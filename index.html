@@ -4,325 +4,104 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Relay Control Panel</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
   :root {
-    --bg: #f5f5f3;
-    --surface: #ffffff;
-    --surface2: #f0efeb;
-    --border: rgba(0,0,0,0.10);
-    --border-md: rgba(0,0,0,0.18);
-    --text-primary: #1a1a18;
-    --text-secondary: #5f5e5a;
-    --text-hint: #888780;
-    --green: #1D9E75;
-    --green-dark: #0F6E56;
-    --green-bg: #E1F5EE;
-    --blue: #378ADD;
-    --blue-dark: #185FA5;
-    --blue-bg: #E6F1FB;
-    --red: #E24B4A;
-    --amber: #BA7517;
-    --amber-bg: #FAEEDA;
-    --radius: 12px;
-    --radius-sm: 8px;
+    --bg: #f5f5f3; --surface: #ffffff; --surface2: #f0efeb;
+    --border: rgba(0,0,0,0.10); --border-md: rgba(0,0,0,0.18);
+    --text-primary: #1a1a18; --text-secondary: #5f5e5a; --text-hint: #888780;
+    --green: #1D9E75; --green-dark: #0F6E56; --green-bg: #E1F5EE;
+    --blue: #378ADD; --blue-dark: #185FA5; --blue-bg: #E6F1FB;
+    --red: #E24B4A; --amber: #BA7517; --radius: 12px; --radius-sm: 8px;
   }
-
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: var(--bg);
-    min-height: 100vh;
-    padding: 1.5rem 1rem 3rem;
-  }
-
-  /* ── Page header ── */
-  .page-header {
-    text-align: center;
-    margin-bottom: 1.5rem;
-  }
-  .page-title {
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--text-primary);
-    letter-spacing: -0.01em;
-  }
-  .page-sub {
-    font-size: 13px;
-    color: var(--text-hint);
-    margin-top: 4px;
-  }
-
-  /* ── Tabs ── */
-  .tabs {
-    display: flex;
-    gap: 6px;
-    justify-content: center;
-    margin-bottom: 1.5rem;
-  }
-  .tab-btn {
-    padding: 8px 20px;
-    border-radius: 20px;
-    border: 0.5px solid var(--border-md);
-    background: var(--surface);
-    color: var(--text-secondary);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .tab-btn.active {
-    background: var(--text-primary);
-    color: #fff;
-    border-color: var(--text-primary);
-  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); min-height: 100vh; padding: 1.5rem 1rem 3rem; }
+  .page-header { text-align: center; margin-bottom: 1.5rem; }
+  .page-title { font-size: 20px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em; }
+  .page-sub { font-size: 13px; color: var(--text-hint); margin-top: 4px; }
+  .tabs { display: flex; gap: 6px; justify-content: center; margin-bottom: 1.5rem; }
+  .tab-btn { padding: 8px 20px; border-radius: 20px; border: 0.5px solid var(--border-md); background: var(--surface); color: var(--text-secondary); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+  .tab-btn.active { background: var(--text-primary); color: #fff; border-color: var(--text-primary); }
   .tab-pane { display: none; }
   .tab-pane.active { display: block; }
-
-  /* ── Status bar ── */
-  .status-bar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 14px;
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    border: 0.5px solid var(--border);
-    margin-bottom: 1.5rem;
-    font-size: 12px;
-    color: var(--text-secondary);
-    max-width: 900px;
-    margin-left: auto;
-    margin-right: auto;
-  }
+  .status-bar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: var(--radius-sm); background: var(--surface); border: 0.5px solid var(--border); margin-bottom: 1.5rem; font-size: 12px; color: var(--text-secondary); max-width: 900px; margin-left: auto; margin-right: auto; }
   .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-hint); flex-shrink: 0; transition: background 0.3s; }
-  .dot.ready  { background: var(--green); }
+  .dot.ready { background: var(--green); }
   .dot.sending { background: var(--amber); animation: blink 0.7s infinite; }
-  .dot.error  { background: var(--red); }
+  .dot.error { background: var(--red); }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
-
-  /* ── Device grid (stacked vertically, max 2 columns) ── */
-  .devices-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-    max-width: 900px;
-    margin: 0 auto;
-  }
-
-  /* ── Device card ── */
-  .device-card {
-    background: var(--surface);
-    border: 0.5px solid var(--border-md);
-    border-radius: var(--radius);
-    padding: 1.25rem;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-  }
-  .device-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 1rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 0.5px solid var(--border);
-  }
-  .device-name {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-  .device-uid {
-    font-size: 10px;
-    color: var(--text-hint);
-    font-family: monospace;
-    margin-top: 2px;
-  }
-  .device-badge {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: var(--text-hint);
-  }
+  .devices-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; max-width: 900px; margin: 0 auto; }
+  .device-card { background: var(--surface); border: 0.5px solid var(--border-md); border-radius: var(--radius); padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .device-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 0.5px solid var(--border); }
+  .device-name { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+  .device-uid { font-size: 10px; color: var(--text-hint); font-family: monospace; margin-top: 2px; }
+  .device-badge { width: 8px; height: 8px; border-radius: 50%; background: var(--text-hint); }
   .device-badge.online { background: var(--green); }
-
-  /* ── Relay rows ── */
   .relay-rows { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
-
-  .relay-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 12px;
-    border-radius: var(--radius-sm);
-    border: 0.5px solid var(--border);
-    background: var(--surface2);
-    cursor: pointer;
-    user-select: none;
-    transition: border-color 0.2s, background 0.2s;
-  }
+  .relay-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: var(--radius-sm); border: 0.5px solid var(--border); background: var(--surface2); cursor: pointer; user-select: none; transition: border-color 0.2s, background 0.2s; }
   .relay-row.on { background: var(--green-bg); border-color: var(--green); }
   .relay-row.disabled { opacity: 0.5; pointer-events: none; }
-
   .relay-row-label { font-size: 13px; font-weight: 500; color: var(--text-primary); }
   .relay-row-state { font-size: 11px; color: var(--text-hint); }
   .relay-row-state.on { color: var(--green-dark); }
-
-  /* All relays row */
-  .all-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 12px;
-    border-radius: var(--radius-sm);
-    border: 0.5px solid var(--border);
-    background: var(--surface2);
-    cursor: pointer;
-    user-select: none;
-    transition: border-color 0.2s, background 0.2s;
-  }
+  .all-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: var(--radius-sm); border: 0.5px solid var(--border); background: var(--surface2); cursor: pointer; user-select: none; transition: border-color 0.2s, background 0.2s; }
   .all-row.on { background: var(--blue-bg); border-color: var(--blue); }
   .all-row.disabled { opacity: 0.5; pointer-events: none; }
   .all-row-label { font-size: 13px; font-weight: 500; color: var(--text-primary); }
   .all-row-state { font-size: 11px; color: var(--text-hint); }
   .all-row-state.on { color: var(--blue-dark); }
-
-  /* ── Toggle ── */
   .toggle { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
   .track { position: absolute; inset: 0; background: #d3d1c7; border-radius: 22px; transition: background 0.2s; }
   .thumb { position: absolute; width: 16px; height: 16px; background: #fff; border-radius: 50%; top: 3px; left: 3px; transition: transform 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
   .toggle.on .track { background: var(--green); }
   .toggle.on .thumb { transform: translateX(18px); }
   .toggle.blue.on .track { background: var(--blue); }
-
-  /* ── Data tab ── */
-  .data-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-    max-width: 900px;
-    margin: 0 auto;
-  }
-  .data-card {
-    background: var(--surface);
-    border: 0.5px solid var(--border-md);
-    border-radius: var(--radius);
-    padding: 1.25rem;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-  }
-  .data-card-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 1rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 0.5px solid var(--border);
-  }
+  .data-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; max-width: 900px; margin: 0 auto; }
+  .data-card { background: var(--surface); border: 0.5px solid var(--border-md); border-radius: var(--radius); padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .data-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 0.5px solid var(--border); }
   .data-card-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
-  .data-refresh-btn {
-    font-size: 11px;
-    padding: 4px 10px;
-    border-radius: 6px;
-    border: 0.5px solid var(--border-md);
-    background: var(--surface2);
-    color: var(--text-secondary);
-    cursor: pointer;
-  }
+  .data-refresh-btn { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 0.5px solid var(--border-md); background: var(--surface2); color: var(--text-secondary); cursor: pointer; }
   .data-refresh-btn:hover { background: var(--border); }
-
-  .data-fields { display: flex; flex-direction: column; gap: 6px; }
-  .data-field {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 12px;
-    padding: 5px 0;
-    border-bottom: 0.5px solid var(--border);
-  }
+  .data-fields { display: flex; flex-direction: column; gap: 0; }
+  .data-field { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 6px 0; border-bottom: 0.5px solid var(--border); }
   .data-field:last-child { border-bottom: none; }
   .data-field-name { color: var(--text-secondary); }
   .data-field-value { font-weight: 500; color: var(--text-primary); font-family: monospace; }
-  .data-field-value.relay-on { color: var(--green-dark); }
-  .data-field-value.relay-off { color: var(--text-hint); }
-
-  .data-timestamp {
-    font-size: 10px;
-    color: var(--text-hint);
-    text-align: right;
-    margin-top: 8px;
-  }
-
-  .data-empty {
-    text-align: center;
-    padding: 2rem 0;
-    color: var(--text-hint);
-    font-size: 13px;
-  }
-
-  /* History table */
-  .history-section {
-    max-width: 900px;
-    margin: 1.5rem auto 0;
-    background: var(--surface);
-    border: 0.5px solid var(--border-md);
-    border-radius: var(--radius);
-    padding: 1.25rem;
-  }
-  .history-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 1rem;
-  }
-  .history-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
-  .history-controls { display: flex; gap: 8px; align-items: center; }
-  .history-select {
-    font-size: 12px;
-    padding: 4px 8px;
-    border-radius: 6px;
-    border: 0.5px solid var(--border-md);
-    background: var(--surface2);
-    color: var(--text-secondary);
-  }
-  .history-load-btn {
-    font-size: 11px;
-    padding: 4px 10px;
-    border-radius: 6px;
-    border: 0.5px solid var(--border-md);
-    background: var(--surface2);
-    color: var(--text-secondary);
-    cursor: pointer;
-  }
-  .history-load-btn:hover { background: var(--border); }
-
-  .history-table-wrap { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 11px; }
-  thead th {
-    text-align: left;
-    padding: 6px 8px;
-    border-bottom: 0.5px solid var(--border-md);
-    color: var(--text-hint);
-    font-weight: 500;
-    white-space: nowrap;
-  }
-  tbody td {
-    padding: 6px 8px;
-    border-bottom: 0.5px solid var(--border);
-    color: var(--text-secondary);
-    white-space: nowrap;
-  }
-  tbody tr:last-child td { border-bottom: none; }
-  tbody tr:hover td { background: var(--surface2); }
+  .data-empty { text-align: center; padding: 2rem 0; color: var(--text-hint); font-size: 13px; }
+  .data-timestamp { font-size: 10px; color: var(--text-hint); text-align: right; margin-top: 8px; }
   .relay-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 3px; }
   .relay-dot.on { background: var(--green); }
   .relay-dot.off { background: #d3d1c7; }
-
+  .history-section { max-width: 900px; margin: 1.5rem auto 0; background: var(--surface); border: 0.5px solid var(--border-md); border-radius: var(--radius); padding: 1.25rem; }
+  .history-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+  .history-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+  .history-controls { display: flex; gap: 8px; align-items: center; }
+  .history-select { font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 0.5px solid var(--border-md); background: var(--surface2); color: var(--text-secondary); }
+  .history-load-btn { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 0.5px solid var(--border-md); background: var(--surface2); color: var(--text-secondary); cursor: pointer; }
+  .history-load-btn:hover { background: var(--border); }
+  .history-table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  thead th { text-align: left; padding: 6px 8px; border-bottom: 0.5px solid var(--border-md); color: var(--text-hint); font-weight: 500; white-space: nowrap; }
+  tbody td { padding: 6px 8px; border-bottom: 0.5px solid var(--border); color: var(--text-secondary); white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--surface2); }
   .no-data { text-align: center; padding: 2rem; color: var(--text-hint); font-size: 12px; }
-
-  /* footer */
+  /* Map */
+  .map-container { max-width: 900px; margin: 0 auto; background: var(--surface); border: 0.5px solid var(--border-md); border-radius: var(--radius); overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .map-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 0.5px solid var(--border); }
+  .map-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+  .map-controls { display: flex; gap: 12px; align-items: center; }
+  .map-legend { display: flex; gap: 12px; align-items: center; font-size: 11px; color: var(--text-secondary); }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .legend-dot.online { background: var(--green); }
+  .legend-dot.offline { background: var(--text-hint); }
+  .map-refresh-btn { font-size: 11px; padding: 4px 12px; border-radius: 6px; border: 0.5px solid var(--border-md); background: var(--surface2); color: var(--text-secondary); cursor: pointer; }
+  .map-refresh-btn:hover { background: var(--border); }
+  #map { height: 450px; width: 100%; }
   .page-footer { text-align: center; margin-top: 2rem; font-size: 11px; color: var(--text-hint); }
-
-  @media (max-width: 600px) {
-    .devices-grid, .data-grid { grid-template-columns: 1fr; }
-  }
+  @media (max-width: 600px) { .devices-grid, .data-grid { grid-template-columns: 1fr; } #map { height: 320px; } }
 </style>
 </head>
 <body>
@@ -333,24 +112,23 @@
 </div>
 
 <div class="tabs">
-  <button class="tab-btn active" onclick="switchTab('controls')">Controls</button>
-  <button class="tab-btn" onclick="switchTab('data')">Device Data</button>
+  <button class="tab-btn active" onclick="switchTab('controls', this)">Controls</button>
+  <button class="tab-btn" onclick="switchTab('data', this)">Device Data</button>
+  <button class="tab-btn" onclick="switchTab('map', this)">Map</button>
 </div>
 
-<!-- ── CONTROLS TAB ── -->
+<!-- CONTROLS TAB -->
 <div class="tab-pane active" id="tab-controls">
   <div class="status-bar">
     <div class="dot ready" id="dot"></div>
     <span id="status-text">Ready to send commands.</span>
   </div>
-
   <div class="devices-grid" id="devices-grid"></div>
 </div>
 
-<!-- ── DATA TAB ── -->
+<!-- DATA TAB -->
 <div class="tab-pane" id="tab-data">
   <div class="data-grid" id="data-grid"></div>
-
   <div class="history-section">
     <div class="history-header">
       <div class="history-title">Event History</div>
@@ -364,19 +142,7 @@
     <div class="history-table-wrap">
       <table>
         <thead>
-          <tr>
-            <th>Time</th>
-            <th>Device</th>
-            <th>R1</th>
-            <th>R2</th>
-            <th>R3</th>
-            <th>R4</th>
-            <th>Voltage</th>
-            <th>Current</th>
-            <th>Watts</th>
-            <th>PF</th>
-            <th>Comfort</th>
-          </tr>
+          <tr><th>Time</th><th>Device</th><th>R1</th><th>R2</th><th>R3</th><th>R4</th><th>Voltage</th><th>Current</th><th>Watts</th><th>PF</th><th>Comfort</th></tr>
         </thead>
         <tbody id="history-body">
           <tr><td colspan="11" class="no-data">Click "Load" to fetch history</td></tr>
@@ -386,72 +152,143 @@
   </div>
 </div>
 
+<!-- MAP TAB -->
+<div class="tab-pane" id="tab-map">
+  <div class="map-container">
+    <div class="map-toolbar">
+      <div class="map-title">Device Locations</div>
+      <div class="map-controls">
+        <div class="map-legend">
+          <div class="legend-item"><div class="legend-dot online"></div>Online</div>
+          <div class="legend-item"><div class="legend-dot offline"></div>No data</div>
+        </div>
+        <button class="map-refresh-btn" onclick="loadMap()">Refresh</button>
+      </div>
+    </div>
+    <div id="map"></div>
+  </div>
+</div>
+
 <div class="page-footer">Notehub &bull; Blues Wireless</div>
 
 <script>
-// ── CONFIG ──────────────────────────────────────────────────────────────────
-const PROXY_URL     = "https://patient-shadow-e2b7.hurd71185.workers.dev/";
-const SUPABASE_URL  = "https://diurqiuzknxzcdxqjfig.supabase.co";
-const SUPABASE_KEY  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRpdXJxaXV6a254emNkeHFqZmlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5ODQ3OTYsImV4cCI6MjA5MzU2MDc5Nn0.jUs0QYAyaOQmirQgCTjP7ldGqn9hhpzBunGLMVv0x8U";
+const PROXY_URL    = "https://patient-shadow-e2b7.hurd71185.workers.dev/";
+const SUPABASE_URL = "https://diurqiuzknxzcdxqjfig.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRpdXJxaXV6a254emNkeHFqZmlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5ODQ3OTYsImV4cCI6MjA5MzU2MDc5Nn0.jUs0QYAyaOQmirQgCTjP7ldGqn9hhpzBunGLMVv0x8U";
 
-// ── DEVICES ─────────────────────────────────────────────────────────────────
 const DEVICES = [
-  { id: "device1", name: "Unit 1",  uid: "dev:868032061596023" },
-  { id: "device2", name: "Unit 2",  uid: "dev:PLACEHOLDER0002" },
-  { id: "device3", name: "Unit 3",  uid: "dev:PLACEHOLDER0003" },
-  { id: "device4", name: "Unit 4",  uid: "dev:PLACEHOLDER0004" },
+  { id: "device1", name: "Unit 1", uid: "dev:868032061596023" },
+  { id: "device2", name: "Unit 2", uid: "dev:PLACEHOLDER0002" },
+  { id: "device3", name: "Unit 3", uid: "dev:PLACEHOLDER0003" },
+  { id: "device4", name: "Unit 4", uid: "dev:PLACEHOLDER0004" },
 ];
 
-// ── COMMANDS ─────────────────────────────────────────────────────────────────
 const COMMANDS = {
-  "1_on":    {"body":{"LC":"A10B000001810001000000002B"},"req":"note.add","sync":true},
-  "1_off":   {"body":{"LC":"A10B00003D8100010000000017"},"req":"note.add","sync":true},
-  "2_on":    {"body":{"LC":"A10B000001820002000000002B"},"req":"note.add","sync":true},
-  "2_off":   {"body":{"LC":"A10B00003D8200020000000017"},"req":"note.add","sync":true},
-  "3_on":    {"body":{"LC":"A10B000001840003000000002C"},"req":"note.add","sync":true},
-  "3_off":   {"body":{"LC":"A10B00003D8400030000000010"},"req":"note.add","sync":true},
-  "4_on":    {"body":{"LC":"A10B0000018800040000000027"},"req":"note.add","sync":true},
-  "4_off":   {"body":{"LC":"A10B00003D8800040000000010"},"req":"note.add","sync":true},
-  "all_on":  {"body":{"LC":"A10B0000018F000F000000002B"},"req":"note.add","sync":true},
-  "all_off": {"body":{"LC":"A10B00003D8F000F0000000017"},"req":"note.add","sync":true},
+  "1_on":   {"body":{"LC":"A10B000001810001000000002B"},"req":"note.add","sync":true},
+  "1_off":  {"body":{"LC":"A10B00003D8100010000000017"},"req":"note.add","sync":true},
+  "2_on":   {"body":{"LC":"A10B000001820002000000002B"},"req":"note.add","sync":true},
+  "2_off":  {"body":{"LC":"A10B00003D8200020000000017"},"req":"note.add","sync":true},
+  "3_on":   {"body":{"LC":"A10B000001840003000000002C"},"req":"note.add","sync":true},
+  "3_off":  {"body":{"LC":"A10B00003D8400030000000010"},"req":"note.add","sync":true},
+  "4_on":   {"body":{"LC":"A10B0000018800040000000027"},"req":"note.add","sync":true},
+  "4_off":  {"body":{"LC":"A10B00003D8800040000000010"},"req":"note.add","sync":true},
+  "all_on": {"body":{"LC":"A10B0000018F000F000000002B"},"req":"note.add","sync":true},
+  "all_off":{"body":{"LC":"A10B00003D8F000F0000000017"},"req":"note.add","sync":true},
 };
 
-// ── STATE ────────────────────────────────────────────────────────────────────
 const relayState = {};
 DEVICES.forEach(d => { relayState[d.id] = { 1:false, 2:false, 3:false, 4:false, all:false }; });
 let busy = false;
 
-// ── STATUS ───────────────────────────────────────────────────────────────────
+// ── MAP ───────────────────────────────────────────────────────────────────────
+let map, mapInitialized = false;
+const mapMarkers = {};
+
+function initMap() {
+  if (mapInitialized) return;
+  map = L.map("map").setView([39.5, -98.35], 4);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>'
+  }).addTo(map);
+  mapInitialized = true;
+}
+
+function makeIcon(online) {
+  const color = online ? "#1D9E75" : "#888780";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
+    <path d="M14 0C6.27 0 0 6.27 0 14c0 9.33 14 22 14 22s14-12.67 14-22C28 6.27 21.73 0 14 0z" fill="${color}"/>
+    <circle cx="14" cy="14" r="6" fill="white"/>
+  </svg>`;
+  return L.divIcon({ html: svg, className: "", iconSize: [28,36], iconAnchor: [14,36], popupAnchor: [0,-36] });
+}
+
+function isOnline(row) {
+  if (!row) return false;
+  return Date.now() - new Date(row.recorded_at).getTime() < 24 * 60 * 60 * 1000;
+}
+
+async function loadMap() {
+  initMap();
+  Object.values(mapMarkers).forEach(m => map.removeLayer(m));
+  Object.keys(mapMarkers).forEach(k => delete mapMarkers[k]);
+  const pinned = [];
+  for (const device of DEVICES) {
+    const rows = await supabaseGet(
+      `device_readings?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1`
+    );
+    const row = rows?.[0] ?? null;
+    const online = isOnline(row);
+    if (row?.lat && row?.lon) {
+      const lastSeen = new Date(row.recorded_at).toLocaleString();
+      const marker = L.marker([row.lat, row.lon], { icon: makeIcon(online) });
+      marker.bindPopup(`
+        <div style="font-family:-apple-system,sans-serif;min-width:150px;">
+          <div style="font-weight:600;font-size:13px;margin-bottom:4px;">${device.name}</div>
+          <div style="font-size:11px;color:#5f5e5a;margin-bottom:6px;">${row.location ?? ""}</div>
+          <div style="display:flex;align-items:center;gap:5px;">
+            <div style="width:7px;height:7px;border-radius:50%;background:${online?"#1D9E75":"#888780"}"></div>
+            <span style="font-size:11px;font-weight:500;color:${online?"#0F6E56":"#888780"}">${online?"Online":"No recent data"}</span>
+          </div>
+          <div style="font-size:10px;color:#888780;margin-top:4px;">Last seen: ${lastSeen}</div>
+        </div>`);
+      marker.addTo(map);
+      mapMarkers[device.uid] = marker;
+      pinned.push(marker);
+      document.getElementById(`badge-${device.id}`)?.classList.toggle("online", online);
+    }
+  }
+  if (pinned.length > 0) {
+    map.fitBounds(L.featureGroup(pinned).getBounds().pad(0.3));
+  }
+  setTimeout(() => map.invalidateSize(), 100);
+}
+
+// ── STATUS ────────────────────────────────────────────────────────────────────
 function setStatus(type, msg) {
   document.getElementById("dot").className = "dot " + type;
   document.getElementById("status-text").textContent = msg;
 }
 
-// ── TABS ─────────────────────────────────────────────────────────────────────
-function switchTab(name) {
+// ── TABS ──────────────────────────────────────────────────────────────────────
+function switchTab(name, btn) {
   document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
   document.getElementById("tab-" + name).classList.add("active");
-  document.querySelectorAll(".tab-btn").forEach(b => {
-    if (b.textContent.toLowerCase().includes(name === "controls" ? "control" : "data")) b.classList.add("active");
-  });
+  btn.classList.add("active");
   if (name === "data") loadLatest();
+  if (name === "map") loadMap();
 }
 
-// ── BUILD CONTROLS ───────────────────────────────────────────────────────────
+// ── BUILD CONTROLS ────────────────────────────────────────────────────────────
 function buildControls() {
   const grid = document.getElementById("devices-grid");
   grid.innerHTML = "";
   DEVICES.forEach(device => {
     const card = document.createElement("div");
     card.className = "device-card";
-    card.id = "dcard-" + device.id;
     card.innerHTML = `
       <div class="device-header">
-        <div>
-          <div class="device-name">${device.name}</div>
-          <div class="device-uid">${device.uid}</div>
-        </div>
+        <div><div class="device-name">${device.name}</div><div class="device-uid">${device.uid}</div></div>
         <div class="device-badge" id="badge-${device.id}"></div>
       </div>
       <div class="relay-rows">
@@ -481,23 +318,18 @@ function buildDataCards() {
   grid.innerHTML = "";
   const sel = document.getElementById("history-device-select");
   DEVICES.forEach(device => {
-    // data card
     const card = document.createElement("div");
     card.className = "data-card";
     card.innerHTML = `
       <div class="data-card-header">
-        <div class="data-card-title">${device.name} — Latest Reading</div>
+        <div class="data-card-title">${device.name} — Latest</div>
         <button class="data-refresh-btn" onclick="loadLatestDevice('${device.id}')">Refresh</button>
       </div>
-      <div id="data-fields-${device.id}">
-        <div class="data-empty">No data yet</div>
-      </div>
+      <div id="data-fields-${device.id}"><div class="data-empty">No data yet</div></div>
       <div class="data-timestamp" id="data-ts-${device.id}"></div>`;
     grid.appendChild(card);
-    // history select option
     const opt = document.createElement("option");
-    opt.value = device.uid;
-    opt.textContent = device.name;
+    opt.value = device.uid; opt.textContent = device.name;
     sel.appendChild(opt);
   });
 }
@@ -511,7 +343,6 @@ function setRelayUI(deviceId, num, on) {
   lbl.textContent = on ? "On" : "Off";
   lbl.className = "relay-row-state" + (on ? " on" : "");
 }
-
 function setAllUI(deviceId, on) {
   relayState[deviceId].all = on;
   document.getElementById(`allrow-${deviceId}`).classList.toggle("on", on);
@@ -520,114 +351,76 @@ function setAllUI(deviceId, on) {
   lbl.textContent = on ? "All on" : "All off";
   lbl.className = "all-row-state" + (on ? " on" : "");
 }
-
 function setDeviceDisabled(deviceId, disabled) {
   [1,2,3,4].forEach(n => document.getElementById(`row-${deviceId}-${n}`).classList.toggle("disabled", disabled));
   document.getElementById(`allrow-${deviceId}`).classList.toggle("disabled", disabled);
 }
 
-// ── SEND COMMAND ──────────────────────────────────────────────────────────────
+// ── SEND ──────────────────────────────────────────────────────────────────────
 async function send(deviceId, key, label) {
   if (busy) return false;
-  busy = true;
-  setDeviceDisabled(deviceId, true);
-  setStatus("sending", `${label}...`);
+  busy = true; setDeviceDisabled(deviceId, true); setStatus("sending", label + "...");
   try {
     const res = await fetch(PROXY_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(COMMANDS[key])
     });
-    if (res.ok) {
-      setStatus("ready", `${label} — done.`);
-      busy = false; setDeviceDisabled(deviceId, false); return true;
-    } else {
-      setStatus("error", `Error ${res.status} — command failed.`);
-      busy = false; setDeviceDisabled(deviceId, false); return false;
-    }
-  } catch(e) {
-    setStatus("error", "Network error — check connection.");
-    busy = false; setDeviceDisabled(deviceId, false); return false;
-  }
+    if (res.ok) { setStatus("ready", label + " — done."); busy = false; setDeviceDisabled(deviceId, false); return true; }
+    else { setStatus("error", "Error " + res.status + " — command failed."); busy = false; setDeviceDisabled(deviceId, false); return false; }
+  } catch(e) { setStatus("error", "Network error — check connection."); busy = false; setDeviceDisabled(deviceId, false); return false; }
 }
-
 async function toggleRelay(deviceId, num) {
   const on = !relayState[deviceId][num];
   const ok = await send(deviceId, `${num}_${on?"on":"off"}`, `${DEVICES.find(d=>d.id===deviceId).name} Relay ${num} ${on?"ON":"OFF"}`);
   if (ok) {
     setRelayUI(deviceId, num, on);
-    const allOn  = [1,2,3,4].every(n => relayState[deviceId][n]);
-    const allOff = [1,2,3,4].every(n => !relayState[deviceId][n]);
-    if (allOn) setAllUI(deviceId, true);
-    else if (allOff) setAllUI(deviceId, false);
+    if ([1,2,3,4].every(n => relayState[deviceId][n])) setAllUI(deviceId, true);
+    else if ([1,2,3,4].every(n => !relayState[deviceId][n])) setAllUI(deviceId, false);
   }
 }
-
 async function toggleAll(deviceId) {
   const on = !relayState[deviceId].all;
-  const ok = await send(deviceId, `all_${on?"on":"off"}`, `${DEVICES.find(d=>d.id===deviceId).name} All Relays ${on?"ON":"OFF"}`);
-  if (ok) {
-    setAllUI(deviceId, on);
-    [1,2,3,4].forEach(n => setRelayUI(deviceId, n, on));
-  }
+  const ok = await send(deviceId, `all_${on?"on":"off"}`, `${DEVICES.find(d=>d.id===deviceId).name} All ${on?"ON":"OFF"}`);
+  if (ok) { setAllUI(deviceId, on); [1,2,3,4].forEach(n => setRelayUI(deviceId, n, on)); }
 }
 
-// ── SUPABASE DATA ─────────────────────────────────────────────────────────────
+// ── SUPABASE ──────────────────────────────────────────────────────────────────
 async function supabaseGet(query) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${query}`, {
-    headers: {
-      "apikey": SUPABASE_KEY,
-      "Authorization": `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": "application/json"
-    }
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
   });
   return res.json();
 }
-
 function relayDot(val) {
   const on = val > 0;
   return `<span class="relay-dot ${on?"on":"off"}"></span>${on?"On":"Off"}`;
 }
-
 async function loadLatestDevice(deviceId) {
   const device = DEVICES.find(d => d.id === deviceId);
   const container = document.getElementById(`data-fields-${deviceId}`);
   const tsEl = document.getElementById(`data-ts-${deviceId}`);
   container.innerHTML = `<div class="data-empty">Loading...</div>`;
   try {
-    const rows = await supabaseGet(
-      `device_readings?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1`
-    );
-    if (!rows || rows.length === 0) {
-      container.innerHTML = `<div class="data-empty">No data received yet</div>`;
-      tsEl.textContent = "";
-      return;
-    }
+    const rows = await supabaseGet(`device_readings?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1`);
+    if (!rows || rows.length === 0) { container.innerHTML = `<div class="data-empty">No data yet</div>`; tsEl.textContent = ""; return; }
     const r = rows[0];
     document.getElementById(`badge-${deviceId}`)?.classList.add("online");
-    container.innerHTML = `
-      <div class="data-fields">
-        <div class="data-field"><span class="data-field-name">Relay 1</span><span class="data-field-value">${relayDot(r.relay_status_r1)}</span></div>
-        <div class="data-field"><span class="data-field-name">Relay 2</span><span class="data-field-value">${relayDot(r.relay_status_r2)}</span></div>
-        <div class="data-field"><span class="data-field-name">Relay 3</span><span class="data-field-value">${relayDot(r.relay_status_r3)}</span></div>
-        <div class="data-field"><span class="data-field-name">Relay 4</span><span class="data-field-value">${relayDot(r.relay_status_r4)}</span></div>
-        <div class="data-field"><span class="data-field-name">Voltage</span><span class="data-field-value">${r.voltage ?? "—"}</span></div>
-        <div class="data-field"><span class="data-field-name">Current</span><span class="data-field-value">${r.current ?? "—"}</span></div>
-        <div class="data-field"><span class="data-field-name">Watts</span><span class="data-field-value">${r.watts_consumed ?? "—"}</span></div>
-        <div class="data-field"><span class="data-field-name">Power Factor</span><span class="data-field-value">${r.power_factor ?? "—"}</span></div>
-        <div class="data-field"><span class="data-field-name">Comfort</span><span class="data-field-value">${r.customer_comfort > 0 ? "On" : "Off"}</span></div>
-        <div class="data-field"><span class="data-field-name">Serial No.</span><span class="data-field-value">${r.serial_number ?? "—"}</span></div>
-      </div>`;
+    container.innerHTML = `<div class="data-fields">
+      <div class="data-field"><span class="data-field-name">Relay 1</span><span class="data-field-value">${relayDot(r.relay_status_r1)}</span></div>
+      <div class="data-field"><span class="data-field-name">Relay 2</span><span class="data-field-value">${relayDot(r.relay_status_r2)}</span></div>
+      <div class="data-field"><span class="data-field-name">Relay 3</span><span class="data-field-value">${relayDot(r.relay_status_r3)}</span></div>
+      <div class="data-field"><span class="data-field-name">Relay 4</span><span class="data-field-value">${relayDot(r.relay_status_r4)}</span></div>
+      <div class="data-field"><span class="data-field-name">Voltage</span><span class="data-field-value">${r.voltage ?? "—"}</span></div>
+      <div class="data-field"><span class="data-field-name">Current</span><span class="data-field-value">${r.current ?? "—"}</span></div>
+      <div class="data-field"><span class="data-field-name">Watts</span><span class="data-field-value">${r.watts_consumed ?? "—"}</span></div>
+      <div class="data-field"><span class="data-field-name">Power Factor</span><span class="data-field-value">${r.power_factor ?? "—"}</span></div>
+      <div class="data-field"><span class="data-field-name">Comfort</span><span class="data-field-value">${r.customer_comfort > 0 ? "On" : "Off"}</span></div>
+      <div class="data-field"><span class="data-field-name">Location</span><span class="data-field-value">${r.location ?? "—"}</span></div>
+    </div>`;
     tsEl.textContent = `Last updated: ${new Date(r.recorded_at).toLocaleString()}`;
-  } catch(e) {
-    container.innerHTML = `<div class="data-empty">Error loading data</div>`;
-  }
+  } catch(e) { container.innerHTML = `<div class="data-empty">Error loading data</div>`; }
 }
-
-async function loadLatest() {
-  DEVICES.forEach(d => loadLatestDevice(d.id));
-}
-
+async function loadLatest() { DEVICES.forEach(d => loadLatestDevice(d.id)); }
 async function loadHistory() {
   const deviceFilter = document.getElementById("history-device-select").value;
   const tbody = document.getElementById("history-body");
@@ -636,33 +429,22 @@ async function loadHistory() {
     let query = `device_readings?order=recorded_at.desc&limit=50`;
     if (deviceFilter) query += `&device_uid=eq.${encodeURIComponent(deviceFilter)}`;
     const rows = await supabaseGet(query);
-    if (!rows || rows.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="11" class="no-data">No history found</td></tr>`;
-      return;
-    }
+    if (!rows || rows.length === 0) { tbody.innerHTML = `<tr><td colspan="11" class="no-data">No history found</td></tr>`; return; }
     tbody.innerHTML = rows.map(r => {
       const devName = DEVICES.find(d => d.uid === r.device_uid)?.name ?? r.device_uid;
-      const ts = new Date(r.recorded_at).toLocaleString();
       return `<tr>
-        <td>${ts}</td>
+        <td>${new Date(r.recorded_at).toLocaleString()}</td>
         <td>${devName}</td>
-        <td>${relayDot(r.relay_status_r1)}</td>
-        <td>${relayDot(r.relay_status_r2)}</td>
-        <td>${relayDot(r.relay_status_r3)}</td>
-        <td>${relayDot(r.relay_status_r4)}</td>
-        <td>${r.voltage ?? "—"}</td>
-        <td>${r.current ?? "—"}</td>
-        <td>${r.watts_consumed ?? "—"}</td>
-        <td>${r.power_factor ?? "—"}</td>
+        <td>${relayDot(r.relay_status_r1)}</td><td>${relayDot(r.relay_status_r2)}</td>
+        <td>${relayDot(r.relay_status_r3)}</td><td>${relayDot(r.relay_status_r4)}</td>
+        <td>${r.voltage ?? "—"}</td><td>${r.current ?? "—"}</td>
+        <td>${r.watts_consumed ?? "—"}</td><td>${r.power_factor ?? "—"}</td>
         <td>${r.customer_comfort > 0 ? "On" : "Off"}</td>
       </tr>`;
     }).join("");
-  } catch(e) {
-    tbody.innerHTML = `<tr><td colspan="11" class="no-data">Error loading history</td></tr>`;
-  }
+  } catch(e) { tbody.innerHTML = `<tr><td colspan="11" class="no-data">Error loading history</td></tr>`; }
 }
 
-// ── INIT ──────────────────────────────────────────────────────────────────────
 buildControls();
 buildDataCards();
 </script>
