@@ -87,7 +87,6 @@
   tbody tr:last-child td { border-bottom: none; }
   tbody tr:hover td { background: var(--surface2); }
   .no-data { text-align: center; padding: 2rem; color: var(--text-hint); font-size: 12px; }
-  /* Map */
   .map-container { max-width: 900px; margin: 0 auto; background: var(--surface); border: 0.5px solid var(--border-md); border-radius: var(--radius); overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
   .map-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 0.5px solid var(--border); }
   .map-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
@@ -176,12 +175,20 @@ const PROXY_URL    = "https://patient-shadow-e2b7.hurd71185.workers.dev/";
 const SUPABASE_URL = "https://diurqiuzknxzcdxqjfig.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRpdXJxaXV6a254emNkeHFqZmlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5ODQ3OTYsImV4cCI6MjA5MzU2MDc5Nn0.jUs0QYAyaOQmirQgCTjP7ldGqn9hhpzBunGLMVv0x8U";
 
+// ── Helper: derive unit name from last 4 digits of device UID ─────────────────
+function unitName(uid) {
+  return "Unit " + uid.slice(-4);
+}
+
 const DEVICES = [
-  { id: "device1", name: "Unit 1", uid: "dev:868032061596023" },
-  { id: "device2", name: "Unit 2", uid: "dev:PLACEHOLDER0002" },
-  { id: "device3", name: "Unit 3", uid: "dev:PLACEHOLDER0003" },
-  { id: "device4", name: "Unit 4", uid: "dev:PLACEHOLDER0004" },
+  { id: "device1", uid: "dev:868032061596023" },
+  { id: "device2", uid: "dev:PLACEHOLDER0002" },
+  { id: "device3", uid: "dev:PLACEHOLDER0003" },
+  { id: "device4", uid: "dev:PLACEHOLDER0004" },
 ];
+
+// Attach auto-generated names
+DEVICES.forEach(d => { d.name = unitName(d.uid); });
 
 const COMMANDS = {
   "1_on":   {"body":{"LC":"A10B000001810001000000002B"},"req":"note.add","sync":true},
@@ -199,11 +206,10 @@ const COMMANDS = {
 const relayState = {};
 DEVICES.forEach(d => { relayState[d.id] = { 1:false, 2:false, 3:false, 4:false, all:false }; });
 let busy = false;
-
-// ── MAP ───────────────────────────────────────────────────────────────────────
 let map, mapInitialized = false;
 const mapMarkers = {};
 
+// ── MAP ───────────────────────────────────────────────────────────────────────
 function initMap() {
   if (mapInitialized) return;
   map = L.map("map").setView([39.5, -98.35], 4);
@@ -257,9 +263,7 @@ async function loadMap() {
       document.getElementById(`badge-${device.id}`)?.classList.toggle("online", online);
     }
   }
-  if (pinned.length > 0) {
-    map.fitBounds(L.featureGroup(pinned).getBounds().pad(0.3));
-  }
+  if (pinned.length > 0) map.fitBounds(L.featureGroup(pinned).getBounds().pad(0.3));
   setTimeout(() => map.invalidateSize(), 100);
 }
 
@@ -361,10 +365,7 @@ async function send(deviceId, key, label) {
   if (busy) return false;
   busy = true; setDeviceDisabled(deviceId, true); setStatus("sending", label + "...");
   try {
-    const res = await fetch(PROXY_URL, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(COMMANDS[key])
-    });
+    const res = await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(COMMANDS[key]) });
     if (res.ok) { setStatus("ready", label + " — done."); busy = false; setDeviceDisabled(deviceId, false); return true; }
     else { setStatus("error", "Error " + res.status + " — command failed."); busy = false; setDeviceDisabled(deviceId, false); return false; }
   } catch(e) { setStatus("error", "Network error — check connection."); busy = false; setDeviceDisabled(deviceId, false); return false; }
@@ -431,7 +432,7 @@ async function loadHistory() {
     const rows = await supabaseGet(query);
     if (!rows || rows.length === 0) { tbody.innerHTML = `<tr><td colspan="11" class="no-data">No history found</td></tr>`; return; }
     tbody.innerHTML = rows.map(r => {
-      const devName = DEVICES.find(d => d.uid === r.device_uid)?.name ?? r.device_uid;
+      const devName = DEVICES.find(d => d.uid === r.device_uid)?.name ?? unitName(r.device_uid);
       return `<tr>
         <td>${new Date(r.recorded_at).toLocaleString()}</td>
         <td>${devName}</td>
