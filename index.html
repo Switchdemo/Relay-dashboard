@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -414,40 +414,4 @@ async function loadLatestDevice(deviceId) {
       <div class="data-field"><span class="data-field-name">Voltage</span><span class="data-field-value">${r.voltage ?? "—"}</span></div>
       <div class="data-field"><span class="data-field-name">Current</span><span class="data-field-value">${r.current ?? "—"}</span></div>
       <div class="data-field"><span class="data-field-name">Watts</span><span class="data-field-value">${r.watts_consumed ?? "—"}</span></div>
-      <div class="data-field"><span class="data-field-name">Power Factor</span><span class="data-field-value">${r.power_factor ?? "—"}</span></div>
-      <div class="data-field"><span class="data-field-name">Comfort</span><span class="data-field-value">${r.customer_comfort > 0 ? "On" : "Off"}</span></div>
-      <div class="data-field"><span class="data-field-name">Location</span><span class="data-field-value">${r.location ?? "—"}</span></div>
-    </div>`;
-    tsEl.textContent = `Last updated: ${new Date(r.recorded_at).toLocaleString()}`;
-  } catch(e) { container.innerHTML = `<div class="data-empty">Error loading data</div>`; }
-}
-async function loadLatest() { DEVICES.forEach(d => loadLatestDevice(d.id)); }
-async function loadHistory() {
-  const deviceFilter = document.getElementById("history-device-select").value;
-  const tbody = document.getElementById("history-body");
-  tbody.innerHTML = `<tr><td colspan="11" class="no-data">Loading...</td></tr>`;
-  try {
-    let query = `device_readings?order=recorded_at.desc&limit=50`;
-    if (deviceFilter) query += `&device_uid=eq.${encodeURIComponent(deviceFilter)}`;
-    const rows = await supabaseGet(query);
-    if (!rows || rows.length === 0) { tbody.innerHTML = `<tr><td colspan="11" class="no-data">No history found</td></tr>`; return; }
-    tbody.innerHTML = rows.map(r => {
-      const devName = DEVICES.find(d => d.uid === r.device_uid)?.name ?? unitName(r.device_uid);
-      return `<tr>
-        <td>${new Date(r.recorded_at).toLocaleString()}</td>
-        <td>${devName}</td>
-        <td>${relayDot(r.relay_status_r1)}</td><td>${relayDot(r.relay_status_r2)}</td>
-        <td>${relayDot(r.relay_status_r3)}</td><td>${relayDot(r.relay_status_r4)}</td>
-        <td>${r.voltage ?? "—"}</td><td>${r.current ?? "—"}</td>
-        <td>${r.watts_consumed ?? "—"}</td><td>${r.power_factor ?? "—"}</td>
-        <td>${r.customer_comfort > 0 ? "On" : "Off"}</td>
-      </tr>`;
-    }).join("");
-  } catch(e) { tbody.innerHTML = `<tr><td colspan="11" class="no-data">Error loading history</td></tr>`; }
-}
-
-buildControls();
-buildDataCards();
-</script>
-</body>
-</html>
+      <div class="data-field"><span class="data-field-name">Power Factor</span><span class="data-field-value">$
