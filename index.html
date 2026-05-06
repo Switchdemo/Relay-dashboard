@@ -483,11 +483,16 @@ async function supabaseGet(query) {
   return res.json();
 }
 async function supabasePost(table, data) {
-  return fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method: "POST",
     headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
     body: JSON.stringify(data)
   });
+  if (!res.ok) {
+    const err = await res.text();
+    console.error(`Supabase POST error (${table}):`, err, "Data:", JSON.stringify(data));
+  }
+  return res;
 }
 async function supabaseUpsert(table, data, onConflict) {
   return fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
@@ -716,7 +721,6 @@ async function prefillEventName() {
   const nextName = await getNextEventName();
   const nameEl = document.getElementById("sf-name");
   if (nameEl) nameEl.value = nextName;
-  // Default date to today
   const dateEl = document.getElementById("sf-date");
   if (dateEl && !dateEl.value) {
     dateEl.value = new Date().toISOString().split("T")[0];
@@ -845,30 +849,31 @@ function updateRepsDisplay() {
 
 
 async function createSchedule() {
-  const name     = document.getElementById("sf-name").value.trim();
-  const type     = document.getElementById("sf-target-type").value;
-  const targetVal= document.getElementById("sf-target").value;
-  const action   = document.getElementById("sf-action").value;
-  const freq     = document.getElementById("sf-frequency").value;
-  const hour     = document.getElementById("sf-hour").value;
-  const minute   = document.getElementById("sf-minute").value;
+  const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ""; };
+  const name     = getVal("sf-name").trim();
+  const type     = getVal("sf-target-type");
+  const targetVal= getVal("sf-target");
+  const action   = getVal("sf-action");
+  const mode     = getVal("sf-mode");
+  const stratVal = getVal("sf-strategy");
+  const hour     = getVal("sf-hour");
+  const minute   = getVal("sf-minute");
   const time     = (hour !== "" && minute !== "") ? `${hour}:${minute}` : "";
-  const tz       = document.getElementById("sf-timezone").value;
+  const tz       = getVal("sf-timezone");
+  const event_date = getVal("sf-date") || null;
+  const one_time = true;
+  const duration_minutes = null;
 
   if (!name) { setStatus("error", "Please enter a schedule name."); return; }
   if (!type) { setStatus("error", "Please select a target type."); return; }
   if (!targetVal) { setStatus("error", "Please select a target."); return; }
   if (!action) { setStatus("error", "Please select a relay action."); return; }
-  const mode     = document.getElementById("sf-mode").value;
-  const stratVal = document.getElementById("sf-strategy").value;
   if (!mode) { setStatus("error", "Please select a control mode."); return; }
   if (!stratVal) { setStatus("error", "Please select a strategy."); return; }
-  if (!freq) { setStatus("error", "Please select a frequency."); return; }
-  if (one_time && !event_date) { setStatus("error", "Please select a date for One Time event."); return; }
+  if (!event_date) { setStatus("error", "Please select a date."); return; }
   if (!hour || !minute) { setStatus("error", "Please select both hour and minute."); return; }
+
   const [stratNum, stratTimeout, stratCycle] = stratVal.split("|").map(Number);
-
-
 
   // Determine target name
   let targetName = targetVal;
@@ -878,10 +883,6 @@ async function createSchedule() {
   } else {
     targetName = unitName(targetVal);
   }
-
-  const duration_minutes = null;
-  const one_time = true;
-  const event_date = document.getElementById("sf-date").value || null;
 
   // Default 1 repetition per scheduled event
   const reps = 1;
