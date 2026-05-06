@@ -158,9 +158,7 @@
   .sched-input:focus { outline: none; border-color: var(--blue); background: var(--surface); }
   .sched-select { font-size: 13px; padding: 7px 10px; border-radius: var(--radius-sm); border: 0.5px solid var(--border-md); background: var(--surface2); color: var(--text-primary); cursor: pointer; }
   .sched-select:focus { outline: none; border-color: var(--blue); }
-  .days-row { display: flex; gap: 6px; flex-wrap: wrap; }
-  .day-btn { padding: 5px 10px; border-radius: 6px; border: 0.5px solid var(--border-md); background: var(--surface2); color: var(--text-secondary); font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s; user-select: none; }
-  .day-btn.selected { background: var(--blue); border-color: var(--blue-dark); color: #fff; }
+
   .sched-submit-btn { width: 100%; padding: 10px; border-radius: var(--radius-sm); border: none; background: var(--text-primary); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 4px; transition: opacity 0.2s; }
   .sched-submit-btn:hover { opacity: 0.85; }
   .queue-section { margin-top: 0; }
@@ -311,87 +309,46 @@
             </select>
           </div>
           <div class="sched-field">
-            <label class="sched-label">Frequency</label>
-            <select class="sched-select" id="sf-frequency" onchange="onFrequencyChange()">
-              <option value="" disabled selected>— Choose Frequency —</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="one_time">One Time</option>
+            <label class="sched-label">Control Mode</label>
+            <select class="sched-select" id="sf-mode">
+              <option value="" disabled selected>— Choose Mode —</option>
+              <option value="dlc">DLC — Direct Load Control</option>
+              <option value="di">DI — Distributed Intelligence</option>
             </select>
           </div>
           <div class="sched-field">
+            <label class="sched-label">Strategy (Timeout / Cycle / %)</label>
+            <select class="sched-select" id="sf-strategy" onchange="onStrategyChange()">
+              <option value="" disabled selected>— Choose Load Reduction —</option>
+              <option value="37|5|60">10% — Minimal (On 5 min, Off 55 min per 60 min cycle)</option>
+              <option value="38|10|60">20% — Light (On 10 min, Off 50 min per 60 min cycle)</option>
+              <option value="40|20|60">30% — Moderate (On 20 min, Off 40 min per 60 min cycle)</option>
+              <option value="41|24|60">40% — Medium (On 24 min, Off 36 min per 60 min cycle)</option>
+              <option value="43|30|60">50% — Half (On 30 min, Off 30 min per 60 min cycle)</option>
+              <option value="45|36|60">60% — High (On 36 min, Off 24 min per 60 min cycle)</option>
+              <option value="47|42|60">70% — Very high (On 42 min, Off 18 min per 60 min cycle)</option>
+              <option value="49|48|60">80% — Near full (On 48 min, Off 12 min per 60 min cycle)</option>
+              <option value="51|54|60">90% — Near total (On 54 min, Off 6 min per 60 min cycle)</option>
+              <option value="53|60|60">100% — Total duration (On entire 60 min cycle — full shed)</option>
+            </select>
+          </div>
+
+
+          <div class="sched-field">
             <label class="sched-label">Time</label>
             <input class="sched-input" id="sf-time" type="time" />
+          </div>
+          <div class="sched-field" id="sf-date-field">
+            <label class="sched-label">Date (One Time)</label>
+            <input class="sched-input" id="sf-date" type="date" />
           </div>
           <div class="sched-field">
             <label class="sched-label">Timezone</label>
             <select class="sched-select" id="sf-timezone">
             </select>
           </div>
-          <div class="sched-field">
-            <label class="sched-label">Duration (relay turns OFF after)</label>
-            <select class="sched-select" id="sf-duration">
-              <option value="">No auto-off</option>
-              <option value="7.5">7.5 minutes</option>
-              <option value="15">15 minutes</option>
-              <option value="22.5">22.5 minutes</option>
-              <option value="30">30 minutes</option>
-              <option value="37.5">37.5 minutes</option>
-              <option value="45">45 minutes</option>
-              <option value="52.5">52.5 minutes</option>
-              <option value="60">1 hour</option>
-              <option value="67.5">1 hr 7.5 min</option>
-              <option value="75">1 hr 15 min</option>
-              <option value="82.5">1 hr 22.5 min</option>
-              <option value="90">1 hr 30 min</option>
-              <option value="97.5">1 hr 37.5 min</option>
-              <option value="105">1 hr 45 min</option>
-              <option value="112.5">1 hr 52.5 min</option>
-              <option value="120">2 hours</option>
-              <option value="127.5">2 hr 7.5 min</option>
-              <option value="135">2 hr 15 min</option>
-              <option value="142.5">2 hr 22.5 min</option>
-              <option value="150">2 hr 30 min</option>
-              <option value="157.5">2 hr 37.5 min</option>
-              <option value="165">2 hr 45 min</option>
-              <option value="172.5">2 hr 52.5 min</option>
-              <option value="180">3 hours</option>
-              <option value="187.5">3 hr 7.5 min</option>
-              <option value="195">3 hr 15 min</option>
-              <option value="202.5">3 hr 22.5 min</option>
-              <option value="210">3 hr 30 min</option>
-              <option value="217.5">3 hr 37.5 min</option>
-              <option value="225">3 hr 45 min</option>
-              <option value="232.5">3 hr 52.5 min</option>
-              <option value="240">4 hours</option>
-              <option value="247.5">4 hr 7.5 min</option>
-              <option value="255">4 hr 15 min</option>
-              <option value="262.5">4 hr 22.5 min</option>
-              <option value="270">4 hr 30 min</option>
-              <option value="277.5">4 hr 37.5 min</option>
-              <option value="285">4 hr 45 min</option>
-              <option value="292.5">4 hr 52.5 min</option>
-              <option value="300">5 hours</option>
-              <option value="330">5 hr 30 min</option>
-              <option value="360">6 hours</option>
-              <option value="390">6 hr 30 min</option>
-              <option value="420">7 hours</option>
-              <option value="450">7 hr 30 min</option>
-              <option value="480">8 hours</option>
-            </select>
-          </div>
-          <div class="sched-field full" id="sf-days-field" style="display:none;">
-            <label class="sched-label">Days of Week</label>
-            <div class="days-row">
-              <div class="day-btn" data-day="0" onclick="toggleDay(this)">Sun</div>
-              <div class="day-btn" data-day="1" onclick="toggleDay(this)">Mon</div>
-              <div class="day-btn" data-day="2" onclick="toggleDay(this)">Tue</div>
-              <div class="day-btn" data-day="3" onclick="toggleDay(this)">Wed</div>
-              <div class="day-btn" data-day="4" onclick="toggleDay(this)">Thu</div>
-              <div class="day-btn" data-day="5" onclick="toggleDay(this)">Fri</div>
-              <div class="day-btn" data-day="6" onclick="toggleDay(this)">Sat</div>
-            </div>
-          </div>
+
+
           <div class="sched-field full">
             <button class="sched-submit-btn" onclick="createSchedule()">Save Schedule</button>
           </div>
@@ -722,8 +679,11 @@ async function getNextEventName() {
 async function prefillEventName() {
   const nextName = await getNextEventName();
   const nameEl = document.getElementById("sf-name");
-  if (nameEl) {
-    nameEl.value = nextName;
+  if (nameEl) nameEl.value = nextName;
+  // Default date to today
+  const dateEl = document.getElementById("sf-date");
+  if (dateEl && !dateEl.value) {
+    dateEl.value = new Date().toISOString().split("T")[0];
   }
 }
 
@@ -823,14 +783,28 @@ function updateSchedulerTimezone() {
   }).join("");
 }
 
-function onFrequencyChange() {
-  const freq = document.getElementById("sf-frequency").value;
-  document.getElementById("sf-days-field").style.display = freq === "weekly" ? "block" : "none";
+
+
+function onStrategyChange() {
+  updateRepsDisplay();
 }
 
-function toggleDay(btn) {
-  btn.classList.toggle("selected");
+function updateRepsDisplay() {
+  const stratSel = document.getElementById("sf-strategy");
+  const durSel   = document.getElementById("sf-duration");
+  const repsEl   = document.getElementById("sf-reps-display");
+  if (!stratSel || !durSel || !repsEl) return;
+  const stratVal = stratSel.value;
+  const durVal   = parseFloat(durSel.value);
+  if (!stratVal || !durVal) {
+    repsEl.value = ""; return;
+  }
+  const [stratNum, timeout, cycleTime] = stratVal.split("|").map(Number);
+  const reps = Math.max(1, Math.round(durVal / cycleTime));
+  repsEl.value = `${reps} repetition(s)  (${durVal} min ÷ ${cycleTime} min cycle)`;
 }
+
+
 
 
 
@@ -847,14 +821,16 @@ async function createSchedule() {
   if (!type) { setStatus("error", "Please select a target type."); return; }
   if (!targetVal) { setStatus("error", "Please select a target."); return; }
   if (!action) { setStatus("error", "Please select a relay action."); return; }
+  const mode     = document.getElementById("sf-mode").value;
+  const stratVal = document.getElementById("sf-strategy").value;
+  if (!mode) { setStatus("error", "Please select a control mode."); return; }
+  if (!stratVal) { setStatus("error", "Please select a strategy."); return; }
   if (!freq) { setStatus("error", "Please select a frequency."); return; }
+  if (one_time && !event_date) { setStatus("error", "Please select a date for One Time event."); return; }
   if (!time) { setStatus("error", "Please select a time."); return; }
+  const [stratNum, stratTimeout, stratCycle] = stratVal.split("|").map(Number);
 
-  let days = null;
-  if (freq === "weekly") {
-    days = [...document.querySelectorAll(".day-btn.selected")].map(b => parseInt(b.dataset.day));
-    if (days.length === 0) { setStatus("error", "Please select at least one day."); return; }
-  }
+
 
   // Determine target name
   let targetName = targetVal;
@@ -865,22 +841,31 @@ async function createSchedule() {
     targetName = unitName(targetVal);
   }
 
-  const durationVal = document.getElementById("sf-duration").value;
-  const duration_minutes = durationVal ? parseFloat(durationVal) : null;
-  const one_time = freq === "one_time";
+  const duration_minutes = null;
+  const one_time = true;
+  const event_date = document.getElementById("sf-date").value || null;
+
+  // Default 1 repetition per scheduled event
+  const reps = 1;
 
   const schedule = {
     name, enabled: true,
     target_type: type,
     target_id: targetVal,
     target_name: targetName,
-    frequency: one_time ? "daily" : freq,
-    days_of_week: one_time ? null : days,
+    frequency: "one_time",
+    days_of_week: null,
     action_time: time,
+    event_date: event_date || null,
     timezone: tz,
     relay_action: action,
     duration_minutes,
-    one_time
+    one_time: true,
+    lc_mode: mode,
+    lc_strategy: stratNum,
+    lc_timeout: stratTimeout,
+    lc_cycle: stratCycle,
+    lc_reps: reps
   };
 
   setStatus("sending", "Saving schedule...");
@@ -910,7 +895,7 @@ async function loadSchedules() {
     return `<div class="sched-item ${s.enabled ? "" : "disabled"}">
       <div class="sched-info">
         <div class="sched-name">${s.name}</div>
-        <div class="sched-detail">${s.target_name} &bull; ${RELAY_ACTION_LABELS[s.relay_action]} &bull; ${s.action_time} ${tzShort} &bull; ${daysStr}${s.duration_minutes ? " &bull; OFF after " + formatDuration(s.duration_minutes) : ""}${s.one_time ? " &bull; <span style='color:var(--amber);font-weight:500;'>One Time</span>" : ""}</div>
+        <div class="sched-detail">${s.target_name} &bull; ${RELAY_ACTION_LABELS[s.relay_action]} &bull; ${s.lc_mode ? s.lc_mode.toUpperCase() : ""} ${s.lc_strategy !== undefined ? "Strategy " + s.lc_strategy : ""} &bull; ${s.event_date ? s.event_date + " " : ""}${s.action_time} ${tzShort} &bull; ${daysStr}${s.one_time ? " &bull; <span style='color:var(--amber);font-weight:500;'>One Time</span>" : ""}</div>
       </div>
       <div class="sched-actions">
         <button class="sched-toggle-btn" onclick="toggleSchedule(${s.id}, ${s.enabled})">${s.enabled ? "Disable" : "Enable"}</button>
@@ -954,7 +939,7 @@ async function loadQueue() {
     return `<div class="queue-item ${q.status}">
       <div class="queue-info">
         <div class="queue-name">${q.target_name} &bull; ${RELAY_ACTION_LABELS[q.relay_action]}</div>
-        <div class="queue-detail">Fire at: ${fireTime}${q.duration_minutes ? " &bull; OFF after " + formatDuration(q.duration_minutes) : ""} &bull; Status: ${q.status}</div>
+        <div class="queue-detail">Fire at: ${fireTime} &bull; Status: ${q.status}</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
         <span class="queue-status ${q.status}">${q.status}</span>
@@ -988,8 +973,15 @@ async function checkSchedules() {
     const [schedH, schedM] = s.action_time.split(":").map(Number);
     const schedHHMM = schedH * 60 + schedM;
 
-    // Check if today is a valid day
-    if (s.frequency === "weekly" && s.days_of_week && !s.days_of_week.includes(currentDay)) continue;
+    // All events are one-time — check date matches today
+    if (s.event_date) {
+      const todayStr = [
+        nowInTz.getFullYear(),
+        String(nowInTz.getMonth()+1).padStart(2,"0"),
+        String(nowInTz.getDate()).padStart(2,"0")
+      ].join("-");
+      if (todayStr !== s.event_date) continue;
+    }
 
     // Check if we're within a 1-minute window of the scheduled time
     const diffMins = schedHHMM - currentHHMM;
@@ -1065,37 +1057,136 @@ function formatDuration(mins) {
   return m > 0 ? `${h} hr ${m} min` : `${h} hr`;
 }
 
+
+// ── LC Hex Generator ──────────────────────────────────────────────────────────
+const RELAY_FUNCTION_MAP = {
+  all_on:    0x8F,
+  relay1_on: 0x81,
+  relay2_on: 0x82,
+  relay3_on: 0x84,
+  relay4_on: 0x88,
+};
+
+let lcEventId = 1; // Auto-incrementing event ID (1-254)
+
+function buildLCHex(relayAction, mode, strategyNum, reps, startUnixTime) {
+  const bytes = [];
+
+  // Header
+  bytes.push(0xA1);
+
+  // Address spec = 0 (all call) — no address body
+  // Message type = 0x00 (Load Control)
+  // Strategy byte: bits 7-6 = mode (0=DLC, 1=DI), bits 0-5 = strategy number
+  const modeBits = (mode === "di") ? 0x40 : 0x00;
+  const stratByte = modeBits | (strategyNum & 0x3F);
+
+  // Function byte: 1000xxxx where xxxx = relay bits
+  const funcByte = RELAY_FUNCTION_MAP[relayAction] || 0x8F;
+
+  // Data byte = repetitions (0-255)
+  const dataByte = Math.min(255, Math.max(0, reps - 1)); // 0 = 1 rep, 1 = 2 reps etc.
+
+  // Event ID (1-254, wraps)
+  const evId = lcEventId;
+  lcEventId = (lcEventId >= 254) ? 1 : lcEventId + 1;
+
+  // Start time as 4 bytes MSB first (Unix timestamp)
+  const t = Math.floor(startUnixTime || 0);
+  const t3 = (t >>> 24) & 0xFF;
+  const t2 = (t >>> 16) & 0xFF;
+  const t1 = (t >>> 8)  & 0xFF;
+  const t0 =  t         & 0xFF;
+
+  // Build message body (excluding header and length)
+  const body = [
+    0x00,      // Address spec = all call
+    0x00,      // Message type = Load Control
+    stratByte, // Strategy
+    funcByte,  // Function
+    dataByte,  // Data (reps-1)
+    evId,      // Event ID
+    t3, t2, t1, t0  // Start time MSB→LSB
+  ];
+
+  // Length = bytes after length byte including checksum = body.length + 1
+  const length = body.length + 1;
+  bytes.push(length);
+  body.forEach(b => bytes.push(b));
+
+  // Checksum = XOR of all bytes so far (including header and length)
+  let checksum = 0;
+  bytes.forEach(b => { checksum ^= b; });
+  bytes.push(checksum);
+
+  return bytes.map(b => b.toString(16).toUpperCase().padStart(2, "0")).join("");
+}
+
+function buildRestoreHex(relayAction) {
+  // Strategy 61 = restore, DLC, abrupt (data=0)
+  const bytes = [0xA1];
+  const funcByte = RELAY_FUNCTION_MAP[relayAction] || 0x8F;
+  const body = [
+    0x00,  // Address spec = all call
+    0x00,  // Message type = Load Control
+    0x3D,  // Strategy 61 = 0x3D, DLC mode bits 7-6 = 00
+    funcByte,
+    0x00,  // Data = 0 (abrupt restore)
+    0xFF,  // Event ID = 0xFF (cancel all)
+    0x00, 0x00, 0x00, 0x00  // Start time = immediate
+  ];
+  const length = body.length + 1;
+  bytes.push(length);
+  body.forEach(b => bytes.push(b));
+  let checksum = 0;
+  bytes.forEach(b => { checksum ^= b; });
+  bytes.push(checksum);
+  return bytes.map(b => b.toString(16).toUpperCase().padStart(2, "0")).join("");
+}
+
+async function sendLCToDevice(uid, lcHex) {
+  // Deliver to Notehub as data.qi note in exact required format:
+  // {"body":{"LC":"..."},"req":"note.add","sync":true}
+  const payload = {
+    body: { LC: lcHex },
+    req: "note.add",
+    sync: true
+  };
+  try {
+    await fetch(PROXY_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    console.log(`LC sent to ${uid}:`, JSON.stringify(payload));
+  } catch(e) { console.error("LC send error", uid, e); }
+}
+
 async function executeQueuedCommand(item) {
   const key = item.relay_action;
-  setStatus("sending", `Scheduled: ${item.target_name} — ${RELAY_ACTION_LABELS[key]}...`);
+  const mode     = item.lc_mode     || "dlc";
+  const strategy = item.lc_strategy || 1;
+  const reps     = item.lc_reps     || 1;
+  const fireTime = item.fire_at ? Math.floor(new Date(item.fire_at).getTime() / 1000) : 0;
+
+  // Build LC ON hex
+  const lcHex = buildLCHex(key, mode, strategy, reps, fireTime);
+
+  setStatus("sending", `Scheduled: ${item.target_name} — ${RELAY_ACTION_LABELS[key]} (${lcHex.substring(0,8)}...)...`);
+
   if (item.target_type === "group") {
     const gNum = parseInt(item.target_id.replace("group_", ""));
     const members = DEVICES.filter(d => (groupAssignments[d.uid] || []).includes(gNum));
     for (const device of members) {
-      await sendToDevice(device.uid, key);
+      await sendLCToDevice(device.uid, lcHex);
     }
   } else {
-    await sendToDevice(item.target_id, key);
+    await sendLCToDevice(item.target_id, lcHex);
   }
-  setStatus("ready", `Scheduled command fired: ${item.target_name} — ${RELAY_ACTION_LABELS[key]}`);
 
-  // If duration set, schedule the OFF command
-  if (item.duration_minutes) {
-    const offKey = RELAY_OFF_MAP[key];
-    if (offKey) {
-      setTimeout(async () => {
-        setStatus("sending", `Duration expired: ${item.target_name} — turning OFF...`);
-        if (item.target_type === "group") {
-          const gNum = parseInt(item.target_id.replace("group_", ""));
-          const members = DEVICES.filter(d => (groupAssignments[d.uid] || []).includes(gNum));
-          for (const device of members) await sendToDevice(device.uid, offKey);
-        } else {
-          await sendToDevice(item.target_id, offKey);
-        }
-        setStatus("ready", `Auto-off fired: ${item.target_name}`);
-      }, item.duration_minutes * 60 * 1000);
-    }
-  }
+  setStatus("ready", `Fired: ${item.target_name} — ${RELAY_ACTION_LABELS[key]} | LC: ${lcHex}`);
+
+
 
   // If one_time, delete the schedule after firing
   if (item.one_time) {
