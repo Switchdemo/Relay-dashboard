@@ -16,21 +16,36 @@
     --blue: #378ADD; --blue-dark: #185FA5; --blue-bg: #E6F1FB;
     --red: #E24B4A; --amber: #BA7517; --radius: 12px; --radius-sm: 8px;
   }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); min-height: 100vh; padding: 1.5rem 1rem 3rem; }
-  .page-header { text-align: center; margin-bottom: 1.5rem; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); min-height: 100vh; padding: 0 0 3rem; }
+
+  /* ── Sticky Header ── */
+  .sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--bg);
+    padding: 1.25rem 1rem 0.75rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  }
+  .page-header { text-align: center; margin-bottom: 0.75rem; }
   .page-title { font-size: 20px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em; }
   .page-sub { font-size: 13px; color: var(--text-hint); margin-top: 4px; }
-  .tabs { display: flex; gap: 6px; justify-content: center; margin-bottom: 1.5rem; }
-  .tab-btn { padding: 8px 20px; border-radius: 20px; border: 0.5px solid var(--border-md); background: var(--surface); color: var(--text-secondary); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+  .tabs { display: flex; gap: 6px; justify-content: center; margin-bottom: 0.75rem; }
+  .tab-btn { padding: 7px 18px; border-radius: 20px; border: 0.5px solid var(--border-md); background: var(--surface); color: var(--text-secondary); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
   .tab-btn.active { background: var(--text-primary); color: #fff; border-color: var(--text-primary); }
-  .tab-pane { display: none; }
-  .tab-pane.active { display: block; }
-  .status-bar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: var(--radius-sm); background: var(--surface); border: 0.5px solid var(--border); margin-bottom: 1.5rem; font-size: 12px; color: var(--text-secondary); max-width: 900px; margin-left: auto; margin-right: auto; }
+  .status-bar { display: flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: var(--radius-sm); background: var(--surface); border: 0.5px solid var(--border); font-size: 12px; color: var(--text-secondary); max-width: 900px; margin: 0 auto; }
   .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-hint); flex-shrink: 0; transition: background 0.3s; }
   .dot.ready { background: var(--green); }
   .dot.sending { background: var(--amber); animation: blink 0.7s infinite; }
   .dot.error { background: var(--red); }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* ── Scroll Content ── */
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+  .scroll-content { padding: 1.25rem 1rem; }
+
+  /* ── Device Cards ── */
   .devices-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; max-width: 900px; margin: 0 auto; }
   .device-card { background: var(--surface); border: 0.5px solid var(--border-md); border-radius: var(--radius); padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
   .device-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 0.5px solid var(--border); }
@@ -57,6 +72,8 @@
   .toggle.on .track { background: var(--green); }
   .toggle.on .thumb { transform: translateX(18px); }
   .toggle.blue.on .track { background: var(--blue); }
+
+  /* ── Data Cards ── */
   .data-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; max-width: 900px; margin: 0 auto; }
   .data-card { background: var(--surface); border: 0.5px solid var(--border-md); border-radius: var(--radius); padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
   .data-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 0.5px solid var(--border); }
@@ -73,7 +90,9 @@
   .relay-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 3px; }
   .relay-dot.on { background: var(--green); }
   .relay-dot.off { background: #d3d1c7; }
-  .history-section { max-width: 900px; margin: 1.5rem auto 0; background: var(--surface); border: 0.5px solid var(--border-md); border-radius: var(--radius); padding: 1.25rem; }
+
+  /* ── History Tab ── */
+  .history-panel { max-width: 900px; margin: 0 auto; background: var(--surface); border: 0.5px solid var(--border-md); border-radius: var(--radius); padding: 1.25rem; }
   .history-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
   .history-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
   .history-controls { display: flex; gap: 8px; align-items: center; }
@@ -87,6 +106,8 @@
   tbody tr:last-child td { border-bottom: none; }
   tbody tr:hover td { background: var(--surface2); }
   .no-data { text-align: center; padding: 2rem; color: var(--text-hint); font-size: 12px; }
+
+  /* ── Map ── */
   .map-container { max-width: 900px; margin: 0 auto; background: var(--surface); border: 0.5px solid var(--border-md); border-radius: var(--radius); overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
   .map-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 0.5px solid var(--border); }
   .map-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
@@ -99,72 +120,87 @@
   .map-refresh-btn { font-size: 11px; padding: 4px 12px; border-radius: 6px; border: 0.5px solid var(--border-md); background: var(--surface2); color: var(--text-secondary); cursor: pointer; }
   .map-refresh-btn:hover { background: var(--border); }
   #map { height: 450px; width: 100%; }
-  .page-footer { text-align: center; margin-top: 2rem; font-size: 11px; color: var(--text-hint); }
+  .page-footer { text-align: center; padding: 2rem 1rem 0; font-size: 11px; color: var(--text-hint); }
   @media (max-width: 600px) { .devices-grid, .data-grid { grid-template-columns: 1fr; } #map { height: 320px; } }
 </style>
 </head>
 <body>
 
-<div class="page-header">
-  <div class="page-title">Relay Control Panel</div>
-  <div class="page-sub">Multi-device remote control</div>
-</div>
-
-<div class="tabs">
-  <button class="tab-btn active" onclick="switchTab('controls', this)">Controls</button>
-  <button class="tab-btn" onclick="switchTab('data', this)">Device Data</button>
-  <button class="tab-btn" onclick="switchTab('map', this)">Map</button>
-</div>
-
-<!-- CONTROLS TAB -->
-<div class="tab-pane active" id="tab-controls">
+<!-- ── STICKY HEADER ── -->
+<div class="sticky-header">
+  <div class="page-header">
+    <div class="page-title">Relay Control Panel</div>
+    <div class="page-sub">Multi-device remote control</div>
+  </div>
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('controls', this)">Controls</button>
+    <button class="tab-btn" onclick="switchTab('data', this)">Device Data</button>
+    <button class="tab-btn" onclick="switchTab('history', this)">Device History</button>
+    <button class="tab-btn" onclick="switchTab('map', this)">Map</button>
+  </div>
   <div class="status-bar">
     <div class="dot ready" id="dot"></div>
     <span id="status-text">Ready to send commands.</span>
   </div>
-  <div class="devices-grid" id="devices-grid"></div>
 </div>
 
-<!-- DATA TAB -->
+<!-- ── CONTROLS TAB ── -->
+<div class="tab-pane active" id="tab-controls">
+  <div class="scroll-content">
+    <div class="devices-grid" id="devices-grid"></div>
+  </div>
+</div>
+
+<!-- ── DATA TAB ── -->
 <div class="tab-pane" id="tab-data">
-  <div class="data-grid" id="data-grid"></div>
-  <div class="history-section">
-    <div class="history-header">
-      <div class="history-title">Event History</div>
-      <div class="history-controls">
-        <select class="history-select" id="history-device-select">
-          <option value="">All Devices</option>
-        </select>
-        <button class="history-load-btn" onclick="loadHistory()">Load</button>
+  <div class="scroll-content">
+    <div class="data-grid" id="data-grid"></div>
+  </div>
+</div>
+
+<!-- ── HISTORY TAB ── -->
+<div class="tab-pane" id="tab-history">
+  <div class="scroll-content">
+    <div class="history-panel">
+      <div class="history-header">
+        <div class="history-title">Device History</div>
+        <div class="history-controls">
+          <select class="history-select" id="history-device-select">
+            <option value="">All Devices</option>
+          </select>
+          <button class="history-load-btn" onclick="loadHistory()">Load</button>
+        </div>
       </div>
-    </div>
-    <div class="history-table-wrap">
-      <table>
-        <thead>
-          <tr><th>Time</th><th>Device</th><th>R1</th><th>R2</th><th>R3</th><th>R4</th><th>Voltage</th><th>Current</th><th>Watts</th><th>PF</th><th>Comfort</th></tr>
-        </thead>
-        <tbody id="history-body">
-          <tr><td colspan="11" class="no-data">Click "Load" to fetch history</td></tr>
-        </tbody>
-      </table>
+      <div class="history-table-wrap">
+        <table>
+          <thead>
+            <tr><th>Time</th><th>Device</th><th>R1</th><th>R2</th><th>R3</th><th>R4</th><th>Voltage</th><th>Current</th><th>Watts</th><th>PF</th><th>Comfort</th></tr>
+          </thead>
+          <tbody id="history-body">
+            <tr><td colspan="11" class="no-data">Select a device and click "Load"</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- MAP TAB -->
+<!-- ── MAP TAB ── -->
 <div class="tab-pane" id="tab-map">
-  <div class="map-container">
-    <div class="map-toolbar">
-      <div class="map-title">Device Locations</div>
-      <div class="map-controls">
-        <div class="map-legend">
-          <div class="legend-item"><div class="legend-dot online"></div>Online</div>
-          <div class="legend-item"><div class="legend-dot offline"></div>No data</div>
+  <div class="scroll-content">
+    <div class="map-container">
+      <div class="map-toolbar">
+        <div class="map-title">Device Locations</div>
+        <div class="map-controls">
+          <div class="map-legend">
+            <div class="legend-item"><div class="legend-dot online"></div>Online</div>
+            <div class="legend-item"><div class="legend-dot offline"></div>No data</div>
+          </div>
+          <button class="map-refresh-btn" onclick="loadMap()">Refresh</button>
         </div>
-        <button class="map-refresh-btn" onclick="loadMap()">Refresh</button>
       </div>
+      <div id="map"></div>
     </div>
-    <div id="map"></div>
   </div>
 </div>
 
@@ -175,20 +211,14 @@ const PROXY_URL    = "https://patient-shadow-e2b7.hurd71185.workers.dev/";
 const SUPABASE_URL = "https://diurqiuzknxzcdxqjfig.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRpdXJxaXV6a254emNkeHFqZmlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5ODQ3OTYsImV4cCI6MjA5MzU2MDc5Nn0.jUs0QYAyaOQmirQgCTjP7ldGqn9hhpzBunGLMVv0x8U";
 
-// ── Helper: derive unit name from last 4 digits of device UID ─────────────────
-function unitName(uid) {
-  return "Unit " + uid.slice(-4);
-}
+function unitName(uid) { return "Unit " + uid.slice(-4); }
 
 const DEVICES = [
   { id: "device1", uid: "dev:868032061596023" },
   { id: "device2", uid: "dev:PLACEHOLDER0002" },
   { id: "device3", uid: "dev:PLACEHOLDER0003" },
   { id: "device4", uid: "dev:PLACEHOLDER0004" },
-];
-
-// Attach auto-generated names
-DEVICES.forEach(d => { d.name = unitName(d.uid); });
+].map(d => ({ ...d, name: unitName(d.uid) }));
 
 const COMMANDS = {
   "1_on":   {"body":{"LC":"A10B000001810001000000002B"},"req":"note.add","sync":true},
@@ -209,22 +239,25 @@ let busy = false;
 let map, mapInitialized = false;
 const mapMarkers = {};
 
-// ── MAP ───────────────────────────────────────────────────────────────────────
-function initMap() {
-  if (mapInitialized) return;
-  map = L.map("map").setView([39.5, -98.35], 4);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>'
-  }).addTo(map);
-  mapInitialized = true;
+function setStatus(type, msg) {
+  document.getElementById("dot").className = "dot " + type;
+  document.getElementById("status-text").textContent = msg;
+}
+
+function switchTab(name, btn) {
+  document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  document.getElementById("tab-" + name).classList.add("active");
+  btn.classList.add("active");
+  if (name === "data") loadLatest();
+  if (name === "map") loadMap();
 }
 
 function makeIcon(online) {
   const color = online ? "#1D9E75" : "#888780";
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
     <path d="M14 0C6.27 0 0 6.27 0 14c0 9.33 14 22 14 22s14-12.67 14-22C28 6.27 21.73 0 14 0z" fill="${color}"/>
-    <circle cx="14" cy="14" r="6" fill="white"/>
-  </svg>`;
+    <circle cx="14" cy="14" r="6" fill="white"/></svg>`;
   return L.divIcon({ html: svg, className: "", iconSize: [28,36], iconAnchor: [14,36], popupAnchor: [0,-36] });
 }
 
@@ -234,29 +267,29 @@ function isOnline(row) {
 }
 
 async function loadMap() {
-  initMap();
+  if (!mapInitialized) {
+    map = L.map("map").setView([39.5, -98.35], 4);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>' }).addTo(map);
+    mapInitialized = true;
+  }
   Object.values(mapMarkers).forEach(m => map.removeLayer(m));
   Object.keys(mapMarkers).forEach(k => delete mapMarkers[k]);
   const pinned = [];
   for (const device of DEVICES) {
-    const rows = await supabaseGet(
-      `device_readings?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1`
-    );
+    const rows = await supabaseGet(`device_readings?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1`);
     const row = rows?.[0] ?? null;
     const online = isOnline(row);
     if (row?.lat && row?.lon) {
-      const lastSeen = new Date(row.recorded_at).toLocaleString();
       const marker = L.marker([row.lat, row.lon], { icon: makeIcon(online) });
-      marker.bindPopup(`
-        <div style="font-family:-apple-system,sans-serif;min-width:150px;">
-          <div style="font-weight:600;font-size:13px;margin-bottom:4px;">${device.name}</div>
-          <div style="font-size:11px;color:#5f5e5a;margin-bottom:6px;">${row.location ?? ""}</div>
-          <div style="display:flex;align-items:center;gap:5px;">
-            <div style="width:7px;height:7px;border-radius:50%;background:${online?"#1D9E75":"#888780"}"></div>
-            <span style="font-size:11px;font-weight:500;color:${online?"#0F6E56":"#888780"}">${online?"Online":"No recent data"}</span>
-          </div>
-          <div style="font-size:10px;color:#888780;margin-top:4px;">Last seen: ${lastSeen}</div>
-        </div>`);
+      marker.bindPopup(`<div style="font-family:-apple-system,sans-serif;min-width:150px;">
+        <div style="font-weight:600;font-size:13px;margin-bottom:4px;">${device.name}</div>
+        <div style="font-size:11px;color:#5f5e5a;margin-bottom:6px;">${row.location ?? ""}</div>
+        <div style="display:flex;align-items:center;gap:5px;">
+          <div style="width:7px;height:7px;border-radius:50%;background:${online?"#1D9E75":"#888780"}"></div>
+          <span style="font-size:11px;font-weight:500;color:${online?"#0F6E56":"#888780"}">${online?"Online":"No recent data"}</span>
+        </div>
+        <div style="font-size:10px;color:#888780;margin-top:4px;">Last seen: ${new Date(row.recorded_at).toLocaleString()}</div>
+      </div>`);
       marker.addTo(map);
       mapMarkers[device.uid] = marker;
       pinned.push(marker);
@@ -267,23 +300,6 @@ async function loadMap() {
   setTimeout(() => map.invalidateSize(), 100);
 }
 
-// ── STATUS ────────────────────────────────────────────────────────────────────
-function setStatus(type, msg) {
-  document.getElementById("dot").className = "dot " + type;
-  document.getElementById("status-text").textContent = msg;
-}
-
-// ── TABS ──────────────────────────────────────────────────────────────────────
-function switchTab(name, btn) {
-  document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
-  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-  document.getElementById("tab-" + name).classList.add("active");
-  btn.classList.add("active");
-  if (name === "data") loadLatest();
-  if (name === "map") loadMap();
-}
-
-// ── BUILD CONTROLS ────────────────────────────────────────────────────────────
 function buildControls() {
   const grid = document.getElementById("devices-grid");
   grid.innerHTML = "";
@@ -316,7 +332,6 @@ function buildControls() {
   });
 }
 
-// ── BUILD DATA CARDS ──────────────────────────────────────────────────────────
 function buildDataCards() {
   const grid = document.getElementById("data-grid");
   grid.innerHTML = "";
@@ -338,7 +353,6 @@ function buildDataCards() {
   });
 }
 
-// ── UI HELPERS ────────────────────────────────────────────────────────────────
 function setRelayUI(deviceId, num, on) {
   relayState[deviceId][num] = on;
   document.getElementById(`row-${deviceId}-${num}`).classList.toggle("on", on);
@@ -360,7 +374,6 @@ function setDeviceDisabled(deviceId, disabled) {
   document.getElementById(`allrow-${deviceId}`).classList.toggle("disabled", disabled);
 }
 
-// ── SEND ──────────────────────────────────────────────────────────────────────
 async function send(deviceId, key, label) {
   if (busy) return false;
   busy = true; setDeviceDisabled(deviceId, true); setStatus("sending", label + "...");
@@ -385,7 +398,6 @@ async function toggleAll(deviceId) {
   if (ok) { setAllUI(deviceId, on); [1,2,3,4].forEach(n => setRelayUI(deviceId, n, on)); }
 }
 
-// ── SUPABASE ──────────────────────────────────────────────────────────────────
 async function supabaseGet(query) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${query}`, {
     headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
