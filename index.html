@@ -930,11 +930,14 @@ async function loadSchedules() {
     const daysStr = s.frequency === "weekly" && s.days_of_week
       ? s.days_of_week.map(d => DAY_NAMES[d]).join(", ")
       : "Every day";
-    const tzShort = s.timezone.split("/").pop().replace("_"," ");
+    const tzParts = s.timezone.split("/");
+    const tzCity = tzParts[tzParts.length-1].replace("_"," ");
+    const tzRegion = tzParts[0] === "America" ? "" : tzParts[0] + " ";
+    const tzShort = tzCity;
     return `<div class="sched-item ${s.enabled ? "" : "disabled"}">
       <div class="sched-info">
         <div class="sched-name">${s.name}</div>
-        <div class="sched-detail">${s.target_name} &bull; ${RELAY_ACTION_LABELS[s.relay_action]} &bull; ${s.lc_mode ? s.lc_mode.toUpperCase() : ""} ${s.lc_strategy !== undefined ? "Strategy " + s.lc_strategy : ""} &bull; ${s.event_date ? s.event_date + " " : ""}${s.action_time} ${tzShort} &bull; ${daysStr}${s.one_time ? " &bull; <span style='color:var(--amber);font-weight:500;'>One Time</span>" : ""}</div>
+        <div class="sched-detail">${s.target_name} &bull; ${RELAY_ACTION_LABELS[s.relay_action]} &bull; ${s.lc_mode ? s.lc_mode.toUpperCase() : ""} ${s.lc_strategy !== undefined ? "Strategy " + s.lc_strategy : ""} &bull; ${s.event_date ? s.event_date + " " : ""}${formatTimeAMPM(s.action_time)} ${tzShort} &bull; <span style='color:var(--amber);font-weight:500;'>One Time</span></div>
       </div>
       <div class="sched-actions">
         <button class="sched-toggle-btn" onclick="toggleSchedule(${s.id}, ${s.enabled})">${s.enabled ? "Disable" : "Enable"}</button>
@@ -1087,6 +1090,17 @@ async function fireReadyQueueItems() {
     });
   }
   if (rows.length > 0) await loadQueue();
+}
+
+function formatTimeAMPM(timeStr) {
+  // Convert "HH:MM" or "HH:MM:SS" to "h:MM AM/PM"
+  if (!timeStr) return "";
+  const parts = timeStr.split(":");
+  let h = parseInt(parts[0]);
+  const m = parts[1] || "00";
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  return `${h}:${m} ${ampm}`;
 }
 
 function formatDuration(mins) {
