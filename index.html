@@ -379,6 +379,20 @@
             <input class="sched-input" id="sf-date" type="date" />
           </div>
           <div class="sched-field">
+            <label class="sched-label">Event Duration</label>
+            <select class="sched-select" id="sf-duration">
+              <option value="" disabled selected>— Choose Duration —</option>
+              <option value="60">1 hour</option>
+              <option value="120">2 hours</option>
+              <option value="180">3 hours</option>
+              <option value="240">4 hours</option>
+              <option value="300">5 hours</option>
+              <option value="360">6 hours</option>
+              <option value="420">7 hours</option>
+              <option value="480">8 hours</option>
+            </select>
+          </div>
+          <div class="sched-field">
             <label class="sched-label">Timezone</label>
             <select class="sched-select" id="sf-timezone">
             </select>
@@ -862,7 +876,7 @@ async function createSchedule() {
   const tz       = getVal("sf-timezone");
   const event_date = getVal("sf-date") || null;
   const one_time = true;
-  const duration_minutes = null;
+  const duration_minutes = parseFloat(getVal("sf-duration")) || null;
 
   if (!name) { setStatus("error", "Please enter a schedule name."); return; }
   if (!type) { setStatus("error", "Please select a target type."); return; }
@@ -872,6 +886,7 @@ async function createSchedule() {
   if (!stratVal) { setStatus("error", "Please select a strategy."); return; }
   if (!event_date) { setStatus("error", "Please select a date."); return; }
   if (!hour || !minute) { setStatus("error", "Please select both hour and minute."); return; }
+  if (!duration_minutes) { setStatus("error", "Please select an event duration."); return; }
 
   const [stratNum, stratTimeout, stratCycle] = stratVal.split("|").map(Number);
 
@@ -884,8 +899,10 @@ async function createSchedule() {
     targetName = unitName(targetVal);
   }
 
-  // Default 1 repetition per scheduled event
-  const reps = 1;
+  // Calculate repetitions from duration ÷ cycle time
+  const reps = duration_minutes
+    ? Math.max(1, Math.round(duration_minutes / stratCycle))
+    : 1;
 
   const schedule = {
     name, enabled: true,
@@ -898,7 +915,7 @@ async function createSchedule() {
     event_date: event_date || null,
     timezone: tz,
     relay_action: action,
-    duration_minutes,
+    duration_minutes: duration_minutes,
     one_time: true,
     lc_mode: mode,
     lc_strategy: stratNum,
@@ -937,14 +954,54 @@ async function loadSchedules() {
     return `<div class="sched-item ${s.enabled ? "" : "disabled"}">
       <div class="sched-info">
         <div class="sched-name">${s.name}</div>
-        <div class="sched-detail">${s.target_name} &bull; ${RELAY_ACTION_LABELS[s.relay_action]} &bull; ${s.lc_mode ? s.lc_mode.toUpperCase() : ""} ${s.lc_strategy !== undefined ? "Strategy " + s.lc_strategy : ""} &bull; ${s.event_date ? s.event_date + " " : ""}${formatTimeAMPM(s.action_time)} ${tzShort} &bull; <span style='color:var(--amber);font-weight:500;'>One Time</span></div>
+        <div class="sched-detail">${s.target_name} &bull; ${RELAY_ACTION_LABELS[s.relay_action]} &bull; ${s.event_date ? s.event_date + " " : ""}${formatTimeAMPM(s.action_time)} &mdash; ${calcEndTime(s.action_time, s.duration_minutes)} ${tzShort}${s.lc_timeout ? " &bull; On " + s.lc_timeout + " min / Off " + (s.lc_cycle - s.lc_timeout) + " min per cycle" : ""} &bull; <span style='color:var(--amber);font-weight:500;'>One Time</span></div>
       </div>
       <div class="sched-actions">
+        <button class="sched-toggle-btn" style="color:var(--green-dark);border-color:var(--green);" onclick="queueNow(${s.id})">Fire Now</button>
         <button class="sched-toggle-btn" onclick="toggleSchedule(${s.id}, ${s.enabled})">${s.enabled ? "Disable" : "Enable"}</button>
         <button class="sched-delete-btn" onclick="deleteSchedule(${s.id})">Delete</button>
       </div>
     </div>`;
   }).join("");
+}
+
+async function queueNow(scheduleId) {
+  // Fetch the schedule and fire it immediately regardless of time
+  const rows = await supabaseGet(`schedules?id=eq.${scheduleId}`);
+  const s = rows?.[0];
+  if (!s) { setStatus("error", "Schedule not found."); return; }
+
+  const fireAt = new Date().toISOString();
+  const queueItem = {
+    schedule_id: s.id,
+    fire_at: fireAt,
+    target_type: s.target_type,
+    target_id: s.target_id,
+    target_name: s.target_name,
+    relay_action: s.relay_action,
+    duration_minutes: s.duration_minutes || null,
+    one_time: s.one_time || false,
+    lc_mode: s.lc_mode || "dlc",
+    lc_strategy: s.lc_strategy || 1,
+    lc_reps: s.lc_reps || 1,
+    status: "pending"
+  };
+
+  setStatus("sending", `Firing ${s.name} now...`);
+  await executeQueuedCommand(queueItem);
+
+  // Log to queue as fired
+  const qRes = await supabasePost("schedule_queue", { ...queueItem, status: "fired", fired_at: fireAt });
+  
+  // Update last_fired_at on schedule
+  await fetch(`${SUPABASE_URL}/rest/v1/schedules?id=eq.${scheduleId}`, {
+    method: "PATCH",
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+    body: JSON.stringify({ last_fired_at: fireAt })
+  });
+
+  await loadQueue();
+  setStatus("ready", `${s.name} fired successfully.`);
 }
 
 async function toggleSchedule(id, currentEnabled) {
@@ -985,10 +1042,26 @@ async function loadQueue() {
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
         <span class="queue-status ${q.status}">${q.status}</span>
+        ${q.status === "pending" ? `<button class="queue-cancel-btn" style="color:var(--green-dark);border-color:var(--green);" onclick="fireNow(${q.id})">Fire Now</button>` : ""}
         ${cancelBtn}
       </div>
     </div>`;
   }).join("");
+}
+
+async function fireNow(id) {
+  // Fetch the queue item and execute it immediately
+  const rows = await supabaseGet(`schedule_queue?id=eq.${id}`);
+  const item = rows?.[0];
+  if (!item) { setStatus("error", "Queue item not found."); return; }
+  await executeQueuedCommand(item);
+  // Mark as fired
+  await fetch(`${SUPABASE_URL}/rest/v1/schedule_queue?id=eq.${id}`, {
+    method: "PATCH",
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+    body: JSON.stringify({ status: "fired", fired_at: new Date().toISOString() })
+  });
+  await loadQueue();
 }
 
 async function cancelQueueItem(id) {
@@ -1025,9 +1098,9 @@ async function checkSchedules() {
       if (todayStr !== s.event_date) continue;
     }
 
-    // Check if we're within a 1-minute window of the scheduled time
+    // Check if we're within a 2-minute window of the scheduled time
     const diffMins = schedHHMM - currentHHMM;
-    if (diffMins < 0 || diffMins > 1) continue;
+    if (diffMins < 0 || diffMins > 2) continue;
 
     // Check if already fired today
     if (s.last_fired_at) {
@@ -1055,6 +1128,9 @@ async function checkSchedules() {
       relay_action: s.relay_action,
       duration_minutes: s.duration_minutes || null,
       one_time: s.one_time || false,
+      lc_mode: s.lc_mode || "dlc",
+      lc_strategy: s.lc_strategy || 1,
+      lc_reps: s.lc_reps || 1,
       status: "pending"
     };
     const qRes = await supabasePost("schedule_queue", queueItem);
@@ -1101,6 +1177,25 @@ function formatTimeAMPM(timeStr) {
   const ampm = h >= 12 ? "PM" : "AM";
   h = h % 12 || 12;
   return `${h}:${m} ${ampm}`;
+}
+
+function calcEndTime(timeStr, durationMins) {
+  if (!timeStr || !durationMins) return "";
+  const parts = timeStr.split(":");
+  const totalMins = parseInt(parts[0]) * 60 + parseInt(parts[1]) + durationMins;
+  const endH = Math.floor(totalMins / 60) % 24;
+  const endM = String(totalMins % 60).padStart(2, "0");
+  const ampm = endH >= 12 ? "PM" : "AM";
+  const h12 = endH % 12 || 12;
+  return `${h12}:${endM} ${ampm}`;
+}
+
+function formatDurationLabel(mins) {
+  if (!mins) return "";
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (m === 0) return `${h} hr`;
+  return `${h} hr ${m} min`;
 }
 
 function formatDuration(mins) {
