@@ -14,24 +14,19 @@
     --text-primary: #1a1a18; --text-secondary: #5f5e5a; --text-hint: #888780;
     --green: #1D9E75; --green-dark: #0F6E56; --green-bg: #E1F5EE;
     --blue: #378ADD; --blue-dark: #185FA5; --blue-bg: #E6F1FB;
-    --red: #E24B4A; --amber: #BA7517; --radius: 12px; --radius-sm: 8px;
+    --red: #E24B4A; --amber: #BA7517; --amber-bg: #FEF3C7;
+    --purple: #7C3AED; --purple-bg: #EDE9FE;
+    --radius: 12px; --radius-sm: 8px;
   }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); min-height: 100vh; padding: 0 0 3rem; }
 
   /* ── Sticky Header ── */
-  .sticky-header {
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    background: var(--bg);
-    padding: 1.25rem 1rem 0.75rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-  }
+  .sticky-header { position: sticky; top: 0; z-index: 100; background: var(--bg); padding: 1.25rem 1rem 0.75rem; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
   .page-header { text-align: center; margin-bottom: 0.75rem; }
   .page-title { font-size: 20px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em; }
   .page-sub { font-size: 13px; color: var(--text-hint); margin-top: 4px; }
-  .tabs { display: flex; gap: 6px; justify-content: center; margin-bottom: 0.75rem; }
-  .tab-btn { padding: 7px 18px; border-radius: 20px; border: 0.5px solid var(--border-md); background: var(--surface); color: var(--text-secondary); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+  .tabs { display: flex; gap: 6px; justify-content: center; margin-bottom: 0.75rem; flex-wrap: wrap; }
+  .tab-btn { padding: 7px 16px; border-radius: 20px; border: 0.5px solid var(--border-md); background: var(--surface); color: var(--text-secondary); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
   .tab-btn.active { background: var(--text-primary); color: #fff; border-color: var(--text-primary); }
   .status-bar { display: flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: var(--radius-sm); background: var(--surface); border: 0.5px solid var(--border); font-size: 12px; color: var(--text-secondary); max-width: 900px; margin: 0 auto; }
   .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-hint); flex-shrink: 0; transition: background 0.3s; }
@@ -40,7 +35,6 @@
   .dot.error { background: var(--red); }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
-  /* ── Scroll Content ── */
   .tab-pane { display: none; }
   .tab-pane.active { display: block; }
   .scroll-content { padding: 1.25rem 1rem; }
@@ -91,7 +85,7 @@
   .relay-dot.on { background: var(--green); }
   .relay-dot.off { background: #d3d1c7; }
 
-  /* ── History Tab ── */
+  /* ── History ── */
   .history-panel { max-width: 900px; margin: 0 auto; background: var(--surface); border: 0.5px solid var(--border-md); border-radius: var(--radius); padding: 1.25rem; }
   .history-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
   .history-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
@@ -118,10 +112,37 @@
   .legend-dot.online { background: var(--green); }
   .legend-dot.offline { background: var(--text-hint); }
   .map-refresh-btn { font-size: 11px; padding: 4px 12px; border-radius: 6px; border: 0.5px solid var(--border-md); background: var(--surface2); color: var(--text-secondary); cursor: pointer; }
-  .map-refresh-btn:hover { background: var(--border); }
   #map { height: 450px; width: 100%; }
+
+  /* ── Groups Tab ── */
+  .groups-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 900px; margin: 0 auto; }
+  .group-card { background: var(--surface); border: 0.5px solid var(--border-md); border-radius: var(--radius); padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .group-card:last-child { grid-column: 1 / -1; }
+  .group-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 0.5px solid var(--border); gap: 10px; }
+  .group-name-input { font-size: 15px; font-weight: 600; color: var(--text-primary); border: none; background: transparent; flex: 1; outline: none; border-bottom: 1.5px dashed var(--border-md); padding-bottom: 2px; }
+  .group-name-input:focus { border-bottom-color: var(--blue); }
+  .group-save-btn { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 0.5px solid var(--border-md); background: var(--surface2); color: var(--text-secondary); cursor: pointer; white-space: nowrap; }
+  .group-save-btn:hover { background: var(--border); }
+  .group-actions { display: flex; gap: 8px; margin-bottom: 1rem; }
+  .group-cmd-btn { flex: 1; padding: 8px; border-radius: var(--radius-sm); border: 0.5px solid var(--border-md); font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+  .group-cmd-btn.on { background: var(--green-bg); border-color: var(--green); color: var(--green-dark); }
+  .group-cmd-btn.on:hover { background: var(--green); color: #fff; }
+  .group-cmd-btn.off { background: var(--surface2); border-color: var(--border-md); color: var(--text-secondary); }
+  .group-cmd-btn.off:hover { background: var(--border-md); }
+  .group-devices { display: flex; flex-direction: column; gap: 6px; }
+  .group-device-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--radius-sm); border: 0.5px solid var(--border); background: var(--surface2); }
+  .group-device-row input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--blue); cursor: pointer; flex-shrink: 0; }
+  .group-device-label { font-size: 13px; color: var(--text-primary); cursor: pointer; flex: 1; }
+  .group-device-uid { font-size: 10px; color: var(--text-hint); font-family: monospace; }
+  .group-member { background: var(--blue-bg); border-color: var(--blue); }
+  .groups-loading { text-align: center; padding: 2rem; color: var(--text-hint); font-size: 13px; max-width: 900px; margin: 0 auto; }
+
   .page-footer { text-align: center; padding: 2rem 1rem 0; font-size: 11px; color: var(--text-hint); }
-  @media (max-width: 600px) { .devices-grid, .data-grid { grid-template-columns: 1fr; } #map { height: 320px; } }
+  @media (max-width: 600px) {
+    .devices-grid, .data-grid, .groups-layout { grid-template-columns: 1fr; }
+    .group-card:last-child { grid-column: auto; }
+    #map { height: 320px; }
+  }
 </style>
 </head>
 <body>
@@ -136,6 +157,7 @@
     <button class="tab-btn active" onclick="switchTab('controls', this)">Controls</button>
     <button class="tab-btn" onclick="switchTab('data', this)">Device Data</button>
     <button class="tab-btn" onclick="switchTab('history', this)">Device History</button>
+    <button class="tab-btn" onclick="switchTab('groups', this)">Demo Groups</button>
     <button class="tab-btn" onclick="switchTab('map', this)">Map</button>
   </div>
   <div class="status-bar">
@@ -182,6 +204,13 @@
         </table>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ── GROUPS TAB ── -->
+<div class="tab-pane" id="tab-groups">
+  <div class="scroll-content">
+    <div id="groups-container"><div class="groups-loading">Loading groups...</div></div>
   </div>
 </div>
 
@@ -239,11 +268,45 @@ let busy = false;
 let map, mapInitialized = false;
 const mapMarkers = {};
 
+// ── Group state ───────────────────────────────────────────────────────────────
+let groupNames = { 1: "Group 1", 2: "Group 2", 3: "Group 3" };
+let groupAssignments = {}; // { device_uid: [group_numbers] }
+
+// ── Supabase ──────────────────────────────────────────────────────────────────
+async function supabaseGet(query) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${query}`, {
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+  });
+  return res.json();
+}
+async function supabasePost(table, data) {
+  return fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: "POST",
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+    body: JSON.stringify(data)
+  });
+}
+async function supabaseUpsert(table, data, onConflict) {
+  return fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
+    method: "POST",
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify(data)
+  });
+}
+async function supabaseDelete(table, filter) {
+  return fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, {
+    method: "DELETE",
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+  });
+}
+
+// ── Status ────────────────────────────────────────────────────────────────────
 function setStatus(type, msg) {
   document.getElementById("dot").className = "dot " + type;
   document.getElementById("status-text").textContent = msg;
 }
 
+// ── Tabs ──────────────────────────────────────────────────────────────────────
 function switchTab(name, btn) {
   document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
@@ -251,21 +314,19 @@ function switchTab(name, btn) {
   btn.classList.add("active");
   if (name === "data") loadLatest();
   if (name === "map") loadMap();
+  if (name === "groups") loadGroups();
 }
 
+// ── Map ───────────────────────────────────────────────────────────────────────
 function makeIcon(online) {
   const color = online ? "#1D9E75" : "#888780";
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
-    <path d="M14 0C6.27 0 0 6.27 0 14c0 9.33 14 22 14 22s14-12.67 14-22C28 6.27 21.73 0 14 0z" fill="${color}"/>
-    <circle cx="14" cy="14" r="6" fill="white"/></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36"><path d="M14 0C6.27 0 0 6.27 0 14c0 9.33 14 22 14 22s14-12.67 14-22C28 6.27 21.73 0 14 0z" fill="${color}"/><circle cx="14" cy="14" r="6" fill="white"/></svg>`;
   return L.divIcon({ html: svg, className: "", iconSize: [28,36], iconAnchor: [14,36], popupAnchor: [0,-36] });
 }
-
 function isOnline(row) {
   if (!row) return false;
   return Date.now() - new Date(row.recorded_at).getTime() < 24 * 60 * 60 * 1000;
 }
-
 async function loadMap() {
   if (!mapInitialized) {
     map = L.map("map").setView([39.5, -98.35], 4);
@@ -281,25 +342,17 @@ async function loadMap() {
     const online = isOnline(row);
     if (row?.lat && row?.lon) {
       const marker = L.marker([row.lat, row.lon], { icon: makeIcon(online) });
-      marker.bindPopup(`<div style="font-family:-apple-system,sans-serif;min-width:150px;">
-        <div style="font-weight:600;font-size:13px;margin-bottom:4px;">${device.name}</div>
-        <div style="font-size:11px;color:#5f5e5a;margin-bottom:6px;">${row.location ?? ""}</div>
-        <div style="display:flex;align-items:center;gap:5px;">
-          <div style="width:7px;height:7px;border-radius:50%;background:${online?"#1D9E75":"#888780"}"></div>
-          <span style="font-size:11px;font-weight:500;color:${online?"#0F6E56":"#888780"}">${online?"Online":"No recent data"}</span>
-        </div>
-        <div style="font-size:10px;color:#888780;margin-top:4px;">Last seen: ${new Date(row.recorded_at).toLocaleString()}</div>
-      </div>`);
+      marker.bindPopup(`<div style="font-family:-apple-system,sans-serif;min-width:150px;"><div style="font-weight:600;font-size:13px;margin-bottom:4px;">${device.name}</div><div style="font-size:11px;color:#5f5e5a;margin-bottom:6px;">${row.location ?? ""}</div><div style="display:flex;align-items:center;gap:5px;"><div style="width:7px;height:7px;border-radius:50%;background:${online?"#1D9E75":"#888780"}"></div><span style="font-size:11px;font-weight:500;color:${online?"#0F6E56":"#888780"}">${online?"Online":"No recent data"}</span></div><div style="font-size:10px;color:#888780;margin-top:4px;">Last seen: ${new Date(row.recorded_at).toLocaleString()}</div></div>`);
       marker.addTo(map);
       mapMarkers[device.uid] = marker;
       pinned.push(marker);
-      document.getElementById(`badge-${device.id}`)?.classList.toggle("online", online);
     }
   }
   if (pinned.length > 0) map.fitBounds(L.featureGroup(pinned).getBounds().pad(0.3));
   setTimeout(() => map.invalidateSize(), 100);
 }
 
+// ── Controls ──────────────────────────────────────────────────────────────────
 function buildControls() {
   const grid = document.getElementById("devices-grid");
   grid.innerHTML = "";
@@ -332,6 +385,7 @@ function buildControls() {
   });
 }
 
+// ── Data Cards ────────────────────────────────────────────────────────────────
 function buildDataCards() {
   const grid = document.getElementById("data-grid");
   grid.innerHTML = "";
@@ -353,6 +407,7 @@ function buildDataCards() {
   });
 }
 
+// ── UI Helpers ────────────────────────────────────────────────────────────────
 function setRelayUI(deviceId, num, on) {
   relayState[deviceId][num] = on;
   document.getElementById(`row-${deviceId}-${num}`).classList.toggle("on", on);
@@ -374,6 +429,7 @@ function setDeviceDisabled(deviceId, disabled) {
   document.getElementById(`allrow-${deviceId}`).classList.toggle("disabled", disabled);
 }
 
+// ── Send Command ──────────────────────────────────────────────────────────────
 async function send(deviceId, key, label) {
   if (busy) return false;
   busy = true; setDeviceDisabled(deviceId, true); setStatus("sending", label + "...");
@@ -382,6 +438,11 @@ async function send(deviceId, key, label) {
     if (res.ok) { setStatus("ready", label + " — done."); busy = false; setDeviceDisabled(deviceId, false); return true; }
     else { setStatus("error", "Error " + res.status + " — command failed."); busy = false; setDeviceDisabled(deviceId, false); return false; }
   } catch(e) { setStatus("error", "Network error — check connection."); busy = false; setDeviceDisabled(deviceId, false); return false; }
+}
+async function sendToDevice(uid, key) {
+  try {
+    await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(COMMANDS[key]) });
+  } catch(e) { console.error("Send error", uid, e); }
 }
 async function toggleRelay(deviceId, num) {
   const on = !relayState[deviceId][num];
@@ -398,12 +459,97 @@ async function toggleAll(deviceId) {
   if (ok) { setAllUI(deviceId, on); [1,2,3,4].forEach(n => setRelayUI(deviceId, n, on)); }
 }
 
-async function supabaseGet(query) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${query}`, {
-    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
-  });
-  return res.json();
+// ── Group Commands ────────────────────────────────────────────────────────────
+async function sendGroupCommand(groupNum, key) {
+  const members = DEVICES.filter(d => (groupAssignments[d.uid] || []).includes(groupNum));
+  if (members.length === 0) { setStatus("error", "No devices in this group."); return; }
+  const gname = groupNames[groupNum];
+  setStatus("sending", `${gname} — sending ${key.replace("_"," ").toUpperCase()}...`);
+  for (const device of members) {
+    await sendToDevice(device.uid, key);
+  }
+  setStatus("ready", `${gname} — ${key.replace("_"," ").toUpperCase()} sent to ${members.length} device(s).`);
 }
+
+// ── Groups Tab ────────────────────────────────────────────────────────────────
+async function loadGroups() {
+  const container = document.getElementById("groups-container");
+  container.innerHTML = `<div class="groups-loading">Loading groups...</div>`;
+  try {
+    // Load group names
+    const names = await supabaseGet("group_names?order=group_number");
+    if (Array.isArray(names)) {
+      names.forEach(n => { groupNames[n.group_number] = n.group_name; });
+    }
+    // Load assignments
+    const assignments = await supabaseGet("device_groups?order=group_number");
+    groupAssignments = {};
+    if (Array.isArray(assignments)) {
+      assignments.forEach(a => {
+        if (!groupAssignments[a.device_uid]) groupAssignments[a.device_uid] = [];
+        groupAssignments[a.device_uid].push(a.group_number);
+      });
+    }
+    renderGroups();
+  } catch(e) {
+    container.innerHTML = `<div class="groups-loading">Error loading groups.</div>`;
+  }
+}
+
+function renderGroups() {
+  const container = document.getElementById("groups-container");
+  const html = `<div class="groups-layout">
+    ${[1,2,3].map(gn => `
+      <div class="group-card">
+        <div class="group-header">
+          <input class="group-name-input" id="gname-${gn}" value="${groupNames[gn]}" placeholder="Group name..." />
+          <button class="group-save-btn" onclick="saveGroupName(${gn})">Save</button>
+        </div>
+        <div style="font-size:11px;font-weight:600;color:var(--red);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Emergency Direct Control</div>
+        <div class="group-actions">
+          <button class="group-cmd-btn on" onclick="sendGroupCommand(${gn}, 'all_on')">All Relays ON</button>
+          <button class="group-cmd-btn off" onclick="sendGroupCommand(${gn}, 'all_off')">All Relays OFF</button>
+        </div>
+        <div class="group-devices">
+          ${DEVICES.map(d => `
+            <label class="group-device-row ${(groupAssignments[d.uid] || []).includes(gn) ? "group-member" : ""}">
+              <input type="checkbox" ${(groupAssignments[d.uid] || []).includes(gn) ? "checked" : ""}
+                onchange="assignDevice('${d.uid}', ${gn}, this.checked)" />
+              <div>
+                <div class="group-device-label">${d.name}</div>
+                <div class="group-device-uid">${d.uid}</div>
+              </div>
+            </label>`).join("")}
+        </div>
+      </div>`).join("")}
+  </div>`;
+  container.innerHTML = html;
+}
+
+async function saveGroupName(groupNum) {
+  const input = document.getElementById(`gname-${groupNum}`);
+  const name = input.value.trim() || `Group ${groupNum}`;
+  groupNames[groupNum] = name;
+  await supabaseUpsert("group_names", { group_number: groupNum, group_name: name }, "group_number");
+  setStatus("ready", `Group ${groupNum} name saved.`);
+}
+
+async function assignDevice(uid, groupNum, checked) {
+  if (checked) {
+    // Add to this group (other group memberships stay intact)
+    await supabaseUpsert("device_groups", { group_number: groupNum, group_name: groupNames[groupNum], device_uid: uid }, "group_number,device_uid");
+    if (!groupAssignments[uid]) groupAssignments[uid] = [];
+    if (!groupAssignments[uid].includes(groupNum)) groupAssignments[uid].push(groupNum);
+  } else {
+    // Remove from this group only
+    await supabaseDelete("device_groups", `device_uid=eq.${encodeURIComponent(uid)}&group_number=eq.${groupNum}`);
+    if (groupAssignments[uid]) groupAssignments[uid] = groupAssignments[uid].filter(g => g !== groupNum);
+  }
+  renderGroups();
+  setStatus("ready", `${unitName(uid)} group assignment saved.`);
+}
+
+// ── Data Loading ──────────────────────────────────────────────────────────────
 function relayDot(val) {
   const on = val > 0;
   return `<span class="relay-dot ${on?"on":"off"}"></span>${on?"On":"Off"}`;
@@ -446,8 +592,7 @@ async function loadHistory() {
     tbody.innerHTML = rows.map(r => {
       const devName = DEVICES.find(d => d.uid === r.device_uid)?.name ?? unitName(r.device_uid);
       return `<tr>
-        <td>${new Date(r.recorded_at).toLocaleString()}</td>
-        <td>${devName}</td>
+        <td>${new Date(r.recorded_at).toLocaleString()}</td><td>${devName}</td>
         <td>${relayDot(r.relay_status_r1)}</td><td>${relayDot(r.relay_status_r2)}</td>
         <td>${relayDot(r.relay_status_r3)}</td><td>${relayDot(r.relay_status_r4)}</td>
         <td>${r.voltage ?? "—"}</td><td>${r.current ?? "—"}</td>
