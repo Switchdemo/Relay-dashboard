@@ -137,6 +137,13 @@
   .group-member { background: var(--blue-bg); border-color: var(--blue); }
   .groups-loading { text-align: center; padding: 2rem; color: var(--text-hint); font-size: 13px; max-width: 900px; margin: 0 auto; }
 
+
+  /* ── Timezone Selector ── */
+  .tz-row { display: flex; align-items: center; gap: 8px; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 0.5px solid var(--border); }
+  .tz-label { font-size: 11px; color: var(--text-hint); white-space: nowrap; }
+  .tz-select { font-size: 11px; padding: 4px 6px; border-radius: 6px; border: 0.5px solid var(--border-md); background: var(--surface2); color: var(--text-secondary); flex: 1; cursor: pointer; }
+  .tz-select:focus { outline: none; border-color: var(--blue); }
+  .tz-time { font-size: 11px; color: var(--text-hint); white-space: nowrap; font-family: monospace; }
   .page-footer { text-align: center; padding: 2rem 1rem 0; font-size: 11px; color: var(--text-hint); }
   @media (max-width: 600px) {
     .devices-grid, .data-grid, .groups-layout { grid-template-columns: 1fr; }
@@ -353,6 +360,109 @@ async function loadMap() {
 }
 
 // ── Controls ──────────────────────────────────────────────────────────────────
+
+// ── North American Timezones ──────────────────────────────────────────────────
+const NA_TIMEZONES = [
+  { label: "Eastern (ET) — UTC-5/4",     tz: "America/New_York" },
+  { label: "Central (CT) — UTC-6/5",     tz: "America/Chicago" },
+  { label: "Mountain (MT) — UTC-7/6",    tz: "America/Denver" },
+  { label: "Mountain No DST (MST)",       tz: "America/Phoenix" },
+  { label: "Pacific (PT) — UTC-8/7",     tz: "America/Los_Angeles" },
+  { label: "Alaska (AKT) — UTC-9/8",     tz: "America/Anchorage" },
+  { label: "Hawaii (HT) — UTC-10",       tz: "Pacific/Honolulu" },
+  { label: "Atlantic (AT) — UTC-4/3",    tz: "America/Halifax" },
+  { label: "Newfoundland (NT) — UTC-3:30", tz: "America/St_Johns" },
+  { label: "Saskatchewan (CST)",          tz: "America/Regina" },
+  { label: "Central Mexico (CST)",        tz: "America/Mexico_City" },
+];
+
+// Store timezone selections per device { device_id: tz_string }
+const deviceTimezones = {};
+
+// Detect timezone from lat/lon using corrected longitude bands
+// Boundaries tuned for actual North American timezone regions
+function guessTzFromCoords(lat, lon) {
+  if (lat == null || lon == null) return "America/Chicago"; // default
+
+  // Hawaii
+  if (lon < -140) return "Pacific/Honolulu";
+
+  // Alaska
+  if (lon < -125 && lat > 54) return "America/Anchorage";
+
+  // Pacific — west of Sierra Nevada
+  if (lon < -114 && lat > 32) return "America/Los_Angeles";
+
+  // Arizona (no DST) — roughly 31-37N, -109 to -114W
+  if (lat >= 31 && lat <= 37 && lon >= -114 && lon <= -109) return "America/Phoenix";
+
+  // Mountain — roughly -104 to -114W (excluding AZ)
+  if (lon < -104) return "America/Denver";
+
+  // Central — roughly -87 to -104W
+  if (lon < -82) return "America/Chicago";
+
+  // Eastern — roughly -67 to -87W
+  if (lon < -52) return "America/New_York";
+
+  // Atlantic (eastern Canada)
+  if (lon < -42) return "America/Halifax";
+
+  return "America/St_Johns";
+}
+
+function getCurrentTime(tz) {
+  return new Date().toLocaleTimeString("en-US", { timeZone: tz, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function buildTzSelector(deviceId, selectedTz) {
+  const opts = NA_TIMEZONES.map(t =>
+    `<option value="${t.tz}" ${t.tz === selectedTz ? "selected" : ""}>${t.label}</option>`
+  ).join("");
+  return `<div class="tz-row">
+    <span class="tz-label">TZ:</span>
+    <select class="tz-select" id="tz-${deviceId}" onchange="onTzChange('${deviceId}')">
+      ${opts}
+    </select>
+    <span class="tz-time" id="tz-time-${deviceId}">${getCurrentTime(selectedTz)}</span>
+  </div>`;
+}
+
+function onTzChange(deviceId) {
+  const sel = document.getElementById(`tz-${deviceId}`);
+  deviceTimezones[deviceId] = sel.value;
+  document.getElementById(`tz-time-${deviceId}`).textContent = getCurrentTime(sel.value);
+}
+
+// Update all timezone clocks every second
+setInterval(() => {
+  DEVICES.forEach(d => {
+    const el = document.getElementById(`tz-time-${d.id}`);
+    if (el && deviceTimezones[d.id]) {
+      el.textContent = getCurrentTime(deviceTimezones[d.id]);
+    }
+  });
+}, 1000);
+
+// Auto-detect timezone from latest device location data
+async function autoDetectTimezones() {
+  for (const device of DEVICES) {
+    try {
+      const rows = await supabaseGet(`device_readings?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1&select=lat,lon`);
+      const row = rows?.[0] ?? null;
+      const tz = guessTzFromCoords(row?.lat, row?.lon);
+      deviceTimezones[device.id] = tz;
+      // Update selector if already rendered
+      const sel = document.getElementById(`tz-${device.id}`);
+      if (sel) sel.value = tz;
+      const timeEl = document.getElementById(`tz-time-${device.id}`);
+      if (timeEl) timeEl.textContent = getCurrentTime(tz);
+    } catch(e) {
+      deviceTimezones[device.id] = "America/Chicago";
+    }
+  }
+}
+
 function buildControls() {
   const grid = document.getElementById("devices-grid");
   grid.innerHTML = "";
@@ -364,6 +474,7 @@ function buildControls() {
         <div><div class="device-name">${device.name}</div><div class="device-uid">${device.uid}</div></div>
         <div class="device-badge" id="badge-${device.id}"></div>
       </div>
+      ${buildTzSelector(device.id, deviceTimezones[device.id] || "America/Chicago")}
       <div class="relay-rows">
         ${[1,2,3,4].map(n => `
           <div class="relay-row" id="row-${device.id}-${n}" onclick="toggleRelay('${device.id}',${n})">
@@ -605,6 +716,7 @@ async function loadHistory() {
 
 buildControls();
 buildDataCards();
+autoDetectTimezones();
 </script>
 </body>
 </html>
