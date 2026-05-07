@@ -1082,7 +1082,7 @@ async function createSchedule() {
       lc_strategy: stratNum,
       lc_reps: reps,
       one_time: true,
-      status: "fired",
+      status: "sent",
       fired_at: new Date().toISOString()
     });
 
@@ -1139,7 +1139,7 @@ async function queueNow(scheduleId) {
     lc_mode: s.lc_mode || "dlc",
     lc_strategy: s.lc_strategy || 1,
     lc_reps: s.lc_reps || 1,
-    status: "fired",
+    status: "sent",
     fired_at: fireAt
   };
 
@@ -1199,11 +1199,11 @@ async function loadQueue() {
     return `<div class="queue-item ${q.status}">
       <div class="queue-info">
         <div class="queue-name">${q.target_name} &bull; ${RELAY_ACTION_LABELS[q.relay_action]}</div>
-        <div class="queue-detail">Scheduled: ${new Date(q.fire_at).toLocaleString()} &bull; Sent: ${q.fired_at ? new Date(q.fired_at).toLocaleString() : "—"} &bull; Status: ${q.status === "fired" ? "sent" : q.status}</div>
+        <div class="queue-detail">Scheduled: ${new Date(q.fire_at).toLocaleString()} &bull; Sent: ${q.fired_at ? new Date(q.fired_at).toLocaleString() : "—"} &bull; Status: ${q.status}</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
         <span class="queue-status ${q.status}">${q.status}</span>
-        ${["fired","received","started"].includes(q.status) ? `<button class="queue-cancel-btn" style="color:var(--red);border-color:var(--red);" onclick="endEvent('${q.target_id}','${q.target_type}','${q.relay_action}',${q.id})">End Event</button>` : ""}
+        ${["sent","received","started"].includes(q.status) ? `<button class="queue-cancel-btn" style="color:var(--red);border-color:var(--red);" onclick="endEvent('${q.target_id}','${q.target_type}','${q.relay_action}',${q.id})">End Event</button>` : ""}
         ${cancelBtn}
       </div>
     </div>`;
@@ -1220,7 +1220,7 @@ async function fireNow(id) {
   await fetch(`${SUPABASE_URL}/rest/v1/schedule_queue?id=eq.${id}`, {
     method: "PATCH",
     headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
-    body: JSON.stringify({ status: "fired", fired_at: new Date().toISOString() })
+    body: JSON.stringify({ status: "sent", fired_at: new Date().toISOString() })
   });
   await loadQueue();
 }
@@ -1282,7 +1282,7 @@ async function checkSchedules() {
       lc_mode: s.lc_mode || "dlc",
       lc_strategy: s.lc_strategy || 1,
       lc_reps: s.lc_reps || 1,
-      status: "fired",
+      status: "sent",
       fired_at: fireAt
     };
 
@@ -1314,7 +1314,7 @@ async function fireReadyQueueItems() {
     await fetch(`${SUPABASE_URL}/rest/v1/schedule_queue?id=eq.${item.id}`, {
       method: "PATCH",
       headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
-      body: JSON.stringify({ status: "fired", fired_at: now.toISOString() })
+      body: JSON.stringify({ status: "sent", fired_at: now.toISOString() })
     });
     await executeQueuedCommand(item);
   }
