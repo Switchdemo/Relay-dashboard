@@ -1113,7 +1113,8 @@ async function deleteSchedule(id) {
 }
 
 async function loadQueue() {
-  const rows = await supabaseGet("schedule_queue?order=fire_at.asc&limit=20");
+  const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  const rows = await supabaseGet(`schedule_queue?order=fire_at.desc&limit=50&fire_at=gte.${since}`);
   const list = document.getElementById("queue-list");
   if (!list) return;
   if (!rows) { list.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error loading queue — check console.</div>`; return; }
