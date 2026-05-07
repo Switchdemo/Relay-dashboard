@@ -170,7 +170,8 @@
   .queue-item { padding: 10px 14px; border-radius: var(--radius-sm); border: 0.5px solid var(--border-md); background: var(--surface2); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .queue-item.pending    { border-left: 3px solid var(--amber); }
   .queue-item.fired      { border-left: 3px solid var(--blue); }
-  .queue-item.delivered  { border-left: 3px solid var(--green); }
+  .queue-item.sent       { border-left: 3px solid var(--blue); }
+  .queue-item.received   { border-left: 3px solid var(--green); }
   .queue-item.started    { border-left: 3px solid #16a34a; }
   .queue-item.ended      { border-left: 3px solid var(--text-hint); opacity: 0.7; }
   .queue-item.rejected   { border-left: 3px solid var(--red); opacity: 0.7; }
@@ -182,7 +183,8 @@
   .queue-status { font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 8px; }
   .queue-status.pending   { background: var(--amber-bg); color: var(--amber); }
   .queue-status.fired     { background: var(--blue-bg); color: var(--blue-dark); }
-  .queue-status.delivered { background: var(--green-bg); color: var(--green-dark); }
+  .queue-status.sent      { background: var(--blue-bg); color: var(--blue-dark); }
+  .queue-status.received  { background: var(--green-bg); color: var(--green-dark); }
   .queue-status.started   { background: #F0FDF4; color: #166534; }
   .queue-status.ended     { background: var(--surface2); color: var(--text-secondary); }
   .queue-status.rejected  { background: #FEF2F2; color: var(--red); }
@@ -1197,11 +1199,11 @@ async function loadQueue() {
     return `<div class="queue-item ${q.status}">
       <div class="queue-info">
         <div class="queue-name">${q.target_name} &bull; ${RELAY_ACTION_LABELS[q.relay_action]}</div>
-        <div class="queue-detail">Scheduled: ${new Date(q.fire_at).toLocaleString()} &bull; Sent: ${q.fired_at ? new Date(q.fired_at).toLocaleString() : "—"} &bull; Status: ${q.status}</div>
+        <div class="queue-detail">Scheduled: ${new Date(q.fire_at).toLocaleString()} &bull; Sent: ${q.fired_at ? new Date(q.fired_at).toLocaleString() : "—"} &bull; Status: ${q.status === "fired" ? "sent" : q.status}</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
         <span class="queue-status ${q.status}">${q.status}</span>
-        ${["fired","delivered","started"].includes(q.status) ? `<button class="queue-cancel-btn" style="color:var(--red);border-color:var(--red);" onclick="endEvent('${q.target_id}','${q.target_type}','${q.relay_action}',${q.id})">End Event</button>` : ""}
+        ${["fired","received","started"].includes(q.status) ? `<button class="queue-cancel-btn" style="color:var(--red);border-color:var(--red);" onclick="endEvent('${q.target_id}','${q.target_type}','${q.relay_action}',${q.id})">End Event</button>` : ""}
         ${cancelBtn}
       </div>
     </div>`;
