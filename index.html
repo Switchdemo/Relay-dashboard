@@ -191,6 +191,23 @@
   .sched-delete-btn:hover { background: #fee2e2; }
   .sched-empty { text-align: center; padding: 1.5rem; color: var(--text-hint); font-size: 13px; }
 
+  /* ── Hex Parser ── */
+  .hex-input { width:100%;font-size:12px;padding:8px 10px;border-radius:var(--radius-sm);
+    border:0.5px solid var(--border-md);background:var(--surface2);color:var(--text-primary);
+    font-family:monospace;margin-bottom:8px; }
+  .hex-input:focus { outline:none;border-color:var(--blue); }
+  .hex-parse-btn { width:100%;padding:8px;border-radius:var(--radius-sm);border:none;
+    background:var(--text-primary);color:#fff;font-size:12px;font-weight:600;
+    cursor:pointer;margin-bottom:10px; }
+  .hex-parse-btn:hover { opacity:0.85; }
+  .hex-result { display:flex;flex-direction:column;gap:4px; }
+  .hex-row { display:flex;justify-content:space-between;font-size:11px;
+    padding:4px 0;border-bottom:0.5px solid var(--border); }
+  .hex-row:last-child { border-bottom:none; }
+  .hex-label { color:var(--text-secondary); }
+  .hex-value { font-family:monospace;font-weight:500;color:var(--text-primary); }
+  .hex-error { font-size:12px;color:var(--red);padding:8px 0; }
+
   .page-footer { text-align: center; padding: 2rem 1rem 0; font-size: 11px; color: var(--text-hint); }
   @media (max-width: 600px) {
     .devices-grid, .data-grid, .groups-layout { grid-template-columns: 1fr; }
@@ -452,6 +469,25 @@
 
 <div class="page-footer">Notehub &bull; Blues Wireless</div>
 
+<!-- ── Floating Hex Parser Button ── -->
+<button id="hex-parser-btn" onclick="toggleHexParser()"
+  style="position:fixed;bottom:24px;right:24px;z-index:200;
+  background:var(--text-primary);color:#fff;border:none;
+  padding:10px 16px;border-radius:20px;font-size:12px;font-weight:600;
+  cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);">
+  🔍 Hex Parser
+</button>
+
+<!-- ── Floating Hex Parser Overlay ── -->
+<div id="hex-overlay" style="display:none;position:fixed;bottom:70px;right:24px;
+  z-index:199;width:340px;background:var(--surface);border:0.5px solid var(--border-md);
+  border-radius:var(--radius);box-shadow:0 4px 20px rgba(0,0,0,0.15);padding:1.25rem;">
+  <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:0.75rem;">
+    LC Hex Parser
+  </div>
+  <div id="hex-parser-inner"></div>
+</div>
+
 <script>
 const PROXY_URL    = "https://patient-shadow-e2b7.hurd71185.workers.dev/";
 const SUPABASE_URL = "https://diurqiuzknxzcdxqjfig.supabase.co";
@@ -701,7 +737,7 @@ let scheduleCheckInterval = null;
 async function initScheduler() {
   if (!schedulerInitialized) {
     schedulerInitialized = true;
-    scheduleCheckInterval = setInterval(checkSchedules, 30000);
+    scheduleCheckInterval = setInterval(checkSchedules, 15000);
   }
   // Always reload group names from Supabase so target dropdown is fresh
   await loadGroupNamesForScheduler();
@@ -710,6 +746,7 @@ async function initScheduler() {
   updateSchedulerTimezone();
   await loadSchedules();
   await loadQueue();
+  renderHexParser("hex-parser-panel");
   // Pre-populate the event name with slight delay to ensure DOM is ready
   setTimeout(async () => { await prefillEventName(); }, 100);
 }
@@ -1042,7 +1079,7 @@ async function loadQueue() {
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
         <span class="queue-status ${q.status}">${q.status}</span>
-        ${q.status === "pending" ? `<button class="queue-cancel-btn" style="color:var(--green-dark);border-color:var(--green);" onclick="fireNow(${q.id})">Fire Now</button>` : ""}
+        ${q.status === "fired" ? `<button class="queue-cancel-btn" style="color:var(--red);border-color:var(--red);" onclick="endEvent('${q.target_id}','${q.target_type}','${q.relay_action}',${q.id})">End Event</button>` : ""}
         ${cancelBtn}
       </div>
     </div>`;
@@ -1098,9 +1135,10 @@ async function checkSchedules() {
       if (todayStr !== s.event_date) continue;
     }
 
-    // Check if we're within a 2-minute window of the scheduled time
+    // Check if we're within a 5-minute window of the scheduled time
+    // Also catch slightly missed events (up to 5 mins past)
     const diffMins = schedHHMM - currentHHMM;
-    if (diffMins < 0 || diffMins > 2) continue;
+    if (diffMins < -5 || diffMins > 2) continue;
 
     // Check if already fired today
     if (s.last_fired_at) {
@@ -1344,7 +1382,136 @@ async function executeQueuedCommand(item) {
 }
 
 // Start checking schedules every 30s once page loads
-setTimeout(() => { setInterval(fireReadyQueueItems, 30000); }, 5000);
+setTimeout(() => { setInterval(fireReadyQueueItems, 15000); }, 5000);
+
+
+// ── HEX PARSER ───────────────────────────────────────────────────────────────
+const STRATEGY_TABLE = {
+  1:{to:7.5,ct:7.5,pct:100}, 2:{to:7.5,ct:15,pct:50},
+  4:{to:5,ct:30,pct:16.7}, 5:{to:7.5,ct:30,pct:25},
+  6:{to:10,ct:30,pct:33.3}, 7:{to:12,ct:30,pct:40},
+  8:{to:13.5,ct:30,pct:45}, 9:{to:15,ct:30,pct:50},
+  10:{to:16.5,ct:30,pct:55}, 11:{to:18,ct:30,pct:60},
+  12:{to:19.5,ct:30,pct:65}, 13:{to:21,ct:30,pct:70},
+  14:{to:22.5,ct:30,pct:75}, 15:{to:24,ct:30,pct:80},
+  16:{to:25.5,ct:30,pct:85}, 17:{to:27,ct:30,pct:90},
+  18:{to:28.5,ct:30,pct:95}, 19:{to:30,ct:30,pct:100},
+  21:{to:5,ct:20,pct:25}, 22:{to:6.6,ct:20,pct:33.3},
+  23:{to:8,ct:20,pct:40}, 24:{to:9,ct:20,pct:45},
+  25:{to:10,ct:20,pct:50}, 26:{to:11,ct:20,pct:55},
+  27:{to:12,ct:20,pct:60}, 28:{to:13,ct:20,pct:65},
+  29:{to:14,ct:20,pct:70}, 30:{to:15,ct:20,pct:75},
+  31:{to:16,ct:20,pct:80}, 32:{to:17,ct:20,pct:85},
+  33:{to:18,ct:20,pct:90}, 34:{to:19,ct:20,pct:95},
+  35:{to:20,ct:20,pct:100},
+  37:{to:5,ct:60,pct:8.3}, 38:{to:10,ct:60,pct:16.7},
+  39:{to:15,ct:60,pct:25}, 40:{to:20,ct:60,pct:33.3},
+  41:{to:24,ct:60,pct:40}, 42:{to:27,ct:60,pct:45},
+  43:{to:30,ct:60,pct:50}, 44:{to:33,ct:60,pct:55},
+  45:{to:36,ct:60,pct:60}, 46:{to:39,ct:60,pct:65},
+  47:{to:42,ct:60,pct:70}, 48:{to:45,ct:60,pct:75},
+  49:{to:48,ct:60,pct:80}, 50:{to:51,ct:60,pct:85},
+  51:{to:54,ct:60,pct:90}, 52:{to:57,ct:60,pct:95},
+  53:{to:60,ct:60,pct:100},
+  61:{to:0,ct:0,pct:0}, 63:{to:0,ct:0,pct:0}
+};
+
+function parseLCHex(hex) {
+  hex = hex.trim().toUpperCase().replace(/\s/g,"");
+  if (hex.length !== 26) return { error: `Expected 26 hex chars, got ${hex.length}` };
+
+  const b = (pos) => parseInt(hex.slice(pos*2, pos*2+2), 16);
+
+  const header    = b(0);
+  const length    = b(1);
+  const addrSpec  = b(2);
+  const msgType   = b(3);
+  const stratByte = b(4);
+  const funcByte  = b(5);
+  const dataByte  = b(6);
+  const eventId   = b(7);
+  const startTime = (b(8)<<24)|(b(9)<<16)|(b(10)<<8)|b(11);
+  const checksum  = b(12);
+
+  const modeBits = (stratByte >> 6) & 0x03;
+  const stratNum = stratByte & 0x3F;
+  const mode = modeBits === 0 ? "DLC" : modeBits === 1 ? "DI" : "Adaptive";
+
+  const relays = [];
+  if (funcByte & 0x01) relays.push("R1");
+  if (funcByte & 0x02) relays.push("R2");
+  if (funcByte & 0x04) relays.push("R3");
+  if (funcByte & 0x08) relays.push("R4");
+
+  const reps = dataByte + 1;
+  const strat = STRATEGY_TABLE[stratNum];
+  const startDate = startTime > 0 ? new Date(startTime * 1000).toLocaleString() : "Immediate";
+
+  // Verify checksum
+  let xor = 0;
+  for (let i = 0; i < 12; i++) xor ^= b(i);
+  const checksumOk = xor === checksum;
+
+  return {
+    header: `0x${header.toString(16).toUpperCase().padStart(2,"0")}`,
+    mode,
+    strategy: stratNum === 61 ? "61 — Restore" : stratNum === 63 ? "63 — Test LED" : `${stratNum}${strat ? " (TO:" + strat.to + "m / CT:" + strat.ct + "m / " + strat.pct + "%)" : ""}`,
+    relays: relays.join(", ") || "None",
+    repetitions: reps,
+    eventId: `0x${eventId.toString(16).toUpperCase().padStart(2,"0")} (${eventId})`,
+    startTime: startDate,
+    checksum: checksumOk ? `0x${checksum.toString(16).toUpperCase().padStart(2,"0")} ✅` : `0x${checksum.toString(16).toUpperCase().padStart(2,"0")} ❌ Invalid`
+  };
+}
+
+function renderHexParser(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = `
+    <input class="hex-input" id="hex-input-${containerId}" type="text"
+      placeholder="Paste LC hex string (26 chars)..." maxlength="26"
+      oninput="runHexParse('${containerId}')" />
+    <button class="hex-parse-btn" onclick="runHexParse('${containerId}')">Parse</button>
+    <div id="hex-result-${containerId}" class="hex-result"></div>`;
+}
+
+function runHexParse(containerId) {
+  const input = document.getElementById(`hex-input-${containerId}`);
+  const result = document.getElementById(`hex-result-${containerId}`);
+  if (!input || !result) return;
+  const hex = input.value.trim();
+  if (hex.length < 26) { result.innerHTML = `<div class="hex-error">Enter 26 hex characters (${hex.length}/26)</div>`; return; }
+  const parsed = parseLCHex(hex);
+  if (parsed.error) { result.innerHTML = `<div class="hex-error">${parsed.error}</div>`; return; }
+  result.innerHTML = Object.entries(parsed).map(([k,v]) =>
+    `<div class="hex-row"><span class="hex-label">${k.charAt(0).toUpperCase()+k.slice(1).replace(/([A-Z])/g," $1")}</span><span class="hex-value">${v}</span></div>`
+  ).join("");
+}
+
+function toggleHexParser() {
+  const overlay = document.getElementById("hex-overlay");
+  if (overlay.style.display === "none") {
+    overlay.style.display = "block";
+    renderHexParser("hex-parser-inner");
+  } else {
+    overlay.style.display = "none";
+  }
+}
+
+// ── End Event ────────────────────────────────────────────────────────────────
+async function endEvent(targetId, targetType, relayAction, queueId) {
+  const restoreHex = buildRestoreHex(relayAction);
+  setStatus("sending", "Ending event — sending restore command...");
+  if (targetType === "group") {
+    const gNum = parseInt(targetId.replace("group_", ""));
+    const members = DEVICES.filter(d => (groupAssignments[d.uid] || []).includes(gNum));
+    for (const device of members) await sendLCToDevice(device.uid, restoreHex);
+  } else {
+    await sendLCToDevice(targetId, restoreHex);
+  }
+  setStatus("ready", "Event ended — restore command sent.");
+  await loadQueue();
+}
 
 function buildControls() {
   const grid = document.getElementById("devices-grid");
