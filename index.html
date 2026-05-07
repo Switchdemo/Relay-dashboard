@@ -769,7 +769,8 @@ let scheduleCheckInterval = null;
 async function initScheduler() {
   if (!schedulerInitialized) {
     schedulerInitialized = true;
-    scheduleCheckInterval = setInterval(checkSchedules, 15000);
+    // No longer needed — device handles scheduling internally
+    // scheduleCheckInterval = setInterval(checkSchedules, 15000);
     // Load queue only on first init
     await loadGroupNamesForScheduler();
     populateTzSelector();
@@ -1002,13 +1003,44 @@ async function createSchedule() {
   setStatus("sending", "Saving schedule...");
   const res = await supabasePost("schedules", schedule);
   if (res.ok) {
-    setStatus("ready", `Schedule "${name}" saved.`);
+    // Build Unix timestamp from event_date + time + timezone
+    const schedUnix = getScheduleUnixTime(event_date, time, tz);
+
+    // Build LC hex with scheduled start time baked in
+    const lcHex = buildLCHex(action, mode, stratNum, reps, schedUnix);
+    console.log(`Sending LC hex immediately: ${lcHex} (startTime=${schedUnix})`);
+
+    // Send payload to device(s) immediately — device stores and executes at scheduled time
+    if (type === "group") {
+      const gNum = parseInt(targetVal.replace("group_", ""));
+      const members = DEVICES.filter(d => (groupAssignments[d.uid] || []).includes(gNum));
+      for (const device of members) await sendLCToDevice(device.uid, lcHex);
+    } else {
+      await sendLCToDevice(targetVal, lcHex);
+    }
+
+    // Log to queue as fired (sent)
+    await supabasePost("schedule_queue", {
+      schedule_id: null,
+      fire_at: new Date(schedUnix * 1000).toISOString(),
+      target_type: type,
+      target_id: targetVal,
+      target_name: targetName,
+      relay_action: action,
+      lc_mode: mode,
+      lc_strategy: stratNum,
+      lc_reps: reps,
+      one_time: true,
+      status: "fired",
+      fired_at: new Date().toISOString()
+    });
+
+    setStatus("ready", `"${name}" saved & payload sent to device.`);
     // Auto-increment name for next event
     const nextName = await getNextEventName();
     document.getElementById("sf-name").value = nextName;
     await loadSchedules();
-    // Check immediately if this schedule fires within 1 hour
-    await checkSchedules();
+    await loadQueue();
   } else {
     setStatus("error", "Error saving schedule.");
   }
@@ -1163,12 +1195,11 @@ async function checkSchedules() {
   for (const s of schedules) {
     // Get current time in schedule's timezone
     const nowInTz = new Date(now.toLocaleString("en-US", { timeZone: s.timezone }));
-    const currentDay = nowInTz.getDay();
     const currentHHMM = nowInTz.getHours() * 60 + nowInTz.getMinutes();
     const [schedH, schedM] = s.action_time.split(":").map(Number);
     const schedHHMM = schedH * 60 + schedM;
 
-    // All events are one-time — check date matches today
+    // Check date matches today
     if (s.event_date) {
       const todayStr = [
         nowInTz.getFullYear(),
@@ -1178,31 +1209,21 @@ async function checkSchedules() {
       if (todayStr !== s.event_date) continue;
     }
 
-    // Check if we're within a 5-minute window of the scheduled time
-    // Also catch slightly missed events (up to 5 mins past)
+    // Check within 5-minute window (2 min before, 5 min after to catch missed)
     const diffMins = schedHHMM - currentHHMM;
     if (diffMins < -5 || diffMins > 2) continue;
 
-    // Check if already fired today
+    // Check not already fired
     if (s.last_fired_at) {
       const lastFired = new Date(s.last_fired_at);
       const lastFiredInTz = new Date(lastFired.toLocaleString("en-US", { timeZone: s.timezone }));
-      const sameDay = lastFiredInTz.toDateString() === nowInTz.toDateString();
-      if (sameDay) continue; // Already fired today
+      if (lastFiredInTz.toDateString() === nowInTz.toDateString()) continue;
     }
 
-    // Calculate fire time — immediately if within 1 hour, else 1 hour delay
-    const schedTimeToday = new Date(nowInTz);
-    schedTimeToday.setHours(schedH, schedM, 0, 0);
-    const minsUntilSched = (schedTimeToday - nowInTz) / 60000;
-    const fireAt = minsUntilSched <= 60
-      ? new Date(now) // fire immediately
-      : new Date(now.getTime() + 60 * 60 * 1000); // 1 hour delay
-
-    // Queue the command
+    const fireAt = now.toISOString();
     const queueItem = {
       schedule_id: s.id || null,
-      fire_at: fireAt.toISOString(),
+      fire_at: fireAt,
       target_type: s.target_type,
       target_id: s.target_id,
       target_name: s.target_name,
@@ -1212,31 +1233,27 @@ async function checkSchedules() {
       lc_mode: s.lc_mode || "dlc",
       lc_strategy: s.lc_strategy || 1,
       lc_reps: s.lc_reps || 1,
-      status: "pending"
+      status: "fired",
+      fired_at: fireAt
     };
-    const qRes = await supabasePost("schedule_queue", queueItem);
-    if (qRes.ok) {
-      // Update last_fired_at
-      await fetch(`${SUPABASE_URL}/rest/v1/schedules?id=eq.${s.id}`, {
-        method: "PATCH",
-        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
-        body: JSON.stringify({ last_fired_at: now.toISOString() })
-      });
-      if (minsUntilSched <= 60) {
-        // Mark as fired immediately so fireReadyQueueItems doesn't pick it up again
-        await fetch(`${SUPABASE_URL}/rest/v1/schedule_queue?schedule_id=eq.${s.id}&status=eq.pending`, {
-          method: "PATCH",
-          headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
-          body: JSON.stringify({ status: "fired", fired_at: new Date().toISOString() })
-        });
-        // Then execute once
-        await executeQueuedCommand(queueItem);
-      }
-    }
-  }
 
-  // Check queue for items ready to fire
-  await fireReadyQueueItems();
+    // Execute immediately — no delay
+    await executeQueuedCommand(queueItem);
+
+    // Save to queue as fired
+    await supabasePost("schedule_queue", queueItem);
+
+    // Update last_fired_at on schedule
+    await fetch(`${SUPABASE_URL}/rest/v1/schedules?id=eq.${s.id}`, {
+      method: "PATCH",
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+      body: JSON.stringify({ last_fired_at: fireAt })
+    });
+
+    // Refresh queue if tab is visible
+    const schedulerTab = document.getElementById("tab-scheduler");
+    if (schedulerTab && schedulerTab.classList.contains("active")) await loadQueue();
+  }
 }
 
 async function fireReadyQueueItems() {
@@ -1256,6 +1273,37 @@ async function fireReadyQueueItems() {
   const schedulerTab = document.getElementById("tab-scheduler");
   if (rows.length > 0 && schedulerTab && schedulerTab.classList.contains("active")) {
     await loadQueue();
+  }
+}
+
+function getScheduleUnixTime(dateStr, timeStr, timezone) {
+  // Build a Unix timestamp from date + time in the given timezone
+  // e.g. dateStr="2026-05-07", timeStr="18:30", timezone="America/Chicago"
+  try {
+    const [year, month, day] = dateStr.split("-").map(Number);
+    const [hour, minute] = timeStr.split(":").map(Number);
+    // Build ISO string and parse — then adjust for timezone offset
+    const dt = new Date(`${dateStr}T${timeStr}:00`);
+    // Get what the local time would be in the target timezone at that UTC moment
+    // Use Intl to find offset
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
+    });
+    // Build a date string in the target timezone to find offset
+    const parts = formatter.formatToParts(dt);
+    const tzHour = parseInt(parts.find(p => p.type === "hour").value);
+    const localHour = dt.getUTCHours();
+    // Simple approach: create date as if it's local time, then correct
+    const localDate = new Date(year, month - 1, day, hour, minute, 0);
+    const utcDate = new Date(localDate.toLocaleString("en-US", { timeZone: "UTC" }));
+    const tzDate = new Date(localDate.toLocaleString("en-US", { timeZone: timezone }));
+    const offset = utcDate - tzDate;
+    return Math.floor((localDate.getTime() + offset) / 1000);
+  } catch(e) {
+    console.error("Error calculating schedule Unix time:", e);
+    return 0;
   }
 }
 
@@ -1436,7 +1484,8 @@ async function executeQueuedCommand(item) {
 }
 
 // Start checking schedules every 30s once page loads
-setTimeout(() => { setInterval(fireReadyQueueItems, 15000); }, 5000);
+// fireReadyQueueItems no longer needed — device handles scheduling internally
+// setTimeout(() => { setInterval(fireReadyQueueItems, 15000); }, 5000);
 
 
 // ── HEX PARSER ───────────────────────────────────────────────────────────────
@@ -1924,3 +1973,4 @@ autoDetectTimezones();
 </script>
 </body>
 </html>
+
