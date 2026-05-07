@@ -1070,9 +1070,10 @@ async function createSchedule() {
       await sendLCToDevice(targetVal, lcHex);
     }
 
-    // Log to queue as fired (sent)
+    // Log to queue as sent
     await supabasePost("schedule_queue", {
       schedule_id: null,
+      name: name,
       fire_at: new Date(schedUnix * 1000).toISOString(),
       target_type: type,
       target_id: targetVal,
@@ -1129,6 +1130,7 @@ async function queueNow(scheduleId) {
   const fireAt = new Date().toISOString();
   const queueItem = {
     schedule_id: s.id || null,
+    name: s.name || null,
     fire_at: fireAt,
     target_type: s.target_type,
     target_id: s.target_id,
@@ -1198,7 +1200,7 @@ async function loadQueue() {
       : "";
     return `<div class="queue-item ${q.status}">
       <div class="queue-info">
-        <div class="queue-name">${q.target_name} &bull; ${RELAY_ACTION_LABELS[q.relay_action]}</div>
+        <div class="queue-name">${q.name ? q.name + " — " : ""}${q.target_name} &bull; ${RELAY_ACTION_LABELS[q.relay_action]}</div>
         <div class="queue-detail">Scheduled: ${new Date(q.fire_at).toLocaleString()} &bull; Sent: ${q.fired_at ? new Date(q.fired_at).toLocaleString() : "—"} &bull; Status: ${q.status}</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
@@ -1272,6 +1274,7 @@ async function checkSchedules() {
     const fireAt = now.toISOString();
     const queueItem = {
       schedule_id: s.id || null,
+      name: s.name || null,
       fire_at: fireAt,
       target_type: s.target_type,
       target_id: s.target_id,
