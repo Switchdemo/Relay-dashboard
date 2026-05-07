@@ -1110,7 +1110,7 @@ async function loadSchedules() {
     return `<div class="sched-item ${s.enabled ? "" : "disabled"}">
       <div class="sched-info">
         <div class="sched-name">${s.name}</div>
-        <div class="sched-detail">${s.target_name} &bull; ${RELAY_ACTION_LABELS[s.relay_action]} &bull; ${s.event_date ? s.event_date + " " : ""}${formatTimeAMPM(s.action_time)} &mdash; ${calcEndTime(s.action_time, s.duration_minutes)} ${tzShort}${s.lc_timeout ? " &bull; On " + s.lc_timeout + " min / Off " + (s.lc_cycle - s.lc_timeout) + " min per cycle" : ""} &bull; <span style='color:var(--amber);font-weight:500;'>One Time</span></div>
+        <div class="sched-detail">${s.target_name} &bull; ${RELAY_ACTION_LABELS[s.relay_action]} &bull; ${s.event_date ? s.event_date + " " : ""}${formatTimeAMPM(s.action_time)} &mdash; ${calcEndTime(s.action_time, s.duration_minutes)} ${tzShort}${(() => { if (!s.duration_minutes || !s.lc_timeout || !s.lc_cycle) return ""; const onTime = Math.round((s.lc_timeout / s.lc_cycle) * s.duration_minutes); const offTime = s.duration_minutes - onTime; return " &bull; On " + onTime + " min / Off " + offTime + " min"; })()} &bull; <span style='color:var(--amber);font-weight:500;'>One Time</span></div>
       </div>
       <div class="sched-actions">
         <button class="sched-delete-btn" onclick="deleteSchedule(${s.id})">Delete</button>
