@@ -221,6 +221,34 @@
   .hex-value { font-family:monospace;font-weight:500;color:var(--text-primary); }
   .hex-error { font-size:12px;color:var(--red);padding:8px 0; }
 
+  /* ── Event Detail Modal ── */
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:300; align-items:center; justify-content:center; }
+  .modal-overlay.active { display:flex; }
+  .modal-box { background:var(--surface); border-radius:var(--radius); padding:1.5rem; max-width:520px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,0.2); max-height:85vh; overflow-y:auto; }
+  .modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; padding-bottom:0.75rem; border-bottom:0.5px solid var(--border); }
+  .modal-title { font-size:15px; font-weight:600; color:var(--text-primary); }
+  .modal-close { font-size:18px; cursor:pointer; color:var(--text-hint); background:none; border:none; padding:0 4px; }
+  .modal-close:hover { color:var(--text-primary); }
+  .modal-section { margin-bottom:1rem; }
+  .modal-section-title { font-size:11px; font-weight:600; color:var(--text-hint); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px; }
+  .modal-row { display:flex; justify-content:space-between; font-size:12px; padding:5px 0; border-bottom:0.5px solid var(--border); }
+  .modal-row:last-child { border-bottom:none; }
+  .modal-row-label { color:var(--text-secondary); }
+  .modal-row-value { font-weight:500; color:var(--text-primary); font-family:monospace; text-align:right; max-width:60%; word-break:break-all; }
+  .modal-hex { font-family:monospace; font-size:12px; background:var(--surface2); border:0.5px solid var(--border-md); border-radius:var(--radius-sm); padding:10px; word-break:break-all; color:var(--text-primary); margin-top:4px; }
+  .modal-status { display:inline-block; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:500; }
+
+  /* ── Persistent Events Bar ── */
+  .events-bar { background: var(--surface); border-top: 0.5px solid var(--border); padding: 6px 1rem; max-width: 100%; overflow-x: auto; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+  .events-bar-label { font-size: 10px; font-weight: 600; color: var(--text-hint); text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0; }
+  .events-bar-empty { font-size: 11px; color: var(--text-hint); font-style: italic; }
+  .event-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 12px; background: var(--amber-bg); border: 0.5px solid var(--amber); font-size: 11px; color: var(--amber); flex-shrink: 0; cursor: pointer; }
+  .event-pill:hover { background: var(--amber); color: #fff; }
+  .event-pill.sent { background: var(--blue-bg); border-color: var(--blue); color: var(--blue-dark); }
+  .event-pill.sent:hover { background: var(--blue); color: #fff; }
+  .event-pill.received { background: var(--green-bg); border-color: var(--green); color: var(--green-dark); }
+  .event-pill.started { background: #F0FDF4; border-color: #16a34a; color: #166534; }
+
   .page-footer { text-align: center; padding: 2rem 1rem 0; font-size: 11px; color: var(--text-hint); }
   @media (max-width: 600px) {
     .devices-grid, .data-grid, .groups-layout { grid-template-columns: 1fr; }
@@ -248,6 +276,10 @@
   <div class="status-bar">
     <div class="dot ready" id="dot"></div>
     <span id="status-text">Ready to send commands.</span>
+  </div>
+  <div class="events-bar" id="events-bar">
+    <span class="events-bar-label">Events:</span>
+    <span class="events-bar-empty">No active events</span>
   </div>
 </div>
 
@@ -536,6 +568,17 @@
 </div>
 
 <div class="page-footer">Notehub &bull; Blues Wireless</div>
+
+<!-- ── Event Detail Modal ── -->
+<div class="modal-overlay" id="event-modal" onclick="closeEventModal(event)">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Event Details</div>
+      <button class="modal-close" onclick="closeEventModal()">✕</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
 
 <!-- ── Floating Hex Parser Button ── -->
 <button id="hex-parser-btn" onclick="toggleHexParser()"
@@ -2022,6 +2065,122 @@ async function loadCharts() {
   buildChart("chart-pf",      "Power Factor", labels, rows.map(r => r.power_factor ?? null),   "#7C3AED");
 }
 
+async function loadEventsBar() {
+  const bar = document.getElementById("events-bar");
+  if (!bar) return;
+  try {
+    // Show upcoming scheduled events + recent active queue items
+    const since = new Date(Date.now() - 24*60*60*1000).toISOString();
+    const queueRows = await supabaseGet(`schedule_queue?status=in.(sent,received,started,pending)&fire_at=gte.${since}&order=fire_at.asc&limit=10`);
+    const schedRows = await supabaseGet(`schedules?enabled=eq.true&order=created_at.desc&limit=10`);
+
+    let pills = [];
+
+    // Active queue items
+    if (Array.isArray(queueRows) && queueRows.length > 0) {
+      queueRows.forEach(q => {
+        const timeStr = formatTimeAMPM(new Date(q.fire_at).toTimeString().slice(0,5));
+        const dateStr = new Date(q.fire_at).toLocaleDateString("en-US",{month:"short",day:"numeric"});
+        const qData = encodeURIComponent(JSON.stringify({type:'queue',item:q}));
+        pills.push(`<span class="event-pill ${q.status}" onclick="showEventDetail(JSON.parse(decodeURIComponent('${qData}')))">${q.name || q.target_name} &bull; ${dateStr} ${timeStr} &bull; ${q.status}</span>`);
+      });
+    }
+
+    // Upcoming schedules not yet in queue
+    if (Array.isArray(schedRows) && schedRows.length > 0) {
+      schedRows.forEach(s => {
+        // Only show if not already in queue
+        const alreadyShown = Array.isArray(queueRows) && queueRows.some(q => q.name === s.name);
+        if (!alreadyShown) {
+          const timeStr = formatTimeAMPM(s.action_time);
+          const sData = encodeURIComponent(JSON.stringify({type:'schedule',item:{...s, status:'scheduled'}}));
+          pills.push(`<span class="event-pill" onclick="showEventDetail(JSON.parse(decodeURIComponent('${sData}')))">${s.name} &bull; ${s.event_date || ""} ${timeStr}</span>`);
+        }
+      });
+    }
+
+    if (pills.length === 0) {
+      bar.innerHTML = `<span class="events-bar-label">Events:</span><span class="events-bar-empty">No active events</span>`;
+    } else {
+      bar.innerHTML = `<span class="events-bar-label">Events:</span>${pills.join("")}`;
+    }
+  } catch(e) {
+    bar.innerHTML = `<span class="events-bar-label">Events:</span><span class="events-bar-empty">—</span>`;
+  }
+}
+
+function switchToScheduler() {
+  const btn = document.querySelector('.tab-btn[onclick*="scheduler"]');
+  if (btn) switchTab('scheduler', btn);
+}
+
+// Refresh events bar every 60 seconds
+setInterval(loadEventsBar, 60000);
+
+function closeEventModal(e) {
+  if (!e || e.target === document.getElementById("event-modal")) {
+    document.getElementById("event-modal").classList.remove("active");
+  }
+}
+
+function showEventDetail(data) {
+  // data = { type: 'queue'|'schedule', item: {...} }
+  const modal = document.getElementById("event-modal");
+  const title = document.getElementById("modal-title");
+  const body  = document.getElementById("modal-body");
+  const item  = data.item;
+
+  title.textContent = item.name || "Event Details";
+
+  // Rebuild hex from stored parameters
+  const mode     = item.lc_mode     || "dlc";
+  const strategy = item.lc_strategy || 1;
+  const reps     = item.lc_reps     || 1;
+  const startUnix = item.fire_at ? Math.floor(new Date(item.fire_at).getTime()/1000) : 0;
+  const lcHex    = buildLCHex(item.relay_action || "all_on", mode, strategy, reps, startUnix);
+
+  // Strategy lookup
+  const strat = STRATEGY_TABLE[strategy];
+  const stratDesc = strat ? `${strategy} — On ${strat.to} min / Off ${strat.ct - strat.to} min (${strat.pct}%)` : `${strategy}`;
+
+  // Status badge color
+  const statusColors = {
+    sent:"background:var(--blue-bg);color:var(--blue-dark);",
+    received:"background:var(--green-bg);color:var(--green-dark);",
+    started:"background:#F0FDF4;color:#166534;",
+    ended:"background:var(--surface2);color:var(--text-secondary);",
+    pending:"background:var(--amber-bg);color:var(--amber);",
+    cancelled:"background:var(--surface2);color:var(--text-hint);"
+  };
+  const statusStyle = statusColors[item.status] || "";
+
+  const fireTime = item.fire_at ? new Date(item.fire_at).toLocaleString() : "—";
+  const sentTime = item.fired_at ? new Date(item.fired_at).toLocaleString() : "—";
+  const endTime  = item.action_time && item.duration_minutes ? calcEndTime(item.action_time, item.duration_minutes) : "—";
+  const tzShort  = item.timezone ? item.timezone.split("/").pop().replace("_"," ") : "";
+
+  body.innerHTML = `
+    <div class="modal-section">
+      <div class="modal-section-title">Event Parameters</div>
+      <div class="modal-row"><span class="modal-row-label">Target</span><span class="modal-row-value">${item.target_name || "—"}</span></div>
+      <div class="modal-row"><span class="modal-row-label">Relay Action</span><span class="modal-row-value">${RELAY_ACTION_LABELS[item.relay_action] || item.relay_action || "—"}</span></div>
+      <div class="modal-row"><span class="modal-row-label">Control Mode</span><span class="modal-row-value">${mode.toUpperCase()}</span></div>
+      <div class="modal-row"><span class="modal-row-label">Strategy</span><span class="modal-row-value">${stratDesc}</span></div>
+      <div class="modal-row"><span class="modal-row-label">Repetitions</span><span class="modal-row-value">${reps}</span></div>
+      <div class="modal-row"><span class="modal-row-label">Duration</span><span class="modal-row-value">${item.duration_minutes ? formatDuration(item.duration_minutes) : "—"}</span></div>
+      <div class="modal-row"><span class="modal-row-label">Scheduled Time</span><span class="modal-row-value">${fireTime}</span></div>
+      ${item.action_time ? `<div class="modal-row"><span class="modal-row-label">End Time</span><span class="modal-row-value">${endTime} ${tzShort}</span></div>` : ""}
+      ${item.status ? `<div class="modal-row"><span class="modal-row-label">Status</span><span class="modal-row-value"><span class="modal-status" style="${statusStyle}">${item.status}</span></span></div>` : ""}
+      ${sentTime !== "—" ? `<div class="modal-row"><span class="modal-row-label">Payload Sent</span><span class="modal-row-value">${sentTime}</span></div>` : ""}
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-title">LC Hex Command</div>
+      <div class="modal-hex">${lcHex}</div>
+    </div>`;
+
+  modal.classList.add("active");
+}
+
 function viewDeviceHistory(uid) {
   // Switch to history tab and auto-select the device
   const historyBtn = document.querySelector('.tab-btn[onclick*="history"]');
@@ -2300,6 +2459,7 @@ async function loadHistory() {
 buildControls();
 buildDataCards();
 autoDetectTimezones();
+loadEventsBar();
 </script>
 </body>
 </html>
