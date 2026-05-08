@@ -1658,101 +1658,8 @@ function toggleHexParser() {
 }
 
 // ── Bubble Up / Data Parser (62-char) ────────────────────────────────────────
-function parseBubbleUpHex(hex) {
-  hex = hex.trim().toUpperCase().replace(/\s/g, "");
-  if (hex.length !== 62) return { error: `Expected 62 hex chars, got ${hex.length}` };
 
-  const b = (pos) => parseInt(hex.slice(pos * 2, pos * 2 + 2), 16);
-  const word = (msb, lsb) => (b(msb) << 8) | b(lsb);
 
-  const header         = b(0);
-  const length         = b(1);
-  const msgType        = b(2);
-  const bubbleUpCfg    = word(3, 4);
-  const relayR1        = b(5);
-  const relayR2        = b(6);
-  const relayR3        = b(7);
-  const relayR4        = b(8);
-  const powerUpFlag    = b(9);
-  const custComfort    = b(10) & 0x0F;
-  const voltage        = word(11, 12);
-  const current        = word(13, 14);
-  const powerFactor    = word(15, 16);
-  const watts          = word(17, 18);
-  const touchPad       = b(19) & 0x03;
-  const swValue        = word(20, 21);
-  const sqValue        = word(22, 23);
-  const overrideTimer  = word(24, 25);
-  const serialNum      = (b(26) << 16) | (b(27) << 8) | b(28);
-  const deviceId       = b(29);
-  const checksum       = b(30);
-
-  // Checksum verify
-  let xorBU = 0;
-  for (let i = 0; i < 30; i++) xorBU ^= b(i);
-  const csOk = xorBU === checksum;
-
-  const relayStatus = (r) => {
-    const active = (r >> 3) & 1;
-    const load   = r & 1;
-    return active ? "ON" : (load ? "OFF (Load present)" : "OFF");
-  };
-
-  return {
-    header:        `0x${header.toString(16).toUpperCase()} (${header === 0x51 ? "Response ✅" : "Invalid ❌"})`,
-    msgType:       `0x${msgType.toString(16).toUpperCase()} (${msgType === 0x10 ? "Bubble Up" : "Other"})`,
-    relay1:        relayStatus(relayR1),
-    relay2:        relayStatus(relayR2),
-    relay3:        relayStatus(relayR3),
-    relay4:        relayStatus(relayR4),
-    voltage:       `${voltage / 10} V`,
-    current:       `${current / 10} A`,
-    powerFactor:   `${(powerFactor / 1000).toFixed(3)}`,
-    watts:         `${watts} W`,
-    custComfort:   custComfort === 0x0A ? "ON" : "OFF",
-    swValue:       swValue,
-    sqValue:       sqValue,
-    overrideTimer: `${overrideTimer} min`,
-    serialNumber:  serialNum,
-    deviceId:      `0x${deviceId.toString(16).toUpperCase()} (${deviceId})`,
-    checksum:      csOk
-      ? `0x${checksum.toString(16).toUpperCase()} ✅ Valid`
-      : `0x${checksum.toString(16).toUpperCase()} ❌ Invalid`
-  };
-}
-
-function renderBubbleUpParser(containerId) {
-  const el = document.getElementById(containerId);
-  if (!el) return;
-  el.innerHTML = `
-    <input class="hex-input" id="bu-input-${containerId}" type="text"
-      placeholder="Paste Bubble Up hex (62 chars)..." maxlength="62"
-      oninput="runBubbleUpParse('${containerId}')" />
-    <button class="hex-parse-btn" onclick="runBubbleUpParse('${containerId}')">Parse</button>
-    <div id="bu-result-${containerId}" class="hex-result"></div>`;
-}
-
-function runBubbleUpParse(containerId) {
-  const input = document.getElementById(`bu-input-${containerId}`);
-  const result = document.getElementById(`bu-result-${containerId}`);
-  if (!input || !result) return;
-  const hex = input.value.trim();
-  if (hex.length < 62) {
-    result.innerHTML = `<div class="hex-error">Enter 62 hex characters (${hex.length}/62)</div>`;
-    return;
-  }
-  const parsed = parseBubbleUpHex(hex);
-  if (parsed.error) {
-    result.innerHTML = `<div class="hex-error">${parsed.error}</div>`;
-    return;
-  }
-  result.innerHTML = Object.entries(parsed).map(([k, v]) =>
-    `<div class="hex-row">
-      <span class="hex-label">${k.charAt(0).toUpperCase() + k.slice(1).replace(/([A-Z])/g, " $1")}</span>
-      <span class="hex-value">${v}</span>
-    </div>`
-  ).join("");
-}
 
 // ── LC Response Parser ────────────────────────────────────────────────────────
 const LC_STATUS_LABELS = {
@@ -1769,46 +1676,7 @@ const LC_STATUS_LABELS = {
   10: "Customer Comfort Exit (R4)"
 };
 
-function parseLCResponseHex(hex) {
-  hex = hex.trim().toUpperCase().replace(/\s/g, "");
-  if (hex.length !== 20) return { error: `Expected 20 hex chars, got ${hex.length}` };
 
-  const b = (pos) => parseInt(hex.slice(pos * 2, pos * 2 + 2), 16);
-
-  const header   = b(0);
-  const length   = b(1);
-  const msgType  = b(2);
-  const eventId  = b(3);
-  const statusByte = b(4);
-  const ts = (b(5) << 24) | (b(6) << 16) | (b(7) << 8) | b(8);
-  const checksum = b(9);
-
-  // Validate header
-  if (header !== 0x51) return { error: `Invalid header: expected 51, got ${header.toString(16).toUpperCase()}` };
-
-  // Verify checksum — XOR of all preceding bytes
-  let xor = 0;
-  for (let i = 0; i < 9; i++) xor ^= b(i);
-  const calcHex = xor.toString(16).toUpperCase().padStart(2,"0");
-  const rcvdHex = checksum.toString(16).toUpperCase().padStart(2,"0");
-  const checksumStr = xor === checksum
-    ? `0x${rcvdHex} ✅ Valid`
-    : `Received 0x${rcvdHex} / Calculated 0x${calcHex} — verify manually`;
-
-  const status = LC_STATUS_LABELS[statusByte] || `Unknown (${statusByte})`;
-  const timestamp = ts > 0 ? new Date(ts * 1000).toLocaleString() : "N/A";
-  const eventIdHex = `0x${eventId.toString(16).toUpperCase().padStart(2, "0")}`;
-
-  return {
-    header:    `0x${header.toString(16).toUpperCase()} ✅`,
-    length:    length,
-    msgType:   `0x${msgType.toString(16).toUpperCase()} (Load Control Response)`,
-    eventId:   `${eventIdHex} (${eventId} decimal)`,
-    status:    status,
-    timestamp: timestamp,
-    checksum:  checksumStr
-  };
-}
 
 
 function runResponseParse(containerId) {
