@@ -875,12 +875,11 @@ async function initScheduler() {
     renderBubbleUpParser("bu-parser-panel");
     setTimeout(async () => { await prefillEventName(); }, 100);
   } else {
-    // On subsequent visits just refresh schedules and group names
-    // but DO NOT reload queue — let user control that with Refresh button
     await loadGroupNamesForScheduler();
     populateTargetSelector();
     updateSchedulerTimezone();
     await loadSchedules();
+    await loadQueue();
   }
 }
 
@@ -1126,8 +1125,13 @@ async function createSchedule() {
       target_id: targetVal,
       target_name: targetName,
       relay_action: action,
+      duration_minutes: duration_minutes || null,
+      timezone: tz,
+      action_time: time,
       lc_mode: mode,
       lc_strategy: stratNum,
+      lc_timeout: stratTimeout,
+      lc_cycle: stratCycle,
       lc_reps: reps,
       one_time: true,
       status: "sent",
@@ -1234,29 +1238,48 @@ async function deleteSchedule(id) {
 
 async function loadQueue() {
   const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
-  const rows = await supabaseGet(`schedule_queue?order=fire_at.desc&limit=50&fire_at=gte.${since}`);
   const list = document.getElementById("queue-list");
   if (!list) return;
-  if (!rows) { list.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error loading queue — check console.</div>`; return; }
-  if (rows.error) { list.innerHTML = `<div class="sched-empty" style="color:var(--red);">Supabase error: ${rows.message || JSON.stringify(rows)}</div>`; return; }
-  if (rows.length === 0) { list.innerHTML = `<div class="sched-empty">No pending commands.</div>`; return; }
-  list.innerHTML = rows.map(q => {
-
-    const cancelBtn = q.status === "pending"
-      ? `<button class="queue-cancel-btn" onclick="cancelQueueItem(${q.id})">Cancel</button>`
-      : "";
-    return `<div class="queue-item ${q.status}">
-      <div class="queue-info">
-        <div class="queue-name">${q.name ? q.name + " — " : ""}${q.target_name} &bull; ${RELAY_ACTION_LABELS[q.relay_action]}</div>
-        <div class="queue-detail">Scheduled: ${new Date(q.fire_at).toLocaleString()} &bull; Sent: ${q.fired_at ? new Date(q.fired_at).toLocaleString() : "—"} &bull; Status: ${q.status}</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span class="queue-status ${q.status}">${q.status}</span>
-        ${["sent","received","started"].includes(q.status) ? `<button class="queue-cancel-btn" style="color:var(--red);border-color:var(--red);" onclick="endEvent('${q.target_id}','${q.target_type}','${q.relay_action}',${q.id})">End Event</button>` : ""}
-        ${cancelBtn}
-      </div>
-    </div>`;
-  }).join("");
+  list.innerHTML = `<div class="sched-empty">Loading...</div>`;
+  try {
+    const rows = await supabaseGet(`schedule_queue?order=fire_at.desc&limit=50&fire_at=gte.${since}`);
+    if (!rows || rows.error) {
+      list.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error: ${rows?.message || "Could not load queue"}</div>`;
+      console.error("Queue load error:", rows);
+      return;
+    }
+    if (rows.length === 0) { list.innerHTML = `<div class="sched-empty">No commands in last 48 hours.</div>`; return; }
+    list.innerHTML = rows.map(q => {
+      const cancelBtn = q.status === "pending"
+        ? `<button class="queue-cancel-btn" onclick="cancelQueueItem(${q.id})">Cancel</button>`
+        : "";
+      const endBtn = ["sent","received","started"].includes(q.status)
+        ? `<button class="queue-cancel-btn" style="color:var(--red);border-color:var(--red);" onclick="endEvent('${q.target_id}','${q.target_type}','${q.relay_action}',${q.id})">End Event</button>`
+        : "";
+      // Device receipt indicator
+      const receiptIcon = q.status === "sent" ? "📤 Sent — awaiting device receipt"
+        : q.status === "received" ? "📥 Received by device"
+        : q.status === "started"  ? "▶️ Event started on device"
+        : q.status === "ended"    ? "✅ Event ended"
+        : q.status === "rejected" ? "❌ Rejected by device"
+        : q.status === "cancelled"? "🚫 Cancelled"
+        : q.status;
+      return `<div class="queue-item ${q.status}">
+        <div class="queue-info">
+          <div class="queue-name">${q.name ? q.name + " — " : ""}${q.target_name} &bull; ${RELAY_ACTION_LABELS[q.relay_action] || q.relay_action}</div>
+          <div class="queue-detail">📅 ${new Date(q.fire_at).toLocaleString()} &bull; ${receiptIcon}</div>
+          ${q.fired_at ? `<div class="queue-detail">📤 Payload sent: ${new Date(q.fired_at).toLocaleString()}</div>` : ""}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="queue-status ${q.status}">${q.status}</span>
+          ${endBtn}${cancelBtn}
+        </div>
+      </div>`;
+    }).join("");
+  } catch(e) {
+    list.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error loading queue: ${e.message}</div>`;
+    console.error("loadQueue exception:", e);
+  }
 }
 
 async function fireNow(id) {
@@ -1995,6 +2018,82 @@ function buildChart(canvasId, label, labels, data, color) {
       }
     }
   });
+}
+
+async function loadHistoricEvents() {
+  const list = document.getElementById("historic-events-list");
+  if (!list) return;
+  list.innerHTML = `<div class="sched-empty">Loading...</div>`;
+  const rangeHours = document.getElementById("hist-event-range")?.value;
+  try {
+    let query = `schedule_queue?order=fire_at.desc&limit=200`;
+    if (rangeHours) {
+      const since = new Date(Date.now() - parseInt(rangeHours)*60*60*1000).toISOString();
+      query += `&fire_at=gte.${since}`;
+    }
+    const rows = await supabaseGet(query);
+    if (!rows || rows.length === 0) { list.innerHTML = `<div class="sched-empty">No historic events found.</div>`; return; }
+    list.innerHTML = `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead><tr>
+        <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Event</th>
+        <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Target</th>
+        <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Action</th>
+        <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Scheduled</th>
+        <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Sent</th>
+        <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Status</th>
+        <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Mode</th>
+        <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Strategy</th>
+        <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Reps</th>
+        <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Duration</th>
+      </tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);">${r.name || "—"}</td>
+        <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);">${r.target_name || "—"}</td>
+        <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);">${RELAY_ACTION_LABELS[r.relay_action] || r.relay_action || "—"}</td>
+        <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);white-space:nowrap;">${r.fire_at ? new Date(r.fire_at).toLocaleString() : "—"}</td>
+        <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);white-space:nowrap;">${r.fired_at ? new Date(r.fired_at).toLocaleString() : "—"}</td>
+        <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);"><span class="queue-status ${r.status}">${r.status}</span></td>
+        <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);">${(r.lc_mode||"—").toUpperCase()}</td>
+        <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);">${r.lc_strategy || "—"}</td>
+        <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);">${r.lc_reps || "—"}</td>
+        <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);">${r.duration_minutes ? formatDuration(r.duration_minutes) : "—"}</td>
+      </tr>`).join("")}</tbody>
+    </table></div>`;
+  } catch(e) { list.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error loading historic events.</div>`; }
+}
+
+async function exportHistoricEvents() {
+  const rangeHours = document.getElementById("hist-event-range")?.value;
+  setStatus("sending", "Preparing historic events export...");
+  try {
+    let query = `schedule_queue?order=fire_at.desc&limit=5000`;
+    if (rangeHours) {
+      const since = new Date(Date.now() - parseInt(rangeHours)*60*60*1000).toISOString();
+      query += `&fire_at=gte.${since}`;
+    }
+    const rows = await supabaseGet(query);
+    if (!rows || rows.length === 0) { setStatus("error", "No events to export."); return; }
+    const headers = ["Event Name","Target","Action","Mode","Strategy","Reps","Duration","Scheduled","Sent","Status"];
+    const csvRows = rows.map(r => [
+      r.name || "",
+      r.target_name || "",
+      RELAY_ACTION_LABELS[r.relay_action] || r.relay_action || "",
+      (r.lc_mode || "").toUpperCase(),
+      r.lc_strategy || "",
+      r.lc_reps || "",
+      r.duration_minutes ? formatDuration(r.duration_minutes) : "",
+      r.fire_at ? new Date(r.fire_at).toLocaleString() : "",
+      r.fired_at ? new Date(r.fired_at).toLocaleString() : "",
+      r.status || ""
+    ].map(v => `"${v}"`).join(","));
+    const csv = [headers.join(","), ...csvRows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `historic_events.csv`; a.click();
+    URL.revokeObjectURL(url);
+    setStatus("ready", `Exported ${rows.length} historic events.`);
+  } catch(e) { setStatus("error", "Export failed."); }
 }
 
 async function exportHistory() {
