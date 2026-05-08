@@ -377,17 +377,17 @@
           <div class="sched-field">
             <label class="sched-label">Strategy (Timeout / Cycle / %)</label>
             <select class="sched-select" id="sf-strategy" onchange="onStrategyChange()">
-              <option value="" disabled selected>— Choose Load Reduction —</option>
-              <option value="37|5|60">10% — Minimal (On 5 min, Off 55 min per 60 min cycle)</option>
-              <option value="38|10|60">20% — Light (On 10 min, Off 50 min per 60 min cycle)</option>
-              <option value="40|20|60">30% — Moderate (On 20 min, Off 40 min per 60 min cycle)</option>
-              <option value="41|24|60">40% — Medium (On 24 min, Off 36 min per 60 min cycle)</option>
-              <option value="43|30|60">50% — Half (On 30 min, Off 30 min per 60 min cycle)</option>
-              <option value="45|36|60">60% — High (On 36 min, Off 24 min per 60 min cycle)</option>
-              <option value="47|42|60">70% — Very high (On 42 min, Off 18 min per 60 min cycle)</option>
-              <option value="49|48|60">80% — Near full (On 48 min, Off 12 min per 60 min cycle)</option>
-              <option value="51|54|60">90% — Near total (On 54 min, Off 6 min per 60 min cycle)</option>
-              <option value="53|60|60">100% — Total duration (On entire 60 min cycle — full shed)</option>
+              <option value="" disabled selected>— Choose Cycle —</option>
+              <option value="2|7.5|15">50% — On 7.5 min / Off 7.5 min (15 min cycle)</option>
+              <option value="5|7.5|30">25% — On 7.5 min / Off 22.5 min (30 min cycle)</option>
+              <option value="6|10|30">33% — On 10 min / Off 20 min (30 min cycle)</option>
+              <option value="9|15|30">50% — On 15 min / Off 15 min (30 min cycle)</option>
+              <option value="11|18|30">60% — On 18 min / Off 12 min (30 min cycle)</option>
+              <option value="13|21|30">70% — On 21 min / Off 9 min (30 min cycle)</option>
+              <option value="15|24|30">80% — On 24 min / Off 6 min (30 min cycle)</option>
+              <option value="17|27|30">90% — On 27 min / Off 3 min (30 min cycle)</option>
+              <option value="19|30|30">100% — On 30 min / Off 0 min (30 min cycle)</option>
+              <option value="1|7.5|7.5">100% — On 7.5 min / Off 0 min (7.5 min cycle)</option>
             </select>
           </div>
 
@@ -1026,10 +1026,14 @@ async function createSchedule() {
     targetName = unitName(targetVal);
   }
 
-  // Calculate repetitions from duration ÷ cycle time
-  const reps = duration_minutes
+  // Calculate repetitions: duration ÷ cycle time
+  // e.g. 15 min event with 15 min cycle = 1 rep
+  //      60 min event with 15 min cycle = 4 reps
+  //      60 min event with 30 min cycle = 2 reps
+  const reps = duration_minutes && stratCycle
     ? Math.max(1, Math.round(duration_minutes / stratCycle))
     : 1;
+  console.log(`Duration=${duration_minutes} min, Cycle=${stratCycle} min, Reps=${reps}`);
 
   const schedule = {
     name, enabled: true,
