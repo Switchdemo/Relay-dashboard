@@ -234,16 +234,16 @@
 <!-- ── STICKY HEADER ── -->
 <div class="sticky-header">
   <div class="page-header">
-    <div class="page-title">Relay Control Panel</div>
-    <div class="page-sub">Multi-device remote control</div>
+    <div class="page-title">Load Control Device Panel</div>
+    <div class="page-sub">Load control &amp; scheduling</div>
   </div>
   <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('controls', this)">Controls</button>
-    <button class="tab-btn" onclick="switchTab('data', this)">Device Data</button>
+    <button class="tab-btn active" onclick="switchTab('scheduler', this)">Event Scheduler</button>
+    <button class="tab-btn" onclick="switchTab('controls', this)">Device Controls</button>
+    <button class="tab-btn" onclick="switchTab('data', this)">Current Device Status</button>
     <button class="tab-btn" onclick="switchTab('history', this)">Device History</button>
-    <button class="tab-btn" onclick="switchTab('groups', this)">Demo Groups</button>
-    <button class="tab-btn" onclick="switchTab('scheduler', this)">Event Scheduler</button>
-    <button class="tab-btn" onclick="switchTab('map', this)">Map</button>
+    <button class="tab-btn" onclick="switchTab('groups', this)">Groups</button>
+    <button class="tab-btn" onclick="switchTab('map', this)">Device Location</button>
   </div>
   <div class="status-bar">
     <div class="dot ready" id="dot"></div>
@@ -252,7 +252,7 @@
 </div>
 
 <!-- ── CONTROLS TAB ── -->
-<div class="tab-pane active" id="tab-controls">
+<div class="tab-pane" id="tab-controls">
   <div class="scroll-content">
     <div class="devices-grid" id="devices-grid"></div>
   </div>
@@ -329,14 +329,14 @@
 
 
 <!-- ── SCHEDULER TAB ── -->
-<div class="tab-pane" id="tab-scheduler">
+<div class="tab-pane active" id="tab-scheduler">
   <div class="scroll-content">
     <div class="scheduler-layout">
 
       <!-- Create Schedule Form -->
       <div class="sched-card">
         <div class="sched-card-header">
-          <div class="sched-card-title">Create New Schedule</div>
+          <div class="sched-card-title">Create New Event</div>
         </div>
         <div class="sched-form">
           <div class="sched-field full">
@@ -1954,6 +1954,45 @@ function buildChart(canvasId, label, labels, data, color) {
   });
 }
 
+async function exportHistory() {
+  const deviceFilter = document.getElementById("history-device-select").value;
+  const rangeHours = document.getElementById("history-range")?.value;
+  setStatus("sending", "Preparing export...");
+  try {
+    let query = `device_readings?order=recorded_at.desc&limit=5000`;
+    if (deviceFilter) query += `&device_uid=eq.${encodeURIComponent(deviceFilter)}`;
+    if (rangeHours) { const since = new Date(Date.now() - parseInt(rangeHours)*60*60*1000).toISOString(); query += `&recorded_at=gte.${since}`; }
+    const rows = await supabaseGet(query);
+    if (!rows || rows.length === 0) { setStatus("error", "No data to export."); return; }
+    const headers = ["Time","Device","Relay1","Relay2","Relay3","Relay4","Voltage (V)","Current (A)","Watts (W)","Power Factor","Comfort"];
+    const csvRows = rows.map(r => {
+      const devName = DEVICES.find(d => d.uid === r.device_uid)?.name ?? unitName(r.device_uid);
+      return [
+        new Date(r.recorded_at).toLocaleString(),
+        devName,
+        r.relay_status_r1 > 0 ? "On" : "Off",
+        r.relay_status_r2 > 0 ? "On" : "Off",
+        r.relay_status_r3 > 0 ? "On" : "Off",
+        r.relay_status_r4 > 0 ? "On" : "Off",
+        r.voltage ? (r.voltage/10).toFixed(1) : "",
+        r.current ? (r.current/10).toFixed(1) : "",
+        r.watts_consumed ?? "",
+        r.power_factor ?? "",
+        r.customer_comfort > 0 ? "On" : "Off"
+      ].map(v => `"${v}"`).join(",");
+    });
+    const csv = [headers.join(","), ...csvRows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const rangeLabel = rangeHours ? `_last${rangeHours}h` : "_all";
+    const devLabel = deviceFilter ? `_${unitName(deviceFilter)}` : "_all_devices";
+    a.href = url; a.download = `device_history${devLabel}${rangeLabel}.csv`; a.click();
+    URL.revokeObjectURL(url);
+    setStatus("ready", `Exported ${rows.length} records.`);
+  } catch(e) { setStatus("error", "Export failed."); console.error(e); }
+}
+
 async function loadCharts() {
   const deviceFilter = document.getElementById("chart-device-select")?.value;
   const hours = parseInt(document.getElementById("chart-range")?.value || "24");
@@ -1981,6 +2020,20 @@ async function loadCharts() {
   buildChart("chart-current", "Current",      labels, rows.map(r => r.current ?? null),        "#1D9E75");
   buildChart("chart-watts",   "Watts",        labels, rows.map(r => r.watts_consumed ?? null), "#BA7517");
   buildChart("chart-pf",      "Power Factor", labels, rows.map(r => r.power_factor ?? null),   "#7C3AED");
+}
+
+function viewDeviceHistory(uid) {
+  // Switch to history tab and auto-select the device
+  const historyBtn = document.querySelector('.tab-btn[onclick*="history"]');
+  if (historyBtn) {
+    switchTab('history', historyBtn);
+    // Set device selector
+    const sel = document.getElementById('history-device-select');
+    if (sel) { sel.value = uid; loadHistory(); }
+    // Also set chart selector
+    const chartSel = document.getElementById('chart-device-select');
+    if (chartSel) { chartSel.value = uid; loadCharts(); }
+  }
 }
 
 function buildControls() {
@@ -2011,7 +2064,8 @@ function buildControls() {
           <span class="all-row-state" id="alllbl-${device.id}">All off</span>
           <div class="toggle blue" id="atgl-${device.id}"><div class="track"></div><div class="thumb"></div></div>
         </div>
-      </div>`;
+      </div>
+      <button onclick="viewDeviceHistory('${device.uid}')" style="width:100%;margin-top:10px;padding:7px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);color:var(--text-secondary);font-size:12px;cursor:pointer;">📋 View History</button>`;
     grid.appendChild(card);
   });
 }
@@ -2207,9 +2261,9 @@ async function loadLatestDevice(deviceId) {
       <div class="data-field"><span class="data-field-name">Relay 2</span><span class="data-field-value">${relayDot(r.relay_status_r2)}</span></div>
       <div class="data-field"><span class="data-field-name">Relay 3</span><span class="data-field-value">${relayDot(r.relay_status_r3)}</span></div>
       <div class="data-field"><span class="data-field-name">Relay 4</span><span class="data-field-value">${relayDot(r.relay_status_r4)}</span></div>
-      <div class="data-field"><span class="data-field-name">Voltage</span><span class="data-field-value">${r.voltage ?? "—"}</span></div>
-      <div class="data-field"><span class="data-field-name">Current</span><span class="data-field-value">${r.current ?? "—"}</span></div>
-      <div class="data-field"><span class="data-field-name">Watts</span><span class="data-field-value">${r.watts_consumed ?? "—"}</span></div>
+      <div class="data-field"><span class="data-field-name">Voltage</span><span class="data-field-value">${r.voltage ? (r.voltage/10).toFixed(1) + " V" : "—"}</span></div>
+      <div class="data-field"><span class="data-field-name">Current</span><span class="data-field-value">${r.current ? (r.current/10).toFixed(1) + " A" : "—"}</span></div>
+      <div class="data-field"><span class="data-field-name">Watts</span><span class="data-field-value">${r.watts_consumed ? r.watts_consumed + " W" : "—"}</span></div>
       <div class="data-field"><span class="data-field-name">Power Factor</span><span class="data-field-value">${r.power_factor ?? "—"}</span></div>
       <div class="data-field"><span class="data-field-name">Comfort</span><span class="data-field-value">${r.customer_comfort > 0 ? "On" : "Off"}</span></div>
       <div class="data-field"><span class="data-field-name">Location</span><span class="data-field-value">${r.location ?? "—"}</span></div>
@@ -2220,11 +2274,13 @@ async function loadLatestDevice(deviceId) {
 async function loadLatest() { DEVICES.forEach(d => loadLatestDevice(d.id)); }
 async function loadHistory() {
   const deviceFilter = document.getElementById("history-device-select").value;
+  const rangeHours = document.getElementById("history-range")?.value;
   const tbody = document.getElementById("history-body");
   tbody.innerHTML = `<tr><td colspan="11" class="no-data">Loading...</td></tr>`;
   try {
-    let query = `device_readings?order=recorded_at.desc&limit=50`;
+    let query = `device_readings?order=recorded_at.desc&limit=200`;
     if (deviceFilter) query += `&device_uid=eq.${encodeURIComponent(deviceFilter)}`;
+    if (rangeHours) { const since = new Date(Date.now() - parseInt(rangeHours)*60*60*1000).toISOString(); query += `&recorded_at=gte.${since}`; }
     const rows = await supabaseGet(query);
     if (!rows || rows.length === 0) { tbody.innerHTML = `<tr><td colspan="11" class="no-data">No history found</td></tr>`; return; }
     tbody.innerHTML = rows.map(r => {
