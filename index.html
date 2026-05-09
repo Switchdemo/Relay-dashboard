@@ -3951,4 +3951,115 @@ function renderGroups() {
     ${[1,2,3].map(gn => `
       <div class="group-card">
         <div class="group-header">
-          <input class="group
+          <input class="group-name-input" id="gname-${gn}" value="${groupNames[gn]}" placeholder="Group name..." />
+          <button class="group-save-btn" onclick="saveGroupName(${gn})">Save</button>
+        </div>
+        <div style="font-size:11px;font-weight:600;color:var(--red);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Emergency Direct Control</div>
+        <div class="group-actions">
+          <button class="group-cmd-btn on" onclick="sendGroupCommand(${gn}, 'all_on')">All Relays ON</button>
+          <button class="group-cmd-btn off" onclick="sendGroupCommand(${gn}, 'all_off')">All Relays OFF</button>
+        </div>
+        <div class="group-devices">
+          ${DEVICES.map(d => `
+            <label class="group-device-row ${(groupAssignments[d.uid] || []).includes(gn) ? "group-member" : ""}">
+              <input type="checkbox" ${(groupAssignments[d.uid] || []).includes(gn) ? "checked" : ""}
+                onchange="assignDevice('${d.uid}', ${gn}, this.checked)" />
+              <div>
+                <div class="group-device-label">${d.name}</div>
+                <div class="group-device-uid">${d.uid}</div>
+              </div>
+            </label>`).join("")}
+        </div>
+      </div>`).join("")}
+  </div>`;
+  container.innerHTML = html;
+}
+
+async function saveGroupName(groupNum) {
+  const input = document.getElementById(`gname-${groupNum}`);
+  const name = input.value.trim() || `Group ${groupNum}`;
+  groupNames[groupNum] = name;
+  await supabaseUpsert("group_names", { group_number: groupNum, group_name: name }, "group_number");
+  setStatus("ready", `Group ${groupNum} name saved.`);
+}
+
+async function assignDevice(uid, groupNum, checked) {
+  if (checked) {
+    // Add to this group (other group memberships stay intact)
+    await supabaseUpsert("device_groups", { group_number: groupNum, group_name: groupNames[groupNum], device_uid: uid }, "group_number,device_uid");
+    if (!groupAssignments[uid]) groupAssignments[uid] = [];
+    if (!groupAssignments[uid].includes(groupNum)) groupAssignments[uid].push(groupNum);
+  } else {
+    // Remove from this group only
+    await supabaseDelete("device_groups", `device_uid=eq.${encodeURIComponent(uid)}&group_number=eq.${groupNum}`);
+    if (groupAssignments[uid]) groupAssignments[uid] = groupAssignments[uid].filter(g => g !== groupNum);
+  }
+  renderGroups();
+  setStatus("ready", `${unitName(uid)} group assignment saved.`);
+}
+
+// ── Data Loading ──────────────────────────────────────────────────────────────
+function relayDot(val) {
+  const on = val > 0;
+  return `<span class="relay-dot ${on?"on":"off"}"></span>${on?"On":"Off"}`;
+}
+async function loadLatestDevice(deviceId) {
+  const device = DEVICES.find(d => d.id === deviceId);
+  const container = document.getElementById(`data-fields-${deviceId}`);
+  const tsEl = document.getElementById(`data-ts-${deviceId}`);
+  container.innerHTML = `<div class="data-empty">Loading...</div>`;
+  try {
+    const rows = await supabaseGet(`device_readings?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1`);
+    if (!rows || rows.length === 0) { container.innerHTML = `<div class="data-empty">No data yet</div>`; tsEl.textContent = ""; return; }
+    const r = rows[0];
+    document.getElementById(`badge-${deviceId}`)?.classList.add("online");
+    container.innerHTML = `<div class="data-fields">
+      <div class="data-field"><span class="data-field-name">Relay 1</span><span class="data-field-value">${relayDot(r.relay_status_r1)}</span></div>
+      <div class="data-field"><span class="data-field-name">Relay 2</span><span class="data-field-value">${relayDot(r.relay_status_r2)}</span></div>
+      <div class="data-field"><span class="data-field-name">Relay 3</span><span class="data-field-value">${relayDot(r.relay_status_r3)}</span></div>
+      <div class="data-field"><span class="data-field-name">Relay 4</span><span class="data-field-value">${relayDot(r.relay_status_r4)}</span></div>
+      <div class="data-field"><span class="data-field-name">Voltage</span><span class="data-field-value">${r.voltage ? (r.voltage/10).toFixed(1) + " V" : "—"}</span></div>
+      <div class="data-field"><span class="data-field-name">Current</span><span class="data-field-value">${r.current ? (r.current/10).toFixed(1) + " A" : "—"}</span></div>
+      <div class="data-field"><span class="data-field-name">Watts</span><span class="data-field-value">${r.watts_consumed ? r.watts_consumed + " W" : "—"}</span></div>
+      <div class="data-field"><span class="data-field-name">Power Factor</span><span class="data-field-value">${r.power_factor ?? "—"}</span></div>
+      <div class="data-field"><span class="data-field-name">Comfort</span><span class="data-field-value">${r.customer_comfort > 0 ? "On" : "Off"}</span></div>
+      <div class="data-field"><span class="data-field-name">Location</span><span class="data-field-value">${r.location ?? "—"}</span></div>
+    </div>`;
+    tsEl.textContent = `Last updated: ${new Date(r.recorded_at).toLocaleString()}`;
+  } catch(e) { container.innerHTML = `<div class="data-empty">Error loading data</div>`; }
+}
+async function loadLatest() { DEVICES.forEach(d => loadLatestDevice(d.id)); }
+async function loadHistory() {
+  const deviceFilter = document.getElementById("history-device-select").value;
+  const rangeHours = document.getElementById("history-range")?.value;
+  const tbody = document.getElementById("history-body");
+  tbody.innerHTML = `<tr><td colspan="11" class="no-data">Loading...</td></tr>`;
+  try {
+    let query = `device_readings?order=recorded_at.desc&limit=200`;
+    if (deviceFilter) query += `&device_uid=eq.${encodeURIComponent(deviceFilter)}`;
+    if (rangeHours) { const since = new Date(Date.now() - parseInt(rangeHours)*60*60*1000).toISOString(); query += `&recorded_at=gte.${since}`; }
+    const rows = await supabaseGet(query);
+    if (!rows || rows.length === 0) { tbody.innerHTML = `<tr><td colspan="11" class="no-data">No history found</td></tr>`; return; }
+    tbody.innerHTML = rows.map(r => {
+      const devName = DEVICES.find(d => d.uid === r.device_uid)?.name ?? unitName(r.device_uid);
+      return `<tr>
+        <td>${new Date(r.recorded_at).toLocaleString()}</td><td>${devName}</td>
+        <td>${relayDot(r.relay_status_r1)}</td><td>${relayDot(r.relay_status_r2)}</td>
+        <td>${relayDot(r.relay_status_r3)}</td><td>${relayDot(r.relay_status_r4)}</td>
+        <td>${r.voltage ?? "—"}</td><td>${r.current ?? "—"}</td>
+        <td>${r.watts_consumed ?? "—"}</td><td>${r.power_factor ?? "—"}</td>
+        <td>${r.customer_comfort > 0 ? "On" : "Off"}</td>
+      </tr>`;
+    }).join("");
+  } catch(e) { tbody.innerHTML = `<tr><td colspan="11" class="no-data">Error loading history</td></tr>`; }
+}
+
+buildControls();
+buildDataCards();
+autoDetectTimezones();
+loadEventsBar();
+// Init summary tab since it's the default active tab
+setTimeout(() => initSummaryTab(), 100);
+</script>
+</body>
+</html>
