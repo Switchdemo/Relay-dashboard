@@ -728,8 +728,10 @@
           <div class="sched-card-title">Event History</div>
           <div style="display:flex;gap:8px;align-items:center;">
             <select class="history-select" id="stats-range">
-              <option value="168">Last 7 days</option>
-              <option value="720" selected>Last 30 days</option>
+              <option value="24">Last 24 hours</option>
+              <option value="48">Last 48 hours</option>
+              <option value="168" selected>Last 7 days</option>
+              <option value="720">Last 30 days</option>
               <option value="2160">Last 90 days</option>
               <option value="">All time</option>
             </select>
@@ -3119,13 +3121,25 @@ async function loadEventHistory() {
   container.innerHTML = `<div class="sched-empty">Loading...</div>`;
   const rangeHours = document.getElementById("stats-range")?.value;
   try {
-    let query = `schedule_queue?order=fire_at.desc&limit=200`;
+    // Order by fired_at (when sent) not fire_at (scheduled time)
+    // Use OR logic — match on either fired_at or fire_at within range
+    let query = `schedule_queue?order=fired_at.desc.nullslast&limit=500`;
     if (rangeHours) {
       const since = new Date(Date.now() - parseInt(rangeHours)*60*60*1000).toISOString();
-      query += `&fire_at=gte.${since}`;
+      // Filter by fired_at (when actually sent) falling within range
+      query += `&fired_at=gte.${since}`;
     }
     const rows = await supabaseGet(query);
-    if (!rows || rows.length === 0) { container.innerHTML = `<div class="sched-empty">No events found.</div>`; return; }
+    if (!rows || rows.length === 0) {
+      // Fallback: try without date filter to see if any rows exist at all
+      const allRows = await supabaseGet(`schedule_queue?order=fired_at.desc.nullslast&limit=10`);
+      if (!allRows || allRows.length === 0) {
+        container.innerHTML = `<div class="sched-empty">No events found in schedule_queue table.</div>`;
+      } else {
+        container.innerHTML = `<div class="sched-empty" style="color:var(--amber);">No events found in selected time range. ${allRows.length} total events exist — try selecting a wider range or "All time".</div>`;
+      }
+      return;
+    }
 
     const statusIcon = { sent:"📤", received:"📥", started:"▶️", ended:"✅", cancelled:"🚫", rejected:"❌", pending:"🕐" };
     const statusClass = { sent:"sent", received:"received", started:"started", ended:"ended", cancelled:"cancelled", rejected:"rejected" };
@@ -3147,7 +3161,7 @@ async function loadEventHistory() {
 
         return `<div class="queue-item ${sc}" style="cursor:pointer;" onclick="showEventDetail(JSON.parse(decodeURIComponent('${rData}')))">
           <div class="queue-info">
-            <div class="queue-name">${r.name || "—"} &bull; ${r.target_name || "—"} &bull; ${RELAY_ACTION_LABELS[r.relay_action] || r.relay_action || "—"}</div>
+            <div class="queue-name">${r.name || r.target_name || "Unnamed Event"} &bull; ${r.target_name || "—"} &bull; ${RELAY_ACTION_LABELS[r.relay_action] || r.relay_action || "—"}</div>
             <div class="queue-detail">${icon} ${r.status} &bull; 📅 ${fireStr} &bull; ⏱ ${dur} &bull; ends ${endStr}</div>
             <div class="queue-detail" style="color:var(--text-hint);margin-top:1px;">Mode: ${(r.lc_mode||"—").toUpperCase()} &bull; Strategy: ${r.lc_strategy||"—"} &bull; Reps: ${r.lc_reps||"—"} &nbsp;|&nbsp; <span style="color:var(--blue);text-decoration:underline;">Click to view hex &amp; details</span></div>
           </div>
