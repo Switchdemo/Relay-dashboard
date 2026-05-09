@@ -767,8 +767,24 @@
           <div style="font-size:11px;color:var(--text-hint);">Sets outbound reporting frequency per device</div>
         </div>
         <div style="margin-bottom:1rem;padding:0.75rem;background:var(--amber-bg);border-radius:var(--radius-sm);font-size:12px;color:var(--amber);border:0.5px solid var(--amber);">
-          ⚠️ Changes take effect on the device's next inbound sync. Frequent bubble-ups increase data costs.
+          ⚠️ Changes take effect on the device's next inbound sync — which occurs every time a bubble-up is sent. Frequent bubble-ups increase data costs.
         </div>
+
+        <!-- Event Mode / Normal Mode buttons -->
+        <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Program Mode</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1.25rem;">
+          <div style="background:var(--green-bg);border:0.5px solid var(--green);border-radius:var(--radius-sm);padding:1rem;">
+            <div style="font-size:13px;font-weight:600;color:var(--green-dark);margin-bottom:4px;">🟢 Event Mode</div>
+            <div style="font-size:11px;color:var(--green-dark);margin-bottom:10px;">Sets both inbound &amp; outbound to <strong>5 minutes</strong> — ensures LC commands are received quickly and device status is monitored closely during active DR events.</div>
+            <button class="sched-submit-btn" style="margin:0;background:var(--green-dark);" onclick="setEventMode()">Activate Event Mode</button>
+          </div>
+          <div style="background:var(--surface2);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:1rem;">
+            <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:4px;">⚙️ Normal Mode</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px;">Reverts inbound &amp; outbound to your <strong>scheduled intervals</strong> — applies the current bubble-up schedule rule based on season and time of day.</div>
+            <button class="sched-submit-btn" style="margin:0;background:var(--text-primary);" onclick="setNormalMode()">Activate Normal Mode</button>
+          </div>
+        </div>
+        <div id="mode-status" style="font-size:11px;margin-bottom:1rem;padding:6px 10px;border-radius:var(--radius-sm);display:none;"></div>
 
         <!-- Preset buttons -->
         <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Quick Presets</div>
@@ -3218,7 +3234,10 @@ async function setBubbleUp(uid, deviceId, minutes) {
     const res = await fetch(`${NOTEHUB_BASE}/projects/${PROJECT_UID}/devices/${encodeURIComponent(uid)}/environment_variables`, {
       method: "PUT",
       headers: { "Authorization": `Bearer ${NOTEHUB_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ environment_variables: { _sync_outbound_mins: String(parseInt(mins)) } })
+      body: JSON.stringify({ environment_variables: {
+        _sync_outbound_mins: String(parseInt(mins)),
+        _sync_inbound_mins:  String(parseInt(mins))
+      }})
     });
     if (res.ok) {
       const el = document.getElementById(`bubble-current-${deviceId}`);
@@ -3262,6 +3281,81 @@ async function setAllBubbleUp() {
     await setBubbleUp(d.uid, d.id, mins);
   }
   showBubbleStatus(`✅ All devices set to ${mins} min — takes effect on next sync.`, "ok");
+}
+
+async function setEventMode() {
+  const statusEl = document.getElementById("mode-status");
+  if (statusEl) {
+    statusEl.style.display = "block";
+    statusEl.style.background = "var(--green-bg)";
+    statusEl.style.color = "var(--green-dark)";
+    statusEl.style.border = "0.5px solid var(--green)";
+    statusEl.textContent = "🟢 Activating Event Mode — setting all devices to 5 min inbound & outbound...";
+  }
+  let successCount = 0;
+  for (const d of DEVICES) {
+    try {
+      const res = await fetch(`${NOTEHUB_BASE}/projects/${PROJECT_UID}/devices/${encodeURIComponent(d.uid)}/environment_variables`, {
+        method: "PUT",
+        headers: { "Authorization": `Bearer ${NOTEHUB_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ environment_variables: {
+          _sync_outbound_mins: "5",
+          _sync_inbound_mins: "5"
+        }})
+      });
+      if (res.ok) {
+        successCount++;
+        const outEl = document.getElementById(`bubble-current-${d.id}`);
+        if (outEl) outEl.textContent = "5 min (Event Mode)";
+      }
+    } catch(e) { console.error("setEventMode error:", d.uid, e); }
+  }
+  if (statusEl) {
+    statusEl.textContent = `🟢 Event Mode active — ${successCount}/${DEVICES.length} devices set to 5 min inbound & outbound. Takes effect on next bubble-up.`;
+  }
+  showBubbleStatus(`🟢 Event Mode activated on ${successCount} device(s) — 5 min inbound & outbound.`, "ok");
+}
+
+async function setNormalMode() {
+  const statusEl = document.getElementById("mode-status");
+  if (statusEl) {
+    statusEl.style.display = "block";
+    statusEl.style.background = "var(--surface2)";
+    statusEl.style.color = "var(--text-primary)";
+    statusEl.style.border = "0.5px solid var(--border-md)";
+    statusEl.textContent = "⚙️ Activating Normal Mode — evaluating schedule and applying intervals...";
+  }
+
+  // Evaluate current bubble-up schedule rule
+  const match = bubbleRules.length > 0 ? evaluateRules(new Date()) : null;
+  const outboundMins = match ? String(match.intervalMins) : null;
+  const ruleLabel = match ? match.label : "firmware default";
+
+  let successCount = 0;
+  for (const d of DEVICES) {
+    try {
+      const envVars = outboundMins
+        ? { _sync_outbound_mins: outboundMins, _sync_inbound_mins: outboundMins }
+        : {};  // Empty = clear vars, revert to firmware default
+
+      const res = await fetch(`${NOTEHUB_BASE}/projects/${PROJECT_UID}/devices/${encodeURIComponent(d.uid)}/environment_variables`, {
+        method: "PUT",
+        headers: { "Authorization": `Bearer ${NOTEHUB_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ environment_variables: envVars })
+      });
+      if (res.ok) {
+        successCount++;
+        const outEl = document.getElementById(`bubble-current-${d.id}`);
+        if (outEl) outEl.textContent = outboundMins ? `${outboundMins} min (${ruleLabel})` : "Firmware default";
+      }
+    } catch(e) { console.error("setNormalMode error:", d.uid, e); }
+  }
+
+  if (statusEl) {
+    statusEl.textContent = `⚙️ Normal Mode active — ${successCount}/${DEVICES.length} devices set to ${outboundMins ? outboundMins + " min" : "firmware default"} (${ruleLabel}). Takes effect on next bubble-up.`;
+    statusEl.style.color = "var(--text-secondary)";
+  }
+  showBubbleStatus(`⚙️ Normal Mode activated — ${outboundMins ? outboundMins + " min" : "firmware default"} (${ruleLabel}).`, "ok");
 }
 
 async function applyBubbleUpPreset(mins) {
