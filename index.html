@@ -2500,8 +2500,12 @@ async function loadEventsBar() {
     // Active = fire_at in past but end time (fire_at + duration) is in future
     // Future = fire_at is in the future
     // Exclude ended/cancelled
+    // Include all statuses except cancelled — use fire_at window to filter ended events
+    // Look back 24hrs to catch active events, and forward for upcoming
+    const lookback = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+    const lookahead = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
     const qRows = await supabaseGet(
-      `schedule_queue?status=in.(sent,received,started,pending)&order=fire_at.asc&limit=20`
+      `schedule_queue?status=not.eq.cancelled&fire_at=gte.${lookback}&fire_at=lte.${lookahead}&order=fire_at.asc&limit=30`
     );
 
     let pills = [];
@@ -2509,7 +2513,8 @@ async function loadEventsBar() {
     if (Array.isArray(qRows)) {
       qRows.forEach(q => {
         const fireAt     = new Date(q.fire_at);
-        const durationMs = (q.duration_minutes || 60) * 60 * 1000;
+        // If duration_minutes is null/0, show for 4 hours as safe default
+        const durationMs = ((q.duration_minutes || 0) > 0 ? q.duration_minutes : 240) * 60 * 1000;
         const endAt      = new Date(fireAt.getTime() + durationMs);
 
         // Skip if event has ended (past end time)
@@ -2517,11 +2522,11 @@ async function loadEventsBar() {
 
         // Determine display status
         const isActive = fireAt <= now && endAt > now;
-        const sc = isActive ? (q.status === "started" ? "started" : "received") : "sent";
+        const sc = isActive ? "started"
+          : q.status === "received" ? "received"
+          : "sent";
 
-        const timeStr = formatTimeAMPM(q.fire_at
-          ? new Date(q.fire_at).toTimeString().slice(0,5)
-          : "");
+        const timeStr = formatTimeAMPM(new Date(q.fire_at).toTimeString().slice(0,5));
         const dateStr = fireAt.toLocaleDateString("en-US", { month:"short", day:"numeric" });
         const activeLabel = isActive ? "🟢 Active" : `📅 ${dateStr} ${timeStr}`;
 
@@ -3363,7 +3368,7 @@ async function fetchWeatherForecast() {
       `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
       `&daily=temperature_2m_max,temperature_2m_min,weathercode` +
       `&hourly=temperature_2m,weathercode` +
-      `&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=7`
+      `&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=14`
     );
     const data = await res.json();
     wxForecastData = data;
