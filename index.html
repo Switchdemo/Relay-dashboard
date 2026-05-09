@@ -1483,7 +1483,7 @@ async function createSchedule() {
     }
 
     // Log to queue as sent
-    await supabasePost("schedule_queue", {
+    const queuePayload = {
       schedule_id: null,
       name: name,
       fire_at: new Date(schedUnix * 1000).toISOString(),
@@ -1493,16 +1493,25 @@ async function createSchedule() {
       relay_action: action,
       duration_minutes: duration_minutes || null,
       timezone: tz,
-      action_time: time,
+      action_time: time || null,
       lc_mode: mode,
       lc_strategy: stratNum,
-      lc_timeout: stratTimeout,
-      lc_cycle: stratCycle,
+      lc_timeout: stratTimeout || null,
+      lc_cycle: stratCycle || null,
       lc_reps: reps,
       one_time: true,
       status: "sent",
       fired_at: new Date().toISOString()
-    });
+    };
+    console.log("Posting to schedule_queue:", JSON.stringify(queuePayload));
+    const qRes = await supabasePost("schedule_queue", queuePayload);
+    if (!qRes.ok) {
+      const qErr = await qRes.text();
+      console.error("Queue post failed:", qErr);
+      setStatus("error", `Queue save failed: ${qErr}`);
+    } else {
+      console.log("Queue post successful");
+    }
 
     setStatus("ready", `"${name}" saved & payload sent to device.`);
     // Auto-increment name for next event
