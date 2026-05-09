@@ -875,34 +875,83 @@
         </div>
 
         <!-- Season Definition -->
-        <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">DR Season Definition</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:1rem;">
-          <div>
-            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Season Start</label>
-            <input type="date" id="season-start" class="sched-input" style="width:100%;font-size:12px;" />
+        <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Season Definitions</div>
+
+        <!-- Summer Season -->
+        <div style="background:var(--amber-bg);border:0.5px solid var(--amber);border-radius:var(--radius-sm);padding:0.75rem;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <div style="font-size:12px;font-weight:600;color:var(--amber);">☀️ Summer DR Season</div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);cursor:pointer;">
+              <input type="checkbox" id="summer-enabled" checked style="accent-color:var(--amber);" /> Enabled
+            </label>
           </div>
-          <div>
-            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Season End</label>
-            <input type="date" id="season-end" class="sched-input" style="width:100%;font-size:12px;" />
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Start (MM/DD)</label>
+              <input type="text" id="summer-start" class="sched-input" placeholder="06/01" maxlength="5" style="width:100%;font-size:12px;" />
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">End (MM/DD)</label>
+              <input type="text" id="summer-end" class="sched-input" placeholder="09/30" maxlength="5" style="width:100%;font-size:12px;" />
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Peak Hours Start</label>
+              <select id="summer-peak-start" class="sched-select" style="width:100%;font-size:12px;">
+                <option value="6">6:00 AM</option><option value="7">7:00 AM</option>
+                <option value="8">8:00 AM</option><option value="9">9:00 AM</option>
+                <option value="10">10:00 AM</option><option value="11">11:00 AM</option>
+                <option value="12">12:00 PM</option><option value="13">1:00 PM</option>
+                <option value="14" selected>2:00 PM</option><option value="15">3:00 PM</option>
+                <option value="16">4:00 PM</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Peak Hours End</label>
+              <select id="summer-peak-end" class="sched-select" style="width:100%;font-size:12px;">
+                <option value="17">5:00 PM</option><option value="18">6:00 PM</option>
+                <option value="19" selected>7:00 PM</option><option value="20">8:00 PM</option>
+                <option value="21">9:00 PM</option><option value="22">10:00 PM</option>
+              </select>
+            </div>
           </div>
-          <div>
-            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Peak Hours Start</label>
-            <select id="peak-start" class="sched-select" style="width:100%;font-size:12px;">
-              <option value="6">6:00 AM</option><option value="7">7:00 AM</option>
-              <option value="8">8:00 AM</option><option value="9">9:00 AM</option>
-              <option value="10">10:00 AM</option><option value="11">11:00 AM</option>
-              <option value="12">12:00 PM</option><option value="13">1:00 PM</option>
-              <option value="14" selected>2:00 PM</option><option value="15">3:00 PM</option>
-              <option value="16">4:00 PM</option>
-            </select>
+        </div>
+
+        <!-- Winter Season -->
+        <div style="background:var(--blue-bg);border:0.5px solid var(--blue);border-radius:var(--radius-sm);padding:0.75rem;margin-bottom:1rem;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <div style="font-size:12px;font-weight:600;color:var(--blue-dark);">❄️ Winter DR Season</div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);cursor:pointer;">
+              <input type="checkbox" id="winter-enabled" checked style="accent-color:var(--blue);" /> Enabled
+            </label>
           </div>
-          <div>
-            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Peak Hours End</label>
-            <select id="peak-end" class="sched-select" style="width:100%;font-size:12px;">
-              <option value="17">5:00 PM</option><option value="18">6:00 PM</option>
-              <option value="19" selected>7:00 PM</option><option value="20">8:00 PM</option>
-              <option value="21">9:00 PM</option><option value="22">10:00 PM</option>
-            </select>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Start (MM/DD)</label>
+              <input type="text" id="winter-start" class="sched-input" placeholder="12/01" maxlength="5" style="width:100%;font-size:12px;" />
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">End (MM/DD)</label>
+              <input type="text" id="winter-end" class="sched-input" placeholder="02/28" maxlength="5" style="width:100%;font-size:12px;" />
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Peak Hours Start</label>
+              <select id="winter-peak-start" class="sched-select" style="width:100%;font-size:12px;">
+                <option value="6" selected>6:00 AM</option><option value="7">7:00 AM</option>
+                <option value="8">8:00 AM</option><option value="9">9:00 AM</option>
+                <option value="10">10:00 AM</option><option value="11">11:00 AM</option>
+                <option value="12">12:00 PM</option><option value="13">1:00 PM</option>
+                <option value="14">2:00 PM</option><option value="15">3:00 PM</option>
+                <option value="16">4:00 PM</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Peak Hours End</label>
+              <select id="winter-peak-end" class="sched-select" style="width:100%;font-size:12px;">
+                <option value="17">5:00 PM</option><option value="18">6:00 PM</option>
+                <option value="19">7:00 PM</option><option value="20">8:00 PM</option>
+                <option value="21" selected>9:00 PM</option><option value="22">10:00 PM</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -2900,13 +2949,20 @@ async function loadParticipation() {
 
 const BUBBLE_SCHED_KEY = "bubble_up_schedule_v1";
 let bubbleRules = [];
-let bubbleSeasonConfig = { start: "", end: "", peakStart: 14, peakEnd: 19 };
+let bubbleSeasonConfig = {
+  summer: { start: "06/01", end: "09/30", peakStart: 14, peakEnd: 19,  enabled: true },
+  winter: { start: "12/01", end: "02/28", peakStart: 6,  peakEnd: 21,  enabled: true }
+};
 let bubbleCheckInterval = null;
 
 const BUBBLE_CONDITIONS = [
-  { value: "peak_season_peak_hours", label: "DR Season — Peak Hours" },
-  { value: "peak_season_offpeak",    label: "DR Season — Off-Peak Hours" },
-  { value: "peak_season_weekend",    label: "DR Season — Weekend" },
+  { value: "peak_season_peak_hours", label: "DR Season (Either) — Peak Hours" },
+  { value: "peak_season_offpeak",    label: "DR Season (Either) — Off-Peak Hours" },
+  { value: "peak_season_weekend",    label: "DR Season (Either) — Weekend" },
+  { value: "summer_peak_hours",      label: "Summer Season — Peak Hours" },
+  { value: "summer_offpeak",         label: "Summer Season — Off-Peak" },
+  { value: "winter_peak_hours",      label: "Winter Season — Peak Hours" },
+  { value: "winter_offpeak",         label: "Winter Season — Off-Peak" },
   { value: "offseason_weekday",      label: "Off-Season — Weekday" },
   { value: "offseason_weekend",      label: "Off-Season — Weekend" },
   { value: "overnight",              label: "Overnight (10 PM – 6 AM)" },
@@ -2934,26 +2990,51 @@ function loadBubbleSchedule() {
     }
   } catch(e) { bubbleRules = [...DEFAULT_RULES]; }
 
-  // Populate season inputs
-  const ss = document.getElementById("season-start");
-  const se = document.getElementById("season-end");
-  const ps = document.getElementById("peak-start");
-  const pe = document.getElementById("peak-end");
-  if (ss) ss.value = bubbleSeasonConfig.start || "";
-  if (se) se.value = bubbleSeasonConfig.end   || "";
-  if (ps) ps.value = String(bubbleSeasonConfig.peakStart || 14);
-  if (pe) pe.value = String(bubbleSeasonConfig.peakEnd   || 19);
+  // Populate summer season inputs
+  const sumStart   = document.getElementById("summer-start");
+  const sumEnd     = document.getElementById("summer-end");
+  const sumPkStart = document.getElementById("summer-peak-start");
+  const sumPkEnd   = document.getElementById("summer-peak-end");
+  const sumEnabled = document.getElementById("summer-enabled");
+  if (sumStart)   sumStart.value   = bubbleSeasonConfig.summer?.start    || "06/01";
+  if (sumEnd)     sumEnd.value     = bubbleSeasonConfig.summer?.end      || "09/30";
+  if (sumPkStart) sumPkStart.value = String(bubbleSeasonConfig.summer?.peakStart || 14);
+  if (sumPkEnd)   sumPkEnd.value   = String(bubbleSeasonConfig.summer?.peakEnd   || 19);
+  if (sumEnabled) sumEnabled.checked = bubbleSeasonConfig.summer?.enabled !== false;
+
+  // Populate winter season inputs
+  const winStart   = document.getElementById("winter-start");
+  const winEnd     = document.getElementById("winter-end");
+  const winPkStart = document.getElementById("winter-peak-start");
+  const winPkEnd   = document.getElementById("winter-peak-end");
+  const winEnabled = document.getElementById("winter-enabled");
+  if (winStart)   winStart.value   = bubbleSeasonConfig.winter?.start    || "12/01";
+  if (winEnd)     winEnd.value     = bubbleSeasonConfig.winter?.end      || "02/28";
+  if (winPkStart) winPkStart.value = String(bubbleSeasonConfig.winter?.peakStart || 6);
+  if (winPkEnd)   winPkEnd.value   = String(bubbleSeasonConfig.winter?.peakEnd   || 21);
+  if (winEnabled) winEnabled.checked = bubbleSeasonConfig.winter?.enabled !== false;
 
   renderBubbleRules();
   evaluateAndShowCurrentRule();
 }
 
 function saveBubbleSchedule() {
-  // Read season config
-  bubbleSeasonConfig.start     = document.getElementById("season-start")?.value || "";
-  bubbleSeasonConfig.end       = document.getElementById("season-end")?.value   || "";
-  bubbleSeasonConfig.peakStart = parseInt(document.getElementById("peak-start")?.value || "14");
-  bubbleSeasonConfig.peakEnd   = parseInt(document.getElementById("peak-end")?.value   || "19");
+  // Read summer season config
+  bubbleSeasonConfig.summer = {
+    start:     document.getElementById("summer-start")?.value    || "06/01",
+    end:       document.getElementById("summer-end")?.value      || "09/30",
+    peakStart: parseInt(document.getElementById("summer-peak-start")?.value || "14"),
+    peakEnd:   parseInt(document.getElementById("summer-peak-end")?.value   || "19"),
+    enabled:   document.getElementById("summer-enabled")?.checked !== false
+  };
+  // Read winter season config
+  bubbleSeasonConfig.winter = {
+    start:     document.getElementById("winter-start")?.value    || "12/01",
+    end:       document.getElementById("winter-end")?.value      || "02/28",
+    peakStart: parseInt(document.getElementById("winter-peak-start")?.value || "6"),
+    peakEnd:   parseInt(document.getElementById("winter-peak-end")?.value   || "21"),
+    enabled:   document.getElementById("winter-enabled")?.checked !== false
+  };
 
   // Read rules from DOM
   bubbleRules = bubbleRules.map(r => {
@@ -3012,10 +3093,24 @@ function deleteBubbleRule(id) {
 }
 
 function isInDRSeason(now) {
-  const { start, end } = bubbleSeasonConfig;
-  if (!start || !end) return false;
-  const today = now.toISOString().slice(0,10);
-  return today >= start && today <= end;
+  const mmdd = String(now.getMonth()+1).padStart(2,"0") + "/" + String(now.getDate()).padStart(2,"0");
+  const { summer, winter } = bubbleSeasonConfig;
+
+  // Check summer season
+  if (summer?.enabled && summer.start && summer.end) {
+    if (mmdd >= summer.start && mmdd <= summer.end) return "summer";
+  }
+
+  // Check winter season — may span year boundary (e.g. 12/01 – 02/28)
+  if (winter?.enabled && winter.start && winter.end) {
+    if (winter.start > winter.end) {
+      // Spans year boundary
+      if (mmdd >= winter.start || mmdd <= winter.end) return "winter";
+    } else {
+      if (mmdd >= winter.start && mmdd <= winter.end) return "winter";
+    }
+  }
+  return null; // off-season
 }
 
 function isWeekend(now) {
@@ -3029,12 +3124,20 @@ function isOvernightHours(now) {
 }
 
 function isPeakHours(now) {
-  const h = now.getHours();
-  return h >= bubbleSeasonConfig.peakStart && h < bubbleSeasonConfig.peakEnd;
+  const h      = now.getHours();
+  const season = isInDRSeason(now);
+  if (season === "summer") {
+    return h >= bubbleSeasonConfig.summer.peakStart && h < bubbleSeasonConfig.summer.peakEnd;
+  }
+  if (season === "winter") {
+    return h >= bubbleSeasonConfig.winter.peakStart && h < bubbleSeasonConfig.winter.peakEnd;
+  }
+  return false;
 }
 
 function evaluateRules(now) {
-  const inSeason  = isInDRSeason(now);
+  const seasonVal = isInDRSeason(now);
+  const inSeason  = !!seasonVal;
   const weekend   = isWeekend(now);
   const overnight = isOvernightHours(now);
   const peak      = isPeakHours(now);
@@ -3051,10 +3154,14 @@ function evaluateRules(now) {
       case "peak_season_peak_hours": if (!inSeason || !peak || overnight) continue; break;
       case "peak_season_offpeak":    if (!inSeason || peak  || overnight) continue; break;
       case "peak_season_weekend":    if (!inSeason || !weekend)           continue; break;
+      case "summer_peak_hours":      if (seasonVal !== "summer" || !peak || overnight) continue; break;
+      case "summer_offpeak":         if (seasonVal !== "summer" || peak  || overnight) continue; break;
+      case "winter_peak_hours":      if (seasonVal !== "winter" || !peak || overnight) continue; break;
+      case "winter_offpeak":         if (seasonVal !== "winter" || peak  || overnight) continue; break;
       case "offseason_weekday":      if (inSeason  || weekend)            continue; break;
       case "offseason_weekend":      if (inSeason  || !weekend)           continue; break;
       case "overnight":              if (!overnight)                       continue; break;
-      case "always":                                                                break;
+      case "always":                                                                 break;
     }
     return rule; // First match wins
   }
@@ -3068,9 +3175,11 @@ function evaluateAndShowCurrentRule() {
   if (!el) return match;
 
   if (match) {
-    const inSeason = isInDRSeason(now);
+    const season = isInDRSeason(now);
+    const seasonLabel = season === "summer" ? "☀️ Summer Season"
+      : season === "winter" ? "❄️ Winter Season" : "Off-Season";
     el.innerHTML = `<span style="color:var(--green-dark);font-weight:600;">▶ ${match.label}</span> — ${match.intervalMins} min interval
-      <span style="margin-left:8px;font-size:10px;color:var(--text-hint);">Season: ${inSeason?"In DR Season":"Off-Season"} &bull; ${isWeekend(now)?"Weekend":"Weekday"} &bull; ${isPeakHours(now)?"Peak Hours":"Off-Peak"}</span>`;
+      <span style="margin-left:8px;font-size:10px;color:var(--text-hint);">${seasonLabel} &bull; ${isWeekend(now)?"Weekend":"Weekday"} &bull; ${isPeakHours(now)?"Peak Hours":"Off-Peak"}</span>`;
   } else {
     el.innerHTML = `<span style="color:var(--text-hint);">No matching rule — using firmware default</span>`;
   }
@@ -3842,115 +3951,4 @@ function renderGroups() {
     ${[1,2,3].map(gn => `
       <div class="group-card">
         <div class="group-header">
-          <input class="group-name-input" id="gname-${gn}" value="${groupNames[gn]}" placeholder="Group name..." />
-          <button class="group-save-btn" onclick="saveGroupName(${gn})">Save</button>
-        </div>
-        <div style="font-size:11px;font-weight:600;color:var(--red);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Emergency Direct Control</div>
-        <div class="group-actions">
-          <button class="group-cmd-btn on" onclick="sendGroupCommand(${gn}, 'all_on')">All Relays ON</button>
-          <button class="group-cmd-btn off" onclick="sendGroupCommand(${gn}, 'all_off')">All Relays OFF</button>
-        </div>
-        <div class="group-devices">
-          ${DEVICES.map(d => `
-            <label class="group-device-row ${(groupAssignments[d.uid] || []).includes(gn) ? "group-member" : ""}">
-              <input type="checkbox" ${(groupAssignments[d.uid] || []).includes(gn) ? "checked" : ""}
-                onchange="assignDevice('${d.uid}', ${gn}, this.checked)" />
-              <div>
-                <div class="group-device-label">${d.name}</div>
-                <div class="group-device-uid">${d.uid}</div>
-              </div>
-            </label>`).join("")}
-        </div>
-      </div>`).join("")}
-  </div>`;
-  container.innerHTML = html;
-}
-
-async function saveGroupName(groupNum) {
-  const input = document.getElementById(`gname-${groupNum}`);
-  const name = input.value.trim() || `Group ${groupNum}`;
-  groupNames[groupNum] = name;
-  await supabaseUpsert("group_names", { group_number: groupNum, group_name: name }, "group_number");
-  setStatus("ready", `Group ${groupNum} name saved.`);
-}
-
-async function assignDevice(uid, groupNum, checked) {
-  if (checked) {
-    // Add to this group (other group memberships stay intact)
-    await supabaseUpsert("device_groups", { group_number: groupNum, group_name: groupNames[groupNum], device_uid: uid }, "group_number,device_uid");
-    if (!groupAssignments[uid]) groupAssignments[uid] = [];
-    if (!groupAssignments[uid].includes(groupNum)) groupAssignments[uid].push(groupNum);
-  } else {
-    // Remove from this group only
-    await supabaseDelete("device_groups", `device_uid=eq.${encodeURIComponent(uid)}&group_number=eq.${groupNum}`);
-    if (groupAssignments[uid]) groupAssignments[uid] = groupAssignments[uid].filter(g => g !== groupNum);
-  }
-  renderGroups();
-  setStatus("ready", `${unitName(uid)} group assignment saved.`);
-}
-
-// ── Data Loading ──────────────────────────────────────────────────────────────
-function relayDot(val) {
-  const on = val > 0;
-  return `<span class="relay-dot ${on?"on":"off"}"></span>${on?"On":"Off"}`;
-}
-async function loadLatestDevice(deviceId) {
-  const device = DEVICES.find(d => d.id === deviceId);
-  const container = document.getElementById(`data-fields-${deviceId}`);
-  const tsEl = document.getElementById(`data-ts-${deviceId}`);
-  container.innerHTML = `<div class="data-empty">Loading...</div>`;
-  try {
-    const rows = await supabaseGet(`device_readings?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1`);
-    if (!rows || rows.length === 0) { container.innerHTML = `<div class="data-empty">No data yet</div>`; tsEl.textContent = ""; return; }
-    const r = rows[0];
-    document.getElementById(`badge-${deviceId}`)?.classList.add("online");
-    container.innerHTML = `<div class="data-fields">
-      <div class="data-field"><span class="data-field-name">Relay 1</span><span class="data-field-value">${relayDot(r.relay_status_r1)}</span></div>
-      <div class="data-field"><span class="data-field-name">Relay 2</span><span class="data-field-value">${relayDot(r.relay_status_r2)}</span></div>
-      <div class="data-field"><span class="data-field-name">Relay 3</span><span class="data-field-value">${relayDot(r.relay_status_r3)}</span></div>
-      <div class="data-field"><span class="data-field-name">Relay 4</span><span class="data-field-value">${relayDot(r.relay_status_r4)}</span></div>
-      <div class="data-field"><span class="data-field-name">Voltage</span><span class="data-field-value">${r.voltage ? (r.voltage/10).toFixed(1) + " V" : "—"}</span></div>
-      <div class="data-field"><span class="data-field-name">Current</span><span class="data-field-value">${r.current ? (r.current/10).toFixed(1) + " A" : "—"}</span></div>
-      <div class="data-field"><span class="data-field-name">Watts</span><span class="data-field-value">${r.watts_consumed ? r.watts_consumed + " W" : "—"}</span></div>
-      <div class="data-field"><span class="data-field-name">Power Factor</span><span class="data-field-value">${r.power_factor ?? "—"}</span></div>
-      <div class="data-field"><span class="data-field-name">Comfort</span><span class="data-field-value">${r.customer_comfort > 0 ? "On" : "Off"}</span></div>
-      <div class="data-field"><span class="data-field-name">Location</span><span class="data-field-value">${r.location ?? "—"}</span></div>
-    </div>`;
-    tsEl.textContent = `Last updated: ${new Date(r.recorded_at).toLocaleString()}`;
-  } catch(e) { container.innerHTML = `<div class="data-empty">Error loading data</div>`; }
-}
-async function loadLatest() { DEVICES.forEach(d => loadLatestDevice(d.id)); }
-async function loadHistory() {
-  const deviceFilter = document.getElementById("history-device-select").value;
-  const rangeHours = document.getElementById("history-range")?.value;
-  const tbody = document.getElementById("history-body");
-  tbody.innerHTML = `<tr><td colspan="11" class="no-data">Loading...</td></tr>`;
-  try {
-    let query = `device_readings?order=recorded_at.desc&limit=200`;
-    if (deviceFilter) query += `&device_uid=eq.${encodeURIComponent(deviceFilter)}`;
-    if (rangeHours) { const since = new Date(Date.now() - parseInt(rangeHours)*60*60*1000).toISOString(); query += `&recorded_at=gte.${since}`; }
-    const rows = await supabaseGet(query);
-    if (!rows || rows.length === 0) { tbody.innerHTML = `<tr><td colspan="11" class="no-data">No history found</td></tr>`; return; }
-    tbody.innerHTML = rows.map(r => {
-      const devName = DEVICES.find(d => d.uid === r.device_uid)?.name ?? unitName(r.device_uid);
-      return `<tr>
-        <td>${new Date(r.recorded_at).toLocaleString()}</td><td>${devName}</td>
-        <td>${relayDot(r.relay_status_r1)}</td><td>${relayDot(r.relay_status_r2)}</td>
-        <td>${relayDot(r.relay_status_r3)}</td><td>${relayDot(r.relay_status_r4)}</td>
-        <td>${r.voltage ?? "—"}</td><td>${r.current ?? "—"}</td>
-        <td>${r.watts_consumed ?? "—"}</td><td>${r.power_factor ?? "—"}</td>
-        <td>${r.customer_comfort > 0 ? "On" : "Off"}</td>
-      </tr>`;
-    }).join("");
-  } catch(e) { tbody.innerHTML = `<tr><td colspan="11" class="no-data">Error loading history</td></tr>`; }
-}
-
-buildControls();
-buildDataCards();
-autoDetectTimezones();
-loadEventsBar();
-// Init summary tab since it's the default active tab
-setTimeout(() => initSummaryTab(), 100);
-</script>
-</body>
-</html>
+          <input class="group
