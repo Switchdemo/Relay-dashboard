@@ -879,7 +879,7 @@ async function initScheduler() {
     populateTargetSelector();
     updateSchedulerTimezone();
     await loadSchedules();
-    await loadQueue();
+    await loadDeviceEvents();
     renderHexParser("hex-parser-panel");
     renderLCResponseParser("lcr-parser-panel");
     renderBubbleUpParser("bu-parser-panel");
@@ -889,7 +889,7 @@ async function initScheduler() {
     populateTargetSelector();
     updateSchedulerTimezone();
     await loadSchedules();
-    await loadQueue();
+    await loadDeviceEvents();
   }
 }
 
@@ -1153,7 +1153,7 @@ async function createSchedule() {
     const nextName = await getNextEventName();
     document.getElementById("sf-name").value = nextName;
     await loadSchedules();
-    await loadQueue();
+    await loadDeviceEvents();
   } else {
     setStatus("error", "Error saving schedule.");
   }
@@ -1246,51 +1246,58 @@ async function deleteSchedule(id) {
   await loadQueue();
 }
 
-async function loadQueue() {
+async function loadDeviceEvents() {
   const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
-  const list = document.getElementById("queue-list");
+  const list = document.getElementById("device-events-list");
   if (!list) return;
   list.innerHTML = `<div class="sched-empty">Loading...</div>`;
   try {
-    const rows = await supabaseGet(`schedule_queue?order=fire_at.desc&limit=50&fire_at=gte.${since}`);
+    const rows = await supabaseGet(`device_events?order=received_at.desc&limit=50&received_at=gte.${encodeURIComponent(since)}`);
     if (!rows || rows.error) {
-      list.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error: ${rows?.message || "Could not load queue"}</div>`;
-      console.error("Queue load error:", rows);
+      list.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error loading events: ${rows?.message || "Unknown error"}</div>`;
+      console.error("loadDeviceEvents error:", rows);
       return;
     }
-    if (rows.length === 0) { list.innerHTML = `<div class="sched-empty">No commands in last 48 hours.</div>`; return; }
-    list.innerHTML = rows.map(q => {
-      const cancelBtn = q.status === "pending"
-        ? `<button class="queue-cancel-btn" onclick="cancelQueueItem(${q.id})">Cancel</button>`
-        : "";
-      const endBtn = ["sent","received","started"].includes(q.status)
-        ? `<button class="queue-cancel-btn" style="color:var(--red);border-color:var(--red);" onclick="endEvent('${q.target_id}','${q.target_type}','${q.relay_action}',${q.id})">End Event</button>`
-        : "";
-      // Device receipt indicator
-      const receiptIcon = q.status === "sent" ? "📤 Sent — awaiting device receipt"
-        : q.status === "received" ? "📥 Received by device"
-        : q.status === "started"  ? "▶️ Event started on device"
-        : q.status === "ended"    ? "✅ Event ended"
-        : q.status === "rejected" ? "❌ Rejected by device"
-        : q.status === "cancelled"? "🚫 Cancelled"
-        : q.status;
-      return `<div class="queue-item ${q.status}">
+    if (rows.length === 0) {
+      list.innerHTML = `<div class="sched-empty">No device events in last 48 hours.</div>`;
+      return;
+    }
+    const statusIcon = (s) => ({
+      0:"📥 Event Received", 1:"▶️ Event Started", 2:"✅ Event Ended",
+      3:"⚠️ Already In Queue", 4:"❌ Rejected — Queue Full", 5:"❌ Rejected",
+      6:"🚫 Event Canceled", 7:"🔄 Override", 8:"🔄 Override Canceled",
+      9:"🏠 Comfort Override", 10:"🏠 Comfort Exit"
+    })[s] || `Status ${s}`;
+
+    const statusClass = (s) => ({
+      0:"received", 1:"started", 2:"ended",
+      3:"pending", 4:"rejected", 5:"rejected",
+      6:"cancelled", 7:"override", 8:"override"
+    })[s] || "pending";
+
+    list.innerHTML = rows.map(e => {
+      const devName = DEVICES.find(d => d.uid === e.device_uid)?.name ?? unitName(e.device_uid);
+      const eventTime = e.event_time ? new Date(e.event_time).toLocaleString() : "—";
+      const receivedAt = new Date(e.received_at).toLocaleString();
+      const sc = statusClass(e.lc_status);
+      return `<div class="queue-item ${sc}">
         <div class="queue-info">
-          <div class="queue-name">${q.name ? q.name + " — " : ""}${q.target_name} &bull; ${RELAY_ACTION_LABELS[q.relay_action] || q.relay_action}</div>
-          <div class="queue-detail">📅 ${new Date(q.fire_at).toLocaleString()} &bull; ${receiptIcon}</div>
-          ${q.fired_at ? `<div class="queue-detail">📤 Payload sent: ${new Date(q.fired_at).toLocaleString()}</div>` : ""}
+          <div class="queue-name">${devName} &bull; Event ID: ${e.event_id ?? "—"}</div>
+          <div class="queue-detail">${statusIcon(e.lc_status)}</div>
+          <div class="queue-detail" style="margin-top:2px;">🕐 Event time: ${eventTime} &bull; 📡 Received: ${receivedAt}</div>
+          <div class="queue-detail" style="font-family:monospace;margin-top:2px;font-size:10px;color:var(--text-hint);">${e.raw_hex} ${e.checksum_ok ? "✅" : "❌"}</div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span class="queue-status ${q.status}">${q.status}</span>
-          ${endBtn}${cancelBtn}
-        </div>
+        <span class="queue-status ${sc}">${e.lc_status_label || sc}</span>
       </div>`;
     }).join("");
   } catch(e) {
-    list.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error loading queue: ${e.message}</div>`;
-    console.error("loadQueue exception:", e);
+    list.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error: ${e.message}</div>`;
+    console.error("loadDeviceEvents exception:", e);
   }
 }
+
+// Keep loadQueue as alias for backward compat
+async function loadQueue() { await loadDeviceEvents(); }
 
 async function fireNow(id) {
   // Fetch the queue item and execute it immediately
@@ -2178,33 +2185,31 @@ async function loadEventsBar() {
   const bar = document.getElementById("events-bar");
   if (!bar) return;
   try {
-    // Show upcoming scheduled events + recent active queue items
-    const since = new Date(Date.now() - 24*60*60*1000).toISOString();
-    const queueRows = await supabaseGet(`schedule_queue?status=in.(sent,received,started,pending)&fire_at=gte.${since}&order=fire_at.asc&limit=10`);
+    // Show scheduled events from schedules table
     const schedRows = await supabaseGet(`schedules?enabled=eq.true&order=created_at.desc&limit=10`);
+    // Show recent device events (last 24hrs)
+    const since = new Date(Date.now() - 24*60*60*1000).toISOString();
+    const devEvRows = await supabaseGet(`device_events?order=received_at.desc&limit=5&received_at=gte.${encodeURIComponent(since)}`);
 
     let pills = [];
 
-    // Active queue items
-    if (Array.isArray(queueRows) && queueRows.length > 0) {
-      queueRows.forEach(q => {
-        const timeStr = formatTimeAMPM(new Date(q.fire_at).toTimeString().slice(0,5));
-        const dateStr = new Date(q.fire_at).toLocaleDateString("en-US",{month:"short",day:"numeric"});
-        const qData = encodeURIComponent(JSON.stringify({type:'queue',item:q}));
-        pills.push(`<span class="event-pill ${q.status}" onclick="showEventDetail(JSON.parse(decodeURIComponent('${qData}')))">${q.name || q.target_name} &bull; ${dateStr} ${timeStr} &bull; ${q.status}</span>`);
+    // Scheduled events
+    if (Array.isArray(schedRows) && schedRows.length > 0) {
+      schedRows.forEach(s => {
+        const timeStr = formatTimeAMPM(s.action_time);
+        const sData = encodeURIComponent(JSON.stringify({type:'schedule',item:{...s, status:'scheduled'}}));
+        pills.push(`<span class="event-pill" onclick="showEventDetail(JSON.parse(decodeURIComponent('${sData}')))">${s.name} &bull; ${s.event_date || ""} ${timeStr} &bull; scheduled</span>`);
       });
     }
 
-    // Upcoming schedules not yet in queue
-    if (Array.isArray(schedRows) && schedRows.length > 0) {
-      schedRows.forEach(s => {
-        // Only show if not already in queue
-        const alreadyShown = Array.isArray(queueRows) && queueRows.some(q => q.name === s.name);
-        if (!alreadyShown) {
-          const timeStr = formatTimeAMPM(s.action_time);
-          const sData = encodeURIComponent(JSON.stringify({type:'schedule',item:{...s, status:'scheduled'}}));
-          pills.push(`<span class="event-pill" onclick="showEventDetail(JSON.parse(decodeURIComponent('${sData}')))">${s.name} &bull; ${s.event_date || ""} ${timeStr}</span>`);
-        }
+    // Recent device acknowledgements
+    if (Array.isArray(devEvRows) && devEvRows.length > 0) {
+      devEvRows.forEach(e => {
+        const devName = DEVICES.find(d => d.uid === e.device_uid)?.name ?? unitName(e.device_uid);
+        const statusClass = [0].includes(e.lc_status) ? "received"
+          : [1].includes(e.lc_status) ? "started"
+          : [2].includes(e.lc_status) ? "ended" : "sent";
+        pills.push(`<span class="event-pill ${statusClass}" onclick="switchToScheduler()">${devName} &bull; ${e.lc_status_label}</span>`);
       });
     }
 
