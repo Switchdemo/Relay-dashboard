@@ -674,13 +674,20 @@
       <div class="sched-card">
         <div class="sched-card-header">
           <div class="sched-card-title">Events Received</div>
-          <div style="display:flex;gap:8px;">
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select class="history-select" id="device-events-range" onchange="loadDeviceEvents()">
+              <option value="future">Current &amp; Upcoming</option>
+              <option value="24">Last 24 Hours</option>
+              <option value="168" selected>Last 7 Days</option>
+              <option value="720">Last 30 Days</option>
+              <option value="">All Events</option>
+            </select>
             <button class="queue-refresh" style="color:var(--red);border-color:var(--red);" onclick="cancelAllEvents()">Cancel All Events</button>
             <button class="queue-refresh" onclick="loadDeviceEvents()">Refresh</button>
           </div>
         </div>
         <div class="queue-list" id="device-events-list">
-          <div class="sched-empty">Click Refresh to load device events.</div>
+          <div class="sched-empty">Loading...</div>
         </div>
       </div>
 
@@ -1635,9 +1642,19 @@ async function createSchedule() {
 }
 
 async function loadSchedules() {
-  const rows = await supabaseGet("schedules?order=created_at.desc");
   const list = document.getElementById("sched-list");
-  if (!rows || rows.length === 0) { list.innerHTML = `<div class="sched-empty">No schedules yet.</div>`; return; }
+  const range = document.getElementById("sched-range")?.value;
+  let query = "schedule_queue?order=fire_at.desc&limit=200";
+  if (range === "future") {
+    // Current and upcoming — fire_at from 2 hours ago onwards (catch active events)
+    const since = new Date(Date.now() - 2*60*60*1000).toISOString();
+    query += `&fire_at=gte.${since}&status=not.eq.cancelled`;
+  } else if (range) {
+    const since = new Date(Date.now() - parseInt(range)*60*60*1000).toISOString();
+    query += `&fire_at=gte.${since}`;
+  }
+  const rows = await supabaseGet(query);
+  if (!rows || rows.length === 0) { list.innerHTML = `<div class="sched-empty">No events found.</div>`; return; }
   list.innerHTML = rows.map(s => {
     const daysStr = s.frequency === "weekly" && s.days_of_week
       ? s.days_of_week.map(d => DAY_NAMES[d]).join(", ")
@@ -1726,8 +1743,13 @@ async function loadDeviceEvents() {
   if (!list) return;
   list.innerHTML = `<div class="sched-empty">Loading...</div>`;
   try {
-    const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
-    const rows = await supabaseGet(`device_events?order=received_at.desc&limit=50&received_at=gte.${since}`);
+    const rangeHours = document.getElementById("dev-events-range")?.value;
+    let query = `device_events?order=received_at.desc&limit=100`;
+    if (rangeHours) {
+      const since = new Date(Date.now() - parseInt(rangeHours)*60*60*1000).toISOString();
+      query += `&received_at=gte.${since}`;
+    }
+    const rows = await supabaseGet(query);
     if (!Array.isArray(rows)) {
       list.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error loading — check console.</div>`;
       console.error("loadDeviceEvents:", rows);
@@ -2015,6 +2037,29 @@ function buildAssignBubbleUpHex(minutes) {
   const msb = (minutes >> 8) & 0xFF;
   const lsb = minutes & 0xFF;
   const bytes = [0xA1, 0x06, 0x00, 0x1A, 0x04, msb, lsb];
+  let checksum = 0;
+  bytes.forEach(b => { checksum ^= b; });
+  bytes.push(checksum);
+  return bytes.map(b => b.toString(16).toUpperCase().padStart(2,"0")).join("");
+}
+
+function buildCancelEventHex(relayAction, eventId) {
+  // Strategy 61 = restore, with SPECIFIC event ID (not 0xFF which cancels all)
+  const bytes = [0xA1];
+  const funcByte = RELAY_FUNCTION_MAP[relayAction] || 0x8F;
+  const evId = parseInt(eventId) & 0xFF; // specific event ID
+  const body = [
+    0x00,  // Address spec = all call
+    0x00,  // Message type = Load Control
+    0x3D,  // Strategy 61 = restore
+    funcByte,
+    0x00,  // Data = 0 (abrupt restore)
+    evId,  // Specific event ID to cancel
+    0x00, 0x00, 0x00, 0x00  // immediate
+  ];
+  const length = body.length + 1;
+  bytes.push(length);
+  body.forEach(b => bytes.push(b));
   let checksum = 0;
   bytes.forEach(b => { checksum ^= b; });
   bytes.push(checksum);
@@ -2434,6 +2479,30 @@ function runLCResponseParse(containerId) {
 }
 
 // ── End Event ────────────────────────────────────────────────────────────────
+async function cancelSpecificEvent(queueId, targetId, targetType, relayAction, eventName, lcEventId) {
+  // Cancel a specific event by its LC Event ID (not 0xFF which cancels all)
+  if (!confirm(`Cancel "${eventName}" on the device? Only this event will be cancelled.`)) return;
+
+  // If we have the LC event ID, use it for targeted cancel
+  // Otherwise fall back to the name-based approach
+  const restoreHex = buildRestoreHex(relayAction, lcEventId);
+  setStatus("sending", `Cancelling "${eventName}" (Event ID: ${lcEventId ?? "unknown"})...`);
+
+  if (targetType === "group") {
+    const gNum = parseInt(targetId.replace("group_",""));
+    const members = DEVICES.filter(d => (groupAssignments[d.uid]||[]).includes(gNum));
+    for (const device of members) await sendLCToDevice(device.uid, restoreHex);
+  } else {
+    await sendLCToDevice(targetId, restoreHex);
+  }
+
+  // Mark as cancelled in Supabase
+  await supabasePatch(`schedule_queue?id=eq.${queueId}`, { status: "cancelled" });
+  setStatus("ready", `"${eventName}" cancelled.`);
+  loadEventsBar();
+  loadDeviceEvents();
+}
+
 async function endEvent(targetId, targetType, relayAction, queueId) {
   const restoreHex = buildRestoreHex(relayAction);
   setStatus("sending", "Ending event — sending restore command...");
@@ -2449,6 +2518,30 @@ async function endEvent(targetId, targetType, relayAction, queueId) {
 }
 
 // ── Cancel All Events ─────────────────────────────────────────────────────────
+async function cancelSpecificEvent(queueId, targetId, targetType, relayAction, eventName, lcEventId) {
+  // lcEventId is the device-level LC Event ID (1-254) stored in the hex
+  // queueId is the Supabase row ID
+  if (!confirm(`Cancel "${eventName}" on the device? This will cancel only this specific event (ID ${lcEventId}).`)) return;
+
+  // Build cancel hex with specific event ID
+  const cancelHex = buildCancelEventHex(relayAction, lcEventId);
+  setStatus("sending", `Cancelling ${eventName} (Event ID ${lcEventId})...`);
+
+  if (targetType === "group") {
+    const gNum = parseInt(targetId.replace("group_",""));
+    const members = DEVICES.filter(d => (groupAssignments[d.uid]||[]).includes(gNum));
+    for (const device of members) await sendLCToDevice(device.uid, cancelHex);
+  } else {
+    await sendLCToDevice(targetId, cancelHex);
+  }
+
+  // Mark as cancelled in Supabase
+  await supabasePatch(`schedule_queue?id=eq.${queueId}`, { status: "cancelled" });
+  setStatus("ready", `${eventName} cancelled on device.`);
+  await loadDeviceEvents();
+  loadEventsBar();
+}
+
 async function cancelAllEvents() {
   if (!confirm("Send restore command to ALL devices? This will cancel all active load control events.")) return;
   // Build restore hex for all relays (0x8F = all functions)
