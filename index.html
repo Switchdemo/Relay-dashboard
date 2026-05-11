@@ -4639,70 +4639,96 @@ async function loadUsersTable() {
     return;
   }
 
-  try {
-  container.innerHTML = `<div style="overflow-x:auto;">
-    <table style="width:100%;border-collapse:collapse;font-size:12px;">
-      <thead><tr>
-        <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Name</th>
-        <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Email</th>
-        <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Role</th>
-        <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">2FA</th>
-        <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Status</th>
-        <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Last Login</th>
-        <th style="padding:8px;border-bottom:0.5px solid var(--border-md);"></th>
-      </tr></thead>
-      <tbody>${users.map(u => {
-        const isMe = u.id === currentUser?.id;
-        const lastLogin = u.last_login ? new Date(u.last_login).toLocaleString() : "Never";
-        return `<tr style="${!u.is_active ? 'opacity:0.5;' : ''}">
-          <td style="padding:8px;border-bottom:0.5px solid var(--border);">${u.full_name || "—"} ${isMe ? '<span style="font-size:10px;color:var(--blue-dark);">(you)</span>' : ""}</td>
-          <td style="padding:8px;border-bottom:0.5px solid var(--border);">${u.email}</td>
-          <td style="padding:8px;border-bottom:0.5px solid var(--border);">
-            <select onchange="updateUserRole('${u.id}', this.value)" ${isMe ? "disabled" : ""}
-              style="font-size:11px;padding:2px 4px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);">
-              <option value="readonly"      ${u.role==="readonly"      ?"selected":""}>Read Only</option>
-              <option value="operator"      ${u.role==="operator"      ?"selected":""}>Operator</option>
-              <option value="administrator" ${u.role==="administrator" ?"selected":""}>Administrator</option>
-            </select>
-          </td>
-          <td style="padding:8px;border-bottom:0.5px solid var(--border);">
-            <input type="checkbox" ${u.two_fa_required?"checked":""} onchange="updateUser2FA('${u.id}', this.checked)"
-              style="accent-color:var(--text-primary);cursor:pointer;" />
-          </td>
-          <td style="padding:8px;border-bottom:0.5px solid var(--border);">
-            <span style="color:${u.is_active?"var(--green-dark)":"var(--red)"};">
-              ${u.is_active ? "Active" : "Inactive"}
-            </span>
-          </td>
-          <td style="padding:8px;border-bottom:0.5px solid var(--border);color:var(--text-hint);">${lastLogin}</td>
-          <td style="padding:8px;border-bottom:0.5px solid var(--border);">
-            ${!isMe ? `<button onclick="toggleUserActive('${u.id}', ${u.is_active})"
-              style="font-size:10px;padding:3px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);cursor:pointer;color:${u.is_active?"var(--red)":"var(--green-dark)"};">
-              ${u.is_active ? "Deactivate" : "Activate"}
-            </button>` : ""}
-          </td>
-        </tr>`;
-      }).join("")}</tbody>
-    </table>
-  </div>`;
-  } catch(renderErr) {
-    console.error("loadUsersTable render error:", renderErr);
-    container.innerHTML = `<div class="sched-empty" style="color:var(--red);">Render error: ${renderErr.message}</div>`;
-  }
-}
+  // Build table using DOM createElement to avoid all quote escaping issues
+  const wrap  = document.createElement("div");
+  wrap.style.overflowX = "auto";
+  const table = document.createElement("table");
+  table.style.cssText = "width:100%;border-collapse:collapse;font-size:12px;";
 
-async function updateUserProfile(userId, updates) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${userId}`, {
-    method: "PATCH",
-    headers: {
-      "apikey":        SUPABASE_KEY,
-      "Authorization": `Bearer ${currentSession?.access_token}`,
-      "Content-Type":  "application/json",
-      "Prefer":        "return=minimal"
-    },
-    body: JSON.stringify(updates)
+  // Header
+  const thead = table.createTHead();
+  const hrow  = thead.insertRow();
+  ["Name","Email","Role","2FA","Status","Last Login",""].forEach(h => {
+    const th = document.createElement("th");
+    th.textContent = h;
+    th.style.cssText = "text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);";
+    hrow.appendChild(th);
   });
-  if (!res.ok) console.error("updateUserProfile error:", await res.text());
+
+  // Body
+  const tbody = table.createTBody();
+  users.forEach(u => {
+    const isMe = u.id === currentUser?.id;
+    const tr   = tbody.insertRow();
+    if (!u.is_active) tr.style.opacity = "0.5";
+
+    // Name
+    const tdName = tr.insertCell();
+    tdName.style.cssText = "padding:8px;border-bottom:0.5px solid var(--border);";
+    tdName.textContent = u.full_name || "—";
+    if (isMe) {
+      const badge = document.createElement("span");
+      badge.textContent = " (you)";
+      badge.style.cssText = "font-size:10px;color:var(--blue-dark);";
+      tdName.appendChild(badge);
+    }
+
+    // Email
+    const tdEmail = tr.insertCell();
+    tdEmail.style.cssText = "padding:8px;border-bottom:0.5px solid var(--border);";
+    tdEmail.textContent = u.email;
+
+    // Role
+    const tdRole = tr.insertCell();
+    tdRole.style.cssText = "padding:8px;border-bottom:0.5px solid var(--border);";
+    const sel = document.createElement("select");
+    sel.style.cssText = "font-size:11px;padding:2px 4px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);";
+    if (isMe) sel.disabled = true;
+    [["readonly","Read Only"],["operator","Operator"],["administrator","Administrator"]].forEach(([val,label]) => {
+      const opt = document.createElement("option");
+      opt.value = val; opt.textContent = label;
+      if (u.role === val) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener("change", () => updateUserRole(u.id, sel.value));
+    tdRole.appendChild(sel);
+
+    // 2FA
+    const td2fa = tr.insertCell();
+    td2fa.style.cssText = "padding:8px;border-bottom:0.5px solid var(--border);";
+    const chk = document.createElement("input");
+    chk.type = "checkbox";
+    chk.checked = !!u.two_fa_required;
+    chk.style.cursor = "pointer";
+    chk.addEventListener("change", () => updateUser2FA(u.id, chk.checked));
+    td2fa.appendChild(chk);
+
+    // Status
+    const tdStatus = tr.insertCell();
+    tdStatus.style.cssText = "padding:8px;border-bottom:0.5px solid var(--border);color:" + (u.is_active ? "var(--green-dark)" : "var(--red)") + ";";
+    tdStatus.textContent = u.is_active ? "Active" : "Inactive";
+
+    // Last Login
+    const tdLogin = tr.insertCell();
+    tdLogin.style.cssText = "padding:8px;border-bottom:0.5px solid var(--border);color:var(--text-hint);";
+    tdLogin.textContent = u.last_login ? new Date(u.last_login).toLocaleString() : "Never";
+
+    // Actions
+    const tdAct = tr.insertCell();
+    tdAct.style.cssText = "padding:8px;border-bottom:0.5px solid var(--border);";
+    if (!isMe) {
+      const btn = document.createElement("button");
+      btn.textContent = u.is_active ? "Deactivate" : "Activate";
+      btn.style.cssText = "font-size:10px;padding:3px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);cursor:pointer;color:" +
+        (u.is_active ? "var(--red)" : "var(--green-dark)") + ";";
+      btn.addEventListener("click", () => toggleUserActive(u.id, u.is_active));
+      tdAct.appendChild(btn);
+    }
+  });
+
+  wrap.appendChild(table);
+  container.innerHTML = "";
+  container.appendChild(wrap);
 }
 
 async function updateUserRole(userId, role) {
