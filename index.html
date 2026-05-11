@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Relay Control Panel</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
@@ -304,6 +305,89 @@
 <body>
 
 <!-- ── STICKY HEADER ── -->
+<!-- ── LOGIN OVERLAY ── -->
+<div id="login-overlay" style="position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center;">
+  <div style="width:100%;max-width:420px;padding:1rem;">
+    <div style="text-align:center;margin-bottom:2rem;">
+      <div style="font-size:22px;font-weight:700;color:var(--text-primary);">Load Control Device Panel</div>
+      <div style="font-size:13px;color:var(--text-hint);margin-top:4px;">Sign in to continue</div>
+    </div>
+    <div class="sched-card" style="padding:1.5rem;">
+
+      <!-- Step 1: Email + Password -->
+      <div id="login-step-1">
+        <div style="margin-bottom:1rem;">
+          <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">Email</label>
+          <input type="email" id="login-email" placeholder="you@example.com"
+            style="width:100%;padding:8px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:13px;"
+            onkeydown="if(event.key==='Enter') loginSubmit()" />
+        </div>
+        <div style="margin-bottom:1.25rem;">
+          <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">Password</label>
+          <input type="password" id="login-password" placeholder="••••••••"
+            style="width:100%;padding:8px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:13px;"
+            onkeydown="if(event.key==='Enter') loginSubmit()" />
+        </div>
+        <button onclick="loginSubmit()" id="login-btn"
+          style="width:100%;padding:10px;border-radius:var(--radius-sm);border:none;background:var(--text-primary);color:white;font-size:14px;font-weight:600;cursor:pointer;">
+          Sign In
+        </button>
+        <div id="login-error" style="margin-top:10px;font-size:12px;color:var(--red);text-align:center;display:none;"></div>
+      </div>
+
+      <!-- Step 2: Email OTP -->
+      <div id="login-step-2" style="display:none;">
+        <div style="text-align:center;margin-bottom:1rem;">
+          <div style="font-size:24px;margin-bottom:8px;">📧</div>
+          <div style="font-size:14px;font-weight:600;color:var(--text-primary);">Check your email</div>
+          <div style="font-size:12px;color:var(--text-hint);margin-top:4px;">We sent a 6-digit code to <span id="login-email-display" style="font-weight:600;color:var(--text-secondary);"></span></div>
+        </div>
+        <div style="margin-bottom:1.25rem;">
+          <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">Verification Code</label>
+          <input type="text" id="login-otp" placeholder="000000" maxlength="6"
+            style="width:100%;padding:10px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:20px;font-weight:700;letter-spacing:8px;text-align:center;"
+            onkeydown="if(event.key==='Enter') otpSubmit()" />
+        </div>
+        <button onclick="otpSubmit()" id="otp-btn"
+          style="width:100%;padding:10px;border-radius:var(--radius-sm);border:none;background:var(--text-primary);color:white;font-size:14px;font-weight:600;cursor:pointer;">
+          Verify Code
+        </button>
+        <button onclick="document.getElementById('login-step-2').style.display='none';document.getElementById('login-step-1').style.display='block';"
+          style="width:100%;margin-top:8px;padding:8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:transparent;font-size:12px;color:var(--text-hint);cursor:pointer;">
+          ← Back
+        </button>
+        <div id="otp-error" style="margin-top:10px;font-size:12px;color:var(--red);text-align:center;display:none;"></div>
+      </div>
+
+      <!-- Step 3: Change password (first login) -->
+      <div id="login-step-3" style="display:none;">
+        <div style="text-align:center;margin-bottom:1rem;">
+          <div style="font-size:24px;margin-bottom:8px;">🔑</div>
+          <div style="font-size:14px;font-weight:600;color:var(--text-primary);">Set your password</div>
+          <div style="font-size:12px;color:var(--text-hint);margin-top:4px;">Please set a new password to continue</div>
+        </div>
+        <div style="margin-bottom:1rem;">
+          <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">New Password</label>
+          <input type="password" id="new-password"
+            style="width:100%;padding:8px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:13px;" />
+        </div>
+        <div style="margin-bottom:1.25rem;">
+          <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">Confirm Password</label>
+          <input type="password" id="confirm-password"
+            style="width:100%;padding:8px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:13px;"
+            onkeydown="if(event.key==='Enter') changePasswordSubmit()" />
+        </div>
+        <button onclick="changePasswordSubmit()"
+          style="width:100%;padding:10px;border-radius:var(--radius-sm);border:none;background:var(--text-primary);color:white;font-size:14px;font-weight:600;cursor:pointer;">
+          Set Password
+        </button>
+        <div id="pw-error" style="margin-top:10px;font-size:12px;color:var(--red);text-align:center;display:none;"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <div class="sticky-header">
   <div class="page-header">
     <div class="page-title">Load Control Device Panel</div>
@@ -322,6 +406,7 @@
     <button class="tab-btn" id="main-events" onclick="switchMain('events', this)">Events</button>
     <button class="tab-btn" id="main-devices" onclick="switchMain('devices', this)">Devices</button>
     <button class="tab-btn" id="main-weather" onclick="switchMain('weather', this)">Weather</button>
+    <button class="tab-btn" id="main-admin" onclick="switchMain('admin', this)" style="display:none;">Admin</button>
   </div>
   <!-- Sub-tabs (shown contextually) -->
   <div class="sub-tabs" id="sub-tabs-events" style="display:none;">
@@ -1062,6 +1147,111 @@
   </div>
 </div>
 
+<!-- ── ADMIN TAB ── -->
+<div class="tab-pane" id="tab-admin">
+  <div class="scroll-content">
+    <div style="max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
+
+      <!-- Current User Info -->
+      <div class="sched-card" style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;">
+        <div>
+          <div style="font-size:12px;color:var(--text-hint);">Signed in as</div>
+          <div id="admin-current-user" style="font-size:14px;font-weight:600;color:var(--text-primary);">—</div>
+          <div id="admin-current-role" style="font-size:11px;color:var(--text-secondary);margin-top:2px;"></div>
+        </div>
+        <button onclick="signOut()"
+          style="padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;cursor:pointer;">
+          Sign Out
+        </button>
+      </div>
+
+      <!-- User Management (Admin only) -->
+      <div class="sched-card" id="admin-user-mgmt">
+        <div class="sched-card-header">
+          <div class="sched-card-title">User Management</div>
+          <button class="queue-refresh" onclick="showAddUserForm()">+ Add User</button>
+        </div>
+
+        <!-- Add User Form (hidden by default) -->
+        <div id="add-user-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:1rem;margin-bottom:1rem;border:0.5px solid var(--border-md);">
+          <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">New User</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Full Name</label>
+              <input type="text" id="new-user-name" placeholder="John Smith"
+                style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;" />
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Email</label>
+              <input type="email" id="new-user-email" placeholder="user@example.com"
+                style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;" />
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Temporary Password</label>
+              <input type="text" id="new-user-password" placeholder="Min 8 characters"
+                style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;" />
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Role</label>
+              <select id="new-user-role" class="sched-select" style="width:100%;font-size:12px;">
+                <option value="readonly">Read Only</option>
+                <option value="operator">Operator</option>
+                <option value="administrator">Administrator</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+              <input type="checkbox" id="new-user-2fa" style="accent-color:var(--text-primary);" />
+              Require 2FA (email OTP)
+            </label>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="createUser()"
+              style="padding:7px 16px;border-radius:var(--radius-sm);border:none;background:var(--text-primary);color:white;font-size:12px;font-weight:600;cursor:pointer;">
+              Create User
+            </button>
+            <button onclick="document.getElementById('add-user-form').style.display='none'"
+              style="padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:transparent;font-size:12px;cursor:pointer;">
+              Cancel
+            </button>
+          </div>
+          <div id="add-user-error" style="margin-top:8px;font-size:11px;color:var(--red);display:none;"></div>
+        </div>
+
+        <!-- Users Table -->
+        <div id="users-table-container">
+          <div class="sched-empty">Loading users...</div>
+        </div>
+      </div>
+
+      <!-- My Account -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">My Account</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">New Password</label>
+            <input type="password" id="my-new-password" placeholder="Min 8 characters"
+              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Confirm Password</label>
+            <input type="password" id="my-confirm-password" placeholder="Repeat password"
+              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+        </div>
+        <button onclick="changeMyPassword()" style="margin-top:10px;padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;cursor:pointer;">
+          Update Password
+        </button>
+        <div id="my-pw-status" style="margin-top:6px;font-size:11px;display:none;"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <script>
 const PROXY_URL    = "https://patient-shadow-e2b7.hurd71185.workers.dev/";
 const SUPABASE_URL = "https://diurqiuzknxzcdxqjfig.supabase.co";
@@ -1186,6 +1376,7 @@ function runTabInit(name) {
   if (name === "groups")     loadGroups();
   if (name === "settings")   initSettingsTab();
   if (name === "weather")    initWeatherTab();
+  if (name === "admin")      { updateAdminHeader(); loadUsersTable(); }
 }
 
 function switchTab(name, btn) { switchMain(name, btn); }
@@ -4096,6 +4287,358 @@ function renderHourlyForecast(dayIndex) {
   </div>`;
 }
 
+// ── SUPABASE AUTH ────────────────────────────────────────────────────────────
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentUser     = null;
+let currentUserRole = null;
+let currentSession  = null;
+let pendingEmail    = null; // for OTP flow
+
+const ROLE_LABELS = {
+  administrator: "Administrator",
+  operator:      "Operator",
+  readonly:      "Read Only"
+};
+
+// ── Init Auth on page load ────────────────────────────────────────────────────
+async function initAuth() {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (session) {
+    await onSignedIn(session);
+  } else {
+    showLoginOverlay();
+  }
+
+  // Listen for auth state changes
+  supabaseClient.auth.onAuthStateChange(async (event, session) => {
+    if (event === "SIGNED_IN" && session) {
+      await onSignedIn(session);
+    } else if (event === "SIGNED_OUT") {
+      showLoginOverlay();
+    } else if (event === "PASSWORD_RECOVERY") {
+      showStep(3);
+    }
+  });
+}
+
+async function onSignedIn(session) {
+  currentSession = session;
+  currentUser    = session.user;
+
+  // Load user profile (role)
+  const { data: profile } = await supabaseClient
+    .from("user_profiles")
+    .select("*")
+    .eq("id", currentUser.id)
+    .single();
+
+  currentUserRole = profile?.role || "readonly";
+
+  // Update last login
+  await supabaseClient
+    .from("user_profiles")
+    .update({ last_login: new Date().toISOString() })
+    .eq("id", currentUser.id);
+
+  hideLoginOverlay();
+  applyRolePermissions(currentUserRole);
+  updateAdminHeader();
+  loadUsersTable();
+}
+
+function showLoginOverlay() {
+  const overlay = document.getElementById("login-overlay");
+  if (overlay) overlay.style.display = "flex";
+  showStep(1);
+}
+
+function hideLoginOverlay() {
+  const overlay = document.getElementById("login-overlay");
+  if (overlay) overlay.style.display = "none";
+}
+
+function showStep(n) {
+  [1,2,3].forEach(i => {
+    const el = document.getElementById(`login-step-${i}`);
+    if (el) el.style.display = i === n ? "block" : "none";
+  });
+  clearLoginErrors();
+}
+
+function clearLoginErrors() {
+  ["login-error","otp-error","pw-error"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.style.display = "none"; el.textContent = ""; }
+  });
+}
+
+function showLoginError(id, msg) {
+  const el = document.getElementById(id);
+  if (el) { el.textContent = msg; el.style.display = "block"; }
+}
+
+// ── Step 1: Email + Password login ───────────────────────────────────────────
+async function loginSubmit() {
+  const email    = document.getElementById("login-email")?.value?.trim();
+  const password = document.getElementById("login-password")?.value;
+  const btn      = document.getElementById("login-btn");
+  if (!email || !password) { showLoginError("login-error", "Please enter your email and password."); return; }
+
+  btn.textContent = "Signing in...";
+  btn.disabled    = true;
+  clearLoginErrors();
+
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+
+  btn.textContent = "Sign In";
+  btn.disabled    = false;
+
+  if (error) {
+    showLoginError("login-error", error.message || "Invalid email or password.");
+    return;
+  }
+
+  // Check if 2FA required for this user
+  const { data: profile } = await supabaseClient
+    .from("user_profiles")
+    .select("two_fa_required, is_active")
+    .eq("id", data.user.id)
+    .single();
+
+  if (profile && !profile.is_active) {
+    await supabaseClient.auth.signOut();
+    showLoginError("login-error", "Your account has been deactivated. Contact your administrator.");
+    return;
+  }
+
+  if (profile?.two_fa_required) {
+    // Send OTP email
+    pendingEmail = email;
+    const { error: otpError } = await supabaseClient.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false }
+    });
+    if (otpError) {
+      showLoginError("login-error", "Could not send verification code: " + otpError.message);
+      return;
+    }
+    document.getElementById("login-email-display").textContent = email;
+    await supabaseClient.auth.signOut(); // Sign out until OTP verified
+    showStep(2);
+  }
+  // If no 2FA required, onSignedIn fires via auth state change
+}
+
+// ── Step 2: OTP verification ──────────────────────────────────────────────────
+async function otpSubmit() {
+  const code = document.getElementById("login-otp")?.value?.trim();
+  const btn  = document.getElementById("otp-btn");
+  if (!code || code.length < 6) { showLoginError("otp-error", "Please enter the 6-digit code."); return; }
+
+  btn.textContent = "Verifying...";
+  btn.disabled    = true;
+  clearLoginErrors();
+
+  const { data, error } = await supabaseClient.auth.verifyOtp({
+    email: pendingEmail,
+    token: code,
+    type:  "email"
+  });
+
+  btn.textContent = "Verify Code";
+  btn.disabled    = false;
+
+  if (error) {
+    showLoginError("otp-error", "Invalid or expired code. Please try again.");
+    return;
+  }
+  // onSignedIn fires via auth state change
+}
+
+// ── Step 3: Change password ───────────────────────────────────────────────────
+async function changePasswordSubmit() {
+  const pw1 = document.getElementById("new-password")?.value;
+  const pw2 = document.getElementById("confirm-password")?.value;
+  if (!pw1 || pw1.length < 8) { showLoginError("pw-error", "Password must be at least 8 characters."); return; }
+  if (pw1 !== pw2) { showLoginError("pw-error", "Passwords do not match."); return; }
+
+  const { error } = await supabaseClient.auth.updateUser({ password: pw1 });
+  if (error) { showLoginError("pw-error", error.message); return; }
+  // Auth state change fires onSignedIn
+}
+
+// ── Sign out ──────────────────────────────────────────────────────────────────
+async function signOut() {
+  await supabaseClient.auth.signOut();
+  currentUser = null; currentUserRole = null; currentSession = null;
+  showLoginOverlay();
+}
+
+// ── Role-based UI permissions ─────────────────────────────────────────────────
+function applyRolePermissions(role) {
+  // Show Admin tab only for administrators
+  const adminBtn = document.getElementById("main-admin");
+  if (adminBtn) adminBtn.style.display = role === "administrator" ? "" : "none";
+
+  // Read-only users: disable all command buttons
+  if (role === "readonly") {
+    // Disable send/save/apply buttons after DOM loads
+    setTimeout(() => {
+      document.querySelectorAll(
+        ".sched-submit-btn, .group-cmd-btn, .sched-delete-btn, #send-lc-btn"
+      ).forEach(btn => {
+        btn.disabled = true;
+        btn.style.opacity = "0.4";
+        btn.title = "Read-only access";
+      });
+    }, 500);
+  }
+}
+
+// ── Admin tab functions ───────────────────────────────────────────────────────
+function updateAdminHeader() {
+  const userEl = document.getElementById("admin-current-user");
+  const roleEl = document.getElementById("admin-current-role");
+  if (userEl) userEl.textContent = currentUser?.email || "—";
+  if (roleEl) roleEl.textContent = ROLE_LABELS[currentUserRole] || currentUserRole;
+}
+
+function showAddUserForm() {
+  const form = document.getElementById("add-user-form");
+  if (form) form.style.display = form.style.display === "none" ? "block" : "none";
+}
+
+async function createUser() {
+  const name     = document.getElementById("new-user-name")?.value?.trim();
+  const email    = document.getElementById("new-user-email")?.value?.trim();
+  const password = document.getElementById("new-user-password")?.value?.trim();
+  const role     = document.getElementById("new-user-role")?.value;
+  const twoFa    = document.getElementById("new-user-2fa")?.checked;
+  const errEl    = document.getElementById("add-user-error");
+
+  if (!email || !password || !role) {
+    errEl.textContent = "Email, password and role are required.";
+    errEl.style.display = "block"; return;
+  }
+  if (password.length < 8) {
+    errEl.textContent = "Password must be at least 8 characters.";
+    errEl.style.display = "block"; return;
+  }
+
+  errEl.style.display = "none";
+
+  // Use Worker to create user (avoids exposing service role key in browser)
+  // For now use Supabase Admin API via Worker
+  const res = await fetch(`${PROXY_URL}admin/create-user`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json",
+               "Authorization": `Bearer ${currentSession.access_token}` },
+    body: JSON.stringify({ email, password, name, role, two_fa_required: twoFa })
+  });
+
+  if (res.ok) {
+    errEl.style.display = "none";
+    document.getElementById("add-user-form").style.display = "none";
+    // Clear form
+    ["new-user-name","new-user-email","new-user-password"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = "";
+    });
+    await loadUsersTable();
+  } else {
+    const err = await res.text();
+    errEl.textContent = `Error: ${err}`;
+    errEl.style.display = "block";
+  }
+}
+
+async function loadUsersTable() {
+  const container = document.getElementById("users-table-container");
+  if (!container || currentUserRole !== "administrator") return;
+
+  const { data: users, error } = await supabaseClient
+    .from("user_profiles")
+    .select("*")
+    .order("created_at", { ascending: true });
+
+  if (error || !users) {
+    container.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error loading users.</div>`;
+    return;
+  }
+
+  container.innerHTML = `<div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr>
+        <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Name</th>
+        <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Email</th>
+        <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Role</th>
+        <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">2FA</th>
+        <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Status</th>
+        <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Last Login</th>
+        <th style="padding:8px;border-bottom:0.5px solid var(--border-md);"></th>
+      </tr></thead>
+      <tbody>${users.map(u => {
+        const isMe = u.id === currentUser?.id;
+        const lastLogin = u.last_login ? new Date(u.last_login).toLocaleString() : "Never";
+        return `<tr style="${!u.is_active ? 'opacity:0.5;' : ''}">
+          <td style="padding:8px;border-bottom:0.5px solid var(--border);">${u.full_name || "—"} ${isMe ? '<span style="font-size:10px;color:var(--blue-dark);">(you)</span>' : ""}</td>
+          <td style="padding:8px;border-bottom:0.5px solid var(--border);">${u.email}</td>
+          <td style="padding:8px;border-bottom:0.5px solid var(--border);">
+            <select onchange="updateUserRole('${u.id}', this.value)" ${isMe ? "disabled" : ""}
+              style="font-size:11px;padding:2px 4px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);">
+              <option value="readonly"      ${u.role==="readonly"      ?"selected":""}>Read Only</option>
+              <option value="operator"      ${u.role==="operator"      ?"selected":""}>Operator</option>
+              <option value="administrator" ${u.role==="administrator" ?"selected":""}>Administrator</option>
+            </select>
+          </td>
+          <td style="padding:8px;border-bottom:0.5px solid var(--border);">
+            <input type="checkbox" ${u.two_fa_required?"checked":""} onchange="updateUser2FA('${u.id}', this.checked)"
+              style="accent-color:var(--text-primary);cursor:pointer;" />
+          </td>
+          <td style="padding:8px;border-bottom:0.5px solid var(--border);">
+            <span style="color:${u.is_active?"var(--green-dark)":"var(--red)"};">
+              ${u.is_active ? "Active" : "Inactive"}
+            </span>
+          </td>
+          <td style="padding:8px;border-bottom:0.5px solid var(--border);color:var(--text-hint);">${lastLogin}</td>
+          <td style="padding:8px;border-bottom:0.5px solid var(--border);">
+            ${!isMe ? `<button onclick="toggleUserActive('${u.id}', ${u.is_active})"
+              style="font-size:10px;padding:3px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);cursor:pointer;color:${u.is_active?"var(--red)":"var(--green-dark)"};">
+              ${u.is_active ? "Deactivate" : "Activate"}
+            </button>` : ""}
+          </td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table>
+  </div>`;
+}
+
+async function updateUserRole(userId, role) {
+  await supabaseClient.from("user_profiles").update({ role }).eq("id", userId);
+}
+
+async function updateUser2FA(userId, required) {
+  await supabaseClient.from("user_profiles").update({ two_fa_required: required }).eq("id", userId);
+}
+
+async function toggleUserActive(userId, currentlyActive) {
+  await supabaseClient.from("user_profiles").update({ is_active: !currentlyActive }).eq("id", userId);
+  await loadUsersTable();
+}
+
+async function changeMyPassword() {
+  const pw1   = document.getElementById("my-new-password")?.value;
+  const pw2   = document.getElementById("my-confirm-password")?.value;
+  const msgEl = document.getElementById("my-pw-status");
+  if (!pw1 || pw1.length < 8) { msgEl.textContent = "Password must be at least 8 characters."; msgEl.style.color = "var(--red)"; msgEl.style.display = "block"; return; }
+  if (pw1 !== pw2) { msgEl.textContent = "Passwords do not match."; msgEl.style.color = "var(--red)"; msgEl.style.display = "block"; return; }
+  const { error } = await supabaseClient.auth.updateUser({ password: pw1 });
+  if (error) { msgEl.textContent = error.message; msgEl.style.color = "var(--red)"; }
+  else { msgEl.textContent = "✅ Password updated successfully."; msgEl.style.color = "var(--green-dark)"; }
+  msgEl.style.display = "block";
+}
+
 function buildControls() {
   const grid = document.getElementById("devices-grid");
   grid.innerHTML = "";
@@ -4363,6 +4906,7 @@ buildDataCards();
 autoDetectTimezones();
 loadEventsBar();
 initHeaderWeather();
+initAuth();
 // Init summary tab since it's the default active tab
 setTimeout(() => initSummaryTab(), 100);
 </script>
