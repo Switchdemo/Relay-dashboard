@@ -4640,6 +4640,7 @@ async function loadUsersTable() {
     return;
   }
 
+  try {
   container.innerHTML = `<div style="overflow-x:auto;">
     <table style="width:100%;border-collapse:collapse;font-size:12px;">
       <thead><tr>
@@ -4685,6 +4686,10 @@ async function loadUsersTable() {
       }).join("")}</tbody>
     </table>
   </div>`;
+  } catch(renderErr) {
+    console.error("loadUsersTable render error:", renderErr);
+    container.innerHTML = `<div class="sched-empty" style="color:var(--red);">Render error: ${renderErr.message}</div>`;
+  }
 }
 
 async function updateUserProfile(userId, updates) {
