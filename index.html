@@ -4608,7 +4608,7 @@ async function createUser() {
 
 async function loadUsersTable() {
   const container = document.getElementById("users-table-container");
-  console.log("loadUsersTable called — role:", currentUserRole, "session:", !!currentSession?.access_token);
+  console.log("loadUsersTable called, role:", currentUserRole, "session:", !!currentSession?.access_token);
   if (!container) { console.log("No container found"); return; }
   if (currentUserRole !== "administrator") { console.log("Not administrator:", currentUserRole); return; }
   container.innerHTML = `<div class="sched-empty">Loading users...</div>`;
