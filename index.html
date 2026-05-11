@@ -4610,13 +4610,28 @@ async function loadUsersTable() {
   const container = document.getElementById("users-table-container");
   if (!container || currentUserRole !== "administrator") return;
 
-  const { data: users, error } = await supabaseClient
-    .from("user_profiles")
-    .select("*")
-    .order("created_at", { ascending: true });
+  // Use raw fetch with admin's JWT to bypass any RLS caching issues
+  const usersRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/user_profiles?select=*&order=created_at.asc`,
+    {
+      headers: {
+        "apikey":        SUPABASE_KEY,
+        "Authorization": `Bearer ${currentSession?.access_token}`,
+        "Content-Type":  "application/json"
+      }
+    }
+  );
 
-  if (error || !users) {
-    container.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error loading users.</div>`;
+  if (!usersRes.ok) {
+    const err = await usersRes.text();
+    container.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error loading users: ${err}</div>`;
+    console.error("loadUsersTable error:", err);
+    return;
+  }
+
+  const users = await usersRes.json();
+  if (!users || users.length === 0) {
+    container.innerHTML = `<div class="sched-empty">No users found.</div>`;
     return;
   }
 
@@ -4667,16 +4682,30 @@ async function loadUsersTable() {
   </div>`;
 }
 
+async function updateUserProfile(userId, updates) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${userId}`, {
+    method: "PATCH",
+    headers: {
+      "apikey":        SUPABASE_KEY,
+      "Authorization": `Bearer ${currentSession?.access_token}`,
+      "Content-Type":  "application/json",
+      "Prefer":        "return=minimal"
+    },
+    body: JSON.stringify(updates)
+  });
+  if (!res.ok) console.error("updateUserProfile error:", await res.text());
+}
+
 async function updateUserRole(userId, role) {
-  await supabaseClient.from("user_profiles").update({ role }).eq("id", userId);
+  await updateUserProfile(userId, { role });
 }
 
 async function updateUser2FA(userId, required) {
-  await supabaseClient.from("user_profiles").update({ two_fa_required: required }).eq("id", userId);
+  await updateUserProfile(userId, { two_fa_required: required });
 }
 
 async function toggleUserActive(userId, currentlyActive) {
-  await supabaseClient.from("user_profiles").update({ is_active: !currentlyActive }).eq("id", userId);
+  await updateUserProfile(userId, { is_active: !currentlyActive });
   await loadUsersTable();
 }
 
