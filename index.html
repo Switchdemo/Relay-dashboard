@@ -4625,6 +4625,7 @@ async function loadUsersTable() {
     }
   );
 
+  console.log("usersRes status:", usersRes.status);
   if (!usersRes.ok) {
     const err = await usersRes.text();
     container.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error loading users: ${err}</div>`;
@@ -4633,6 +4634,7 @@ async function loadUsersTable() {
   }
 
   const users = await usersRes.json();
+  console.log("users fetched:", users?.length, users);
   if (!users || users.length === 0) {
     container.innerHTML = `<div class="sched-empty">No users found.</div>`;
     return;
