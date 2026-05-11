@@ -315,6 +315,8 @@
     <div class="header-wx-loc" id="header-wx-loc"></div>
     <div class="header-wx" id="header-wx-days"></div>
   </div>
+  <!-- Hourly forecast panel (shown when a day is selected) -->
+  <div id="header-wx-hourly" style="display:none;background:var(--surface2);border-top:0.5px solid var(--border);border-bottom:0.5px solid var(--border);"></div>
   <!-- Main tabs -->
   <div class="tabs" id="main-tabs">
     <button class="tab-btn active" id="main-summary" onclick="switchMain('summary', this)">Program Summary</button>
@@ -3878,8 +3880,9 @@ function showWeatherLocation() {
   if (searchBtn) searchBtn.style.display = "none";
 }
 
+let headerWxSelectedDay = null;
+
 function renderHeaderWeather() {
-  // Render compact 7-day strip in the header using existing wxForecastData
   const strip = document.getElementById("header-wx-strip");
   const daysEl = document.getElementById("header-wx-days");
   const locEl  = document.getElementById("header-wx-loc");
@@ -3897,7 +3900,8 @@ function renderHeaderWeather() {
   daysEl.innerHTML = days7.map((dateStr, i) => {
     const d    = new Date(dateStr + "T12:00:00");
     const name = i === 0 ? "Today" : d.toLocaleDateString("en-US", { weekday: "short" });
-    return `<div class="header-wx-day">
+    const sel  = headerWxSelectedDay === i;
+    return `<div class="header-wx-day${sel ? " selected" : ""}" onclick="toggleHeaderHourly(${i})" style="cursor:pointer;${sel ? "border-color:var(--blue);background:var(--blue-bg);" : ""}">
       <div class="header-wx-day-name">${name}</div>
       <div class="header-wx-icon">${wxIcon(weathercode[i])}</div>
       <div class="header-wx-high">${Math.round(temperature_2m_max[i])}°</div>
@@ -3907,6 +3911,57 @@ function renderHeaderWeather() {
 
   if (locEl) locEl.textContent = `📍 ${wxLocationData.name}`;
   strip.style.display = "block";
+
+  // Render or hide hourly panel
+  renderHeaderHourly();
+}
+
+function toggleHeaderHourly(dayIndex) {
+  headerWxSelectedDay = headerWxSelectedDay === dayIndex ? null : dayIndex;
+  renderHeaderWeather();
+}
+
+function renderHeaderHourly() {
+  const panel = document.getElementById("header-wx-hourly");
+  if (!panel) return;
+
+  if (headerWxSelectedDay === null || !wxForecastData?.hourly) {
+    panel.style.display = "none";
+    return;
+  }
+
+  const dateStr = wxForecastData.daily.time[headerWxSelectedDay];
+  const { time, temperature_2m, weathercode } = wxForecastData.hourly;
+
+  const dayHours = time.reduce((acc, t, i) => {
+    if (t.startsWith(dateStr)) acc.push({ time: t, temp: temperature_2m[i], code: weathercode[i] });
+    return acc;
+  }, []);
+
+  if (dayHours.length === 0) { panel.style.display = "none"; return; }
+
+  const selDate  = new Date(dateStr + "T12:00:00");
+  const dayLabel = headerWxSelectedDay === 0
+    ? "Today"
+    : selDate.toLocaleDateString("en-US", { weekday:"long", month:"short", day:"numeric" });
+
+  panel.innerHTML = `
+    <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;padding:4px 1rem 4px;text-align:center;">
+      ${dayLabel} — Hourly Forecast
+      <span style="font-size:10px;font-weight:400;color:var(--text-hint);margin-left:6px;">(click day again to close)</span>
+    </div>
+    <div style="display:flex;gap:6px;padding:4px 1rem 8px;overflow-x:auto;justify-content:center;flex-wrap:nowrap;">
+      ${dayHours.map(h => {
+        const hour = new Date(h.time).toLocaleTimeString("en-US", { hour:"numeric", hour12:true });
+        return `<div style="display:flex;flex-direction:column;align-items:center;min-width:52px;padding:5px 8px;border-radius:var(--radius-sm);background:var(--surface);border:0.5px solid var(--border);flex-shrink:0;">
+          <div style="font-size:10px;color:var(--text-hint);margin-bottom:2px;">${hour}</div>
+          <div style="font-size:18px;line-height:1;margin:2px 0;">${wxIcon(h.code)}</div>
+          <div style="font-size:13px;font-weight:700;color:var(--text-primary);">${Math.round(h.temp)}°</div>
+          <div style="font-size:9px;color:var(--text-hint);margin-top:1px;text-align:center;line-height:1.2;">${wxDesc(h.code)}</div>
+        </div>`;
+      }).join("")}
+    </div>`;
+  panel.style.display = "block";
 }
 
 function clearWeatherLocation() {
@@ -3943,6 +3998,7 @@ async function fetchWeatherForecast() {
     const data = await res.json();
     wxForecastData = data;
     wxSelectedDay  = null;
+    headerWxSelectedDay = null;
     renderWeatherForecast();
     renderHeaderWeather(); // Update header strip
   } catch(e) {
