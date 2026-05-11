@@ -1948,6 +1948,18 @@ function buildLCHex(relayAction, mode, strategyNum, reps, startUnixTime) {
   return bytes.map(b => b.toString(16).toUpperCase().padStart(2, "0")).join("");
 }
 
+function buildAssignBubbleUpHex(minutes) {
+  // Assignment Command 0x1A, Designator 0x04 = Assign Bubble Up Timer
+  // Writes directly to device non-volatile memory — persists through reboots
+  const msb = (minutes >> 8) & 0xFF;
+  const lsb = minutes & 0xFF;
+  const bytes = [0xA1, 0x06, 0x00, 0x1A, 0x04, msb, lsb];
+  let checksum = 0;
+  bytes.forEach(b => { checksum ^= b; });
+  bytes.push(checksum);
+  return bytes.map(b => b.toString(16).toUpperCase().padStart(2,"0")).join("");
+}
+
 function buildRestoreHex(relayAction) {
   // Strategy 61 = restore, DLC, abrupt (data=0)
   const bytes = [0xA1];
@@ -3361,23 +3373,17 @@ async function refreshBubbleStatus() {
   const actualEl      = document.getElementById("global-actual-interval");
   const actualLabelEl = document.getElementById("global-actual-label");
 
-  // Get configured interval from first real device
+  // Show last known configured interval from deviceIntervals cache
   try {
-    const firstDevice = DEVICES[0];
-    const res = await fetch(`${PROXY_URL}env/get`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ deviceUID: firstDevice.uid })
-    });
-    const data = await res.json();
-    const mins = data?.environment_variables?._sync_outbound_mins;
+    const firstDevice = DEVICES.find(d => !d.uid.includes('PLACEHOLDER')) || DEVICES[0];
+    const cachedMins = deviceIntervals[firstDevice.uid];
     if (configuredEl) {
-      if (mins) {
-        configuredEl.textContent = formatIntervalMins(parseInt(mins));
-        if (configLabelEl) configLabelEl.textContent = `_sync_outbound_mins = ${mins} min`;
+      if (cachedMins) {
+        configuredEl.textContent = formatIntervalMins(parseInt(cachedMins));
+        if (configLabelEl) configLabelEl.textContent = `Last set: ${cachedMins} min (via Assignment Command)`;
       } else {
-        configuredEl.textContent = "Firmware Default";
-        if (configLabelEl) configLabelEl.textContent = "No override set";
+        configuredEl.textContent = "Unknown";
+        if (configLabelEl) configLabelEl.textContent = "Set an interval to track it here";
       }
     }
   } catch(e) {
@@ -3446,19 +3452,20 @@ async function loadBubbleUpIntervals() {
     </tr>`
   ).join("");
 
-  // Fetch current env vars for each device
+  // Read actual interval from last 2 bubble-up timestamps per device
   for (const d of DEVICES) {
     try {
-      const res = await fetch(`${PROXY_URL}env/get`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceUID: d.uid })
-      });
-      const data = await res.json();
-      const mins = data?.environment_variables?._sync_outbound_mins;
+      const rows = await supabaseGet(
+        `device_readings?device_uid=eq.${encodeURIComponent(d.uid)}&order=recorded_at.desc&limit=2`
+      );
       const el = document.getElementById(`bubble-current-${d.id}`);
-      if (el) el.textContent = mins ? `${mins} min` : "Firmware default";
-      deviceIntervals[d.uid] = mins || null;
+      if (Array.isArray(rows) && rows.length === 2) {
+        const diffMins = Math.round((new Date(rows[0].recorded_at) - new Date(rows[1].recorded_at)) / 60000);
+        if (el && diffMins > 0 && diffMins < 1440) {
+          el.textContent = `~${diffMins} min (measured)`;
+          deviceIntervals[d.uid] = diffMins;
+        } else if (el) { el.textContent = "Insufficient data"; }
+      } else if (el) { el.textContent = "No recent data"; }
     } catch(e) {
       const el = document.getElementById(`bubble-current-${d.id}`);
       if (el) el.textContent = "—";
@@ -3471,27 +3478,27 @@ async function setBubbleUp(uid, deviceId, minutes) {
   if (!mins || isNaN(mins) || parseInt(mins) < 1) {
     showBubbleStatus("Please enter a valid number of minutes.", "error"); return;
   }
+  const minsInt = parseInt(mins);
   try {
-    const res = await fetch(`${PROXY_URL}env`, {
+    // Send Assignment Command 0x04 directly to device via data.qi
+    // This writes to non-volatile memory — persists through reboots
+    const assignHex = buildAssignBubbleUpHex(minsInt);
+    console.log(`Sending bubble-up assignment to ${uid}: ${assignHex} (${minsInt} min)`);
+    const payload = { body: { LC: assignHex }, req: "note.add", sync: true };
+    const res = await fetch(PROXY_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        deviceUID: uid,
-        environment_variables: {
-          _sync_outbound_mins: String(parseInt(mins)),
-          _sync_inbound_mins:  String(parseInt(mins))
-        }
-      })
+      headers: { "Content-Type": "application/json", "X-Device-UID": uid },
+      body: JSON.stringify(payload)
     });
-    const resText = await res.text();
     if (res.ok) {
       const el = document.getElementById(`bubble-current-${deviceId}`);
-      if (el) el.textContent = `${mins} min`;
-      deviceIntervals[uid] = mins;
-      showBubbleStatus(`✅ ${DEVICES.find(d=>d.id===deviceId)?.name} set to ${mins} min — takes effect on next sync.`, "ok");
+      if (el) el.textContent = `${minsInt} min (pending sync)`;
+      deviceIntervals[uid] = minsInt;
+      showBubbleStatus(`✅ ${DEVICES.find(d=>d.id===deviceId)?.name} — assignment command sent (${minsInt} min). Takes effect on next bubble-up.`, "ok");
     } else {
-      console.error("setBubbleUp error:", res.status, resText);
-      showBubbleStatus(`❌ Error ${res.status}: ${resText}`, "error");
+      const err = await res.text();
+      console.error("setBubbleUp error:", res.status, err);
+      showBubbleStatus(`❌ Error ${res.status}: ${err}`, "error");
     }
   } catch(e) {
     showBubbleStatus(`❌ Network error: ${e.message}`, "error");
@@ -3499,24 +3506,12 @@ async function setBubbleUp(uid, deviceId, minutes) {
 }
 
 async function clearBubbleUp(uid, deviceId) {
-  try {
-    const res = await fetch(`${PROXY_URL}env`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        deviceUID: uid,
-        environment_variables: { _sync_outbound_mins: "", _sync_inbound_mins: "" }
-      })
-    });
-    if (res.ok) {
-      const el = document.getElementById(`bubble-current-${deviceId}`);
-      if (el) el.textContent = "Firmware default";
-      deviceIntervals[uid] = null;
-      showBubbleStatus(`✅ ${DEVICES.find(d=>d.id===deviceId)?.name} reverted to firmware default — takes effect on next sync.`, "ok");
-    }
-  } catch(e) {
-    showBubbleStatus(`❌ Network error: ${e.message}`, "error");
-  }
+  // Send assignment with 30 min to revert to factory default
+  await setBubbleUp(uid, deviceId, 30);
+  const el = document.getElementById(`bubble-current-${deviceId}`);
+  if (el) el.textContent = "30 min (factory default)";
+  deviceIntervals[uid] = 30;
+  showBubbleStatus(`✅ ${DEVICES.find(d=>d.id===deviceId)?.name} reverted to 30 min factory default.`, "ok");
 }
 
 async function setAllBubbleUp() {
@@ -3543,13 +3538,12 @@ async function setEventMode() {
   let successCount = 0;
   for (const d of DEVICES) {
     try {
-      const res = await fetch(`${PROXY_URL}env`, {
+      const assignHex = buildAssignBubbleUpHex(5);
+      const payload = { body: { LC: assignHex }, req: "note.add", sync: true };
+      const res = await fetch(PROXY_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          deviceUID: d.uid,
-          environment_variables: { _sync_outbound_mins: "5", _sync_inbound_mins: "5" }
-        })
+        headers: { "Content-Type": "application/json", "X-Device-UID": d.uid },
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         successCount++;
@@ -3588,10 +3582,13 @@ async function setNormalMode() {
         ? { _sync_outbound_mins: outboundMins, _sync_inbound_mins: outboundMins }
         : {};  // Empty = clear vars, revert to firmware default
 
-      const res = await fetch(`${PROXY_URL}env`, {
+      const normalMins = outboundMins ? parseInt(outboundMins) : 30;
+      const assignHex = buildAssignBubbleUpHex(normalMins);
+      const payload = { body: { LC: assignHex }, req: "note.add", sync: true };
+      const res = await fetch(PROXY_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceUID: d.uid, environment_variables: envVars })
+        headers: { "Content-Type": "application/json", "X-Device-UID": d.uid },
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         successCount++;
