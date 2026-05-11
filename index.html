@@ -3202,9 +3202,7 @@ function startBubbleScheduler() {
 }
 
 // ── BUBBLE-UP INTERVAL CONTROL ───────────────────────────────────────────────
-const NOTEHUB_TOKEN  = "api_key_ghn9PnVbcab9VdToEGJuPfKVZXk9wlF9vpP+5e60sMA=";
-const NOTEHUB_BASE   = "https://api.notefile.net/v1";
-const PROJECT_UID    = "app:45e8c741-8358-4e04-b03a-b5f39135702a";
+// All Notehub API calls routed through Worker to avoid CORS + hide token
 
 // Store known intervals per device (loaded from Notehub)
 const deviceIntervals = {};
@@ -3354,10 +3352,11 @@ async function refreshBubbleStatus() {
   // Get configured interval from first real device
   try {
     const firstDevice = DEVICES[0];
-    const res = await fetch(
-      `${NOTEHUB_BASE}/projects/${PROJECT_UID}/devices/${encodeURIComponent(firstDevice.uid)}/environment_variables`,
-      { headers: { "Authorization": `Bearer ${NOTEHUB_TOKEN}` } }
-    );
+    const res = await fetch(`${PROXY_URL}env/get`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceUID: firstDevice.uid })
+    });
     const data = await res.json();
     const mins = data?.environment_variables?._sync_outbound_mins;
     if (configuredEl) {
@@ -3459,13 +3458,16 @@ async function setBubbleUp(uid, deviceId, minutes) {
     showBubbleStatus("Please enter a valid number of minutes.", "error"); return;
   }
   try {
-    const res = await fetch(`${NOTEHUB_BASE}/projects/${PROJECT_UID}/devices/${encodeURIComponent(uid)}/environment_variables`, {
-      method: "PUT",
-      headers: { "Authorization": `Bearer ${NOTEHUB_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ environment_variables: {
-        _sync_outbound_mins: String(parseInt(mins)),
-        _sync_inbound_mins:  String(parseInt(mins))
-      }})
+    const res = await fetch(`${PROXY_URL}env`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        deviceUID: uid,
+        environment_variables: {
+          _sync_outbound_mins: String(parseInt(mins)),
+          _sync_inbound_mins:  String(parseInt(mins))
+        }
+      })
     });
     if (res.ok) {
       const el = document.getElementById(`bubble-current-${deviceId}`);
@@ -3483,10 +3485,13 @@ async function setBubbleUp(uid, deviceId, minutes) {
 
 async function clearBubbleUp(uid, deviceId) {
   try {
-    const res = await fetch(`${NOTEHUB_BASE}/projects/${PROJECT_UID}/devices/${encodeURIComponent(uid)}/environment_variables`, {
-      method: "PUT",
-      headers: { "Authorization": `Bearer ${NOTEHUB_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ environment_variables: { _sync_outbound_mins: "" } })
+    const res = await fetch(`${PROXY_URL}env`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        deviceUID: uid,
+        environment_variables: { _sync_outbound_mins: "", _sync_inbound_mins: "" }
+      })
     });
     if (res.ok) {
       const el = document.getElementById(`bubble-current-${deviceId}`);
@@ -3523,13 +3528,13 @@ async function setEventMode() {
   let successCount = 0;
   for (const d of DEVICES) {
     try {
-      const res = await fetch(`${NOTEHUB_BASE}/projects/${PROJECT_UID}/devices/${encodeURIComponent(d.uid)}/environment_variables`, {
-        method: "PUT",
-        headers: { "Authorization": `Bearer ${NOTEHUB_TOKEN}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ environment_variables: {
-          _sync_outbound_mins: "5",
-          _sync_inbound_mins: "5"
-        }})
+      const res = await fetch(`${PROXY_URL}env`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deviceUID: d.uid,
+          environment_variables: { _sync_outbound_mins: "5", _sync_inbound_mins: "5" }
+        })
       });
       if (res.ok) {
         successCount++;
@@ -3566,10 +3571,10 @@ async function setNormalMode() {
         ? { _sync_outbound_mins: outboundMins, _sync_inbound_mins: outboundMins }
         : {};  // Empty = clear vars, revert to firmware default
 
-      const res = await fetch(`${NOTEHUB_BASE}/projects/${PROJECT_UID}/devices/${encodeURIComponent(d.uid)}/environment_variables`, {
-        method: "PUT",
-        headers: { "Authorization": `Bearer ${NOTEHUB_TOKEN}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ environment_variables: envVars })
+      const res = await fetch(`${PROXY_URL}env`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceUID: d.uid, environment_variables: envVars })
       });
       if (res.ok) {
         successCount++;
