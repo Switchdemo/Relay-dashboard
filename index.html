@@ -1340,6 +1340,7 @@ function switchMain(main, btn) {
   document.getElementById("sub-tabs-devices").style.display = main === "devices" ? "flex" : "none";
   if (main === "summary") { activatePane("summary"); initSummaryTab(); }
   else if (main === "weather") { activatePane("weather"); initWeatherTab(); }
+  else if (main === "admin")   { activatePane("admin"); updateAdminHeader(); loadUsersTable(); }
   else if (main === "events")  { const s = currentSub.events||"scheduler";  activatePane(s); activateSubBtn("events",s); }
   else if (main === "devices") { const s = currentSub.devices||"controls"; activatePane(s); activateSubBtn("devices",s); }
 }
