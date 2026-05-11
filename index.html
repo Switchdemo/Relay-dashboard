@@ -4532,36 +4532,70 @@ async function createUser() {
   if (createBtn) { createBtn.textContent = "Creating..."; createBtn.disabled = true; }
 
   try {
-    const res = await fetch(`${PROXY_URL}admin/create-user`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${currentSession?.access_token}`
-      },
-      body: JSON.stringify({ email, password, name, role, two_fa_required: twoFa })
+    // Use signUp — works with anon key, email confirm is OFF in Supabase settings
+    const { data: su, error: suErr } = await supabaseClient.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: name } }
     });
 
-    const resText = await res.text();
-    let resData;
-    try { resData = JSON.parse(resText); } catch { resData = { error: resText }; }
+    console.log("signUp result:", su, suErr);
 
-    if (res.ok && resData.success) {
-      errEl.style.display = "none";
-      document.getElementById("add-user-form").style.display = "none";
-      ["new-user-name","new-user-email","new-user-password"].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.value = "";
-      });
-      document.getElementById("new-user-2fa").checked = false;
-      await loadUsersTable();
-      showBubbleStatus(`✅ User ${email} created successfully.`, "ok");
-    } else {
-      errEl.textContent = resData.error || `Error ${res.status}: ${resText}`;
+    if (suErr) {
+      errEl.textContent = suErr.message || "Failed to create user account.";
       errEl.style.display = "block";
-      console.error("createUser error:", res.status, resText);
+      return;
     }
+
+    if (!su?.user?.id) {
+      errEl.textContent = "User may already exist or email confirmation is required. Check Supabase → Auth → Users.";
+      errEl.style.display = "block";
+      return;
+    }
+
+    const userId = su.user.id;
+
+    // Insert user_profiles row using service role via raw fetch
+    // (anon key won't have INSERT permission even with policy)
+    const profileRes = await fetch(`${SUPABASE_URL}/rest/v1/user_profiles`, {
+      method: "POST",
+      headers: {
+        "apikey":        SUPABASE_KEY,
+        "Authorization": `Bearer ${currentSession?.access_token}`,
+        "Content-Type":  "application/json",
+        "Prefer":        "return=minimal"
+      },
+      body: JSON.stringify({
+        id:              userId,
+        email,
+        full_name:       name || "",
+        role,
+        two_fa_required: twoFa || false,
+        is_active:       true,
+        created_by:      currentUser?.id
+      })
+    });
+
+    if (!profileRes.ok) {
+      const profileErr = await profileRes.text();
+      console.error("Profile insert error:", profileErr);
+      errEl.textContent = `User auth created but profile failed: ${profileErr}`;
+      errEl.style.display = "block";
+      return;
+    }
+
+    // Success
+    errEl.style.display = "none";
+    document.getElementById("add-user-form").style.display = "none";
+    ["new-user-name","new-user-email","new-user-password"].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = "";
+    });
+    document.getElementById("new-user-2fa").checked = false;
+    await loadUsersTable();
+    alert(`✅ User ${email} created! They can log in with the temporary password you set.`);
+
   } catch(e) {
-    errEl.textContent = `Network error: ${e.message}`;
+    errEl.textContent = `Error: ${e.message}`;
     errEl.style.display = "block";
     console.error("createUser exception:", e);
   } finally {
