@@ -3536,7 +3536,7 @@ async function setEventMode() {
     statusEl.textContent = "🟢 Activating Event Mode — setting all devices to 5 min inbound & outbound...";
   }
   let successCount = 0;
-  for (const d of DEVICES) {
+  for (const d of DEVICES.filter(d => !d.uid.includes('PLACEHOLDER'))) {
     try {
       const assignHex = buildAssignBubbleUpHex(5);
       const payload = { body: { LC: assignHex }, req: "note.add", sync: true };
