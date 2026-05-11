@@ -4608,7 +4608,10 @@ async function createUser() {
 
 async function loadUsersTable() {
   const container = document.getElementById("users-table-container");
-  if (!container || currentUserRole !== "administrator") return;
+  console.log("loadUsersTable called — role:", currentUserRole, "session:", !!currentSession?.access_token);
+  if (!container) { console.log("No container found"); return; }
+  if (currentUserRole !== "administrator") { console.log("Not administrator:", currentUserRole); return; }
+  container.innerHTML = `<div class="sched-empty">Loading users...</div>`;
 
   // Use raw fetch with admin's JWT to bypass any RLS caching issues
   const usersRes = await fetch(
