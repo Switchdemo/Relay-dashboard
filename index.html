@@ -2954,6 +2954,7 @@ let bubbleSeasonConfig = {
   winter: { start: "12/01", end: "02/28", peakStart: 6,  peakEnd: 21,  enabled: true }
 };
 let bubbleCheckInterval = null;
+let bubbleManualOverrideUntil = null; // timestamp when manual override expires
 
 const BUBBLE_CONDITIONS = [
   { value: "peak_season_peak_hours", label: "DR Season (Either) — Peak Hours" },
@@ -3178,8 +3179,12 @@ function evaluateAndShowCurrentRule() {
     const season = isInDRSeason(now);
     const seasonLabel = season === "summer" ? "☀️ Summer Season"
       : season === "winter" ? "❄️ Winter Season" : "Off-Season";
+    const overrideActive = bubbleManualOverrideUntil && Date.now() < bubbleManualOverrideUntil;
+    const overrideLabel = overrideActive
+      ? `<span style="color:var(--amber);font-weight:500;margin-left:8px;">⏸ Auto-schedule paused (manual override active ${Math.round((bubbleManualOverrideUntil-Date.now())/60000)} min remaining)</span>`
+      : "";
     el.innerHTML = `<span style="color:var(--green-dark);font-weight:600;">▶ ${match.label}</span> — ${match.intervalMins} min interval
-      <span style="margin-left:8px;font-size:10px;color:var(--text-hint);">${seasonLabel} &bull; ${isWeekend(now)?"Weekend":"Weekday"} &bull; ${isPeakHours(now)?"Peak Hours":"Off-Peak"}</span>`;
+      <span style="margin-left:8px;font-size:10px;color:var(--text-hint);">${seasonLabel} &bull; ${isWeekend(now)?"Weekend":"Weekday"} &bull; ${isPeakHours(now)?"Peak Hours":"Off-Peak"}</span>${overrideLabel}`;
   } else {
     el.innerHTML = `<span style="color:var(--text-hint);">No matching rule — using firmware default</span>`;
   }
@@ -3190,6 +3195,13 @@ function evaluateAndShowCurrentRule() {
 function startBubbleScheduler() {
   if (bubbleCheckInterval) clearInterval(bubbleCheckInterval);
   bubbleCheckInterval = setInterval(async () => {
+    // Don't auto-apply if manual override is active
+    if (bubbleManualOverrideUntil && Date.now() < bubbleManualOverrideUntil) {
+      const remainMins = Math.round((bubbleManualOverrideUntil - Date.now()) / 60000);
+      console.log(`Bubble-up scheduler paused — manual override active for ${remainMins} more min`);
+      evaluateAndShowCurrentRule();
+      return;
+    }
     const match = evaluateRules(new Date());
     if (match) {
       console.log(`Bubble-up schedule: applying ${match.intervalMins} min (${match.label})`);
@@ -3437,8 +3449,10 @@ async function loadBubbleUpIntervals() {
   // Fetch current env vars for each device
   for (const d of DEVICES) {
     try {
-      const res = await fetch(`${NOTEHUB_BASE}/projects/${PROJECT_UID}/devices/${encodeURIComponent(d.uid)}/environment_variables`, {
-        headers: { "Authorization": `Bearer ${NOTEHUB_TOKEN}` }
+      const res = await fetch(`${PROXY_URL}env/get`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceUID: d.uid })
       });
       const data = await res.json();
       const mins = data?.environment_variables?._sync_outbound_mins;
@@ -3469,14 +3483,15 @@ async function setBubbleUp(uid, deviceId, minutes) {
         }
       })
     });
+    const resText = await res.text();
     if (res.ok) {
       const el = document.getElementById(`bubble-current-${deviceId}`);
       if (el) el.textContent = `${mins} min`;
       deviceIntervals[uid] = mins;
       showBubbleStatus(`✅ ${DEVICES.find(d=>d.id===deviceId)?.name} set to ${mins} min — takes effect on next sync.`, "ok");
     } else {
-      const err = await res.text();
-      showBubbleStatus(`❌ Error: ${err}`, "error");
+      console.error("setBubbleUp error:", res.status, resText);
+      showBubbleStatus(`❌ Error ${res.status}: ${resText}`, "error");
     }
   } catch(e) {
     showBubbleStatus(`❌ Network error: ${e.message}`, "error");
@@ -3543,10 +3558,12 @@ async function setEventMode() {
       }
     } catch(e) { console.error("setEventMode error:", d.uid, e); }
   }
+  // Pause auto-scheduler for 4 hours during event mode
+  bubbleManualOverrideUntil = Date.now() + (4 * 60 * 60 * 1000);
   if (statusEl) {
-    statusEl.textContent = `🟢 Event Mode active — ${successCount}/${DEVICES.length} devices set to 5 min inbound & outbound. Takes effect on next bubble-up.`;
+    statusEl.textContent = `🟢 Event Mode active — ${successCount}/${DEVICES.length} devices set to 5 min. Auto-schedule paused 4 hrs.`;
   }
-  showBubbleStatus(`🟢 Event Mode activated on ${successCount} device(s) — 5 min inbound & outbound.`, "ok");
+  showBubbleStatus(`🟢 Event Mode activated — 5 min inbound & outbound. Auto-schedule paused for 4 hours.`, "ok");
 }
 
 async function setNormalMode() {
@@ -3584,23 +3601,28 @@ async function setNormalMode() {
     } catch(e) { console.error("setNormalMode error:", d.uid, e); }
   }
 
+  // Resume auto-scheduler
+  bubbleManualOverrideUntil = null;
   if (statusEl) {
-    statusEl.textContent = `⚙️ Normal Mode active — ${successCount}/${DEVICES.length} devices set to ${outboundMins ? outboundMins + " min" : "firmware default"} (${ruleLabel}). Takes effect on next bubble-up.`;
+    statusEl.textContent = `⚙️ Normal Mode active — ${successCount}/${DEVICES.length} devices set to ${outboundMins ? outboundMins + " min" : "firmware default"} (${ruleLabel}). Auto-schedule resumed.`;
     statusEl.style.color = "var(--text-secondary)";
   }
-  showBubbleStatus(`⚙️ Normal Mode activated — ${outboundMins ? outboundMins + " min" : "firmware default"} (${ruleLabel}).`, "ok");
+  showBubbleStatus(`⚙️ Normal Mode activated — auto-schedule resumed (${ruleLabel}).`, "ok");
 }
 
 async function applyBubbleUpPreset(mins) {
   if (mins === null) {
-    // Clear all - revert to firmware default
+    // Clear override and revert to firmware default
+    bubbleManualOverrideUntil = null;
     showBubbleStatus("Clearing all device intervals — reverting to firmware default...", "ok");
     for (const d of DEVICES) await clearBubbleUp(d.uid, d.id);
-    showBubbleStatus("✅ All devices reverted to firmware default.", "ok");
+    showBubbleStatus("✅ All devices reverted to firmware default. Auto-schedule resumed.", "ok");
   } else {
-    showBubbleStatus(`Applying ${mins} min preset to all devices...`, "ok");
+    // Set manual override for 2 hours to prevent scheduler from overwriting
+    bubbleManualOverrideUntil = Date.now() + (2 * 60 * 60 * 1000);
+    showBubbleStatus(`Applying ${mins} min preset to all devices... (auto-schedule paused 2 hrs)`, "ok");
     for (const d of DEVICES) await setBubbleUp(d.uid, d.id, mins);
-    showBubbleStatus(`✅ All devices set to ${mins} min — takes effect on next sync.`, "ok");
+    showBubbleStatus(`✅ All devices set to ${mins} min — takes effect on next sync. Auto-schedule paused for 2 hours.`, "ok");
   }
 }
 
