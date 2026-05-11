@@ -665,9 +665,9 @@
           <div class="sched-card-title">Scheduled Events</div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
             <select class="history-select" id="sched-range" onchange="loadSchedules()">
-              <option value="future">Current &amp; Upcoming</option>
+              <option value="future" selected>Current &amp; Upcoming</option>
               <option value="24">Last 24 Hours</option>
-              <option value="168" selected>Last 7 Days</option>
+              <option value="168">Last 7 Days</option>
               <option value="720">Last 30 Days</option>
               <option value="">All Events</option>
             </select>
@@ -685,9 +685,8 @@
           <div class="sched-card-title">Events Received</div>
           <div style="display:flex;gap:8px;align-items:center;">
             <select class="history-select" id="device-events-range" onchange="loadDeviceEvents()">
-              <option value="future">Current &amp; Upcoming</option>
-              <option value="24">Last 24 Hours</option>
-              <option value="168" selected>Last 7 Days</option>
+              <option value="24" selected>Last 24 Hours</option>
+              <option value="168">Last 7 Days</option>
               <option value="720">Last 30 Days</option>
               <option value="">All Events</option>
             </select>
@@ -1659,8 +1658,9 @@ async function loadSchedules() {
   // Build query against schedule_queue for full event history
   let query = "schedule_queue?order=fire_at.desc&limit=200";
   if (range === "future") {
-    const since = new Date(Date.now() - 2*60*60*1000).toISOString();
-    query += `&fire_at=gte.${since}&status=not.eq.cancelled`;
+    // Show events from now forward plus active events (started up to 24hrs ago)
+    const since = new Date(Date.now() - 24*60*60*1000).toISOString();
+    query = `schedule_queue?order=fire_at.asc&limit=200&fire_at=gte.${since}&status=not.eq.cancelled`;
   } else if (range) {
     const since = new Date(Date.now() - parseInt(range)*60*60*1000).toISOString();
     query += `&fire_at=gte.${since}`;
