@@ -4527,28 +4527,45 @@ async function createUser() {
 
   errEl.style.display = "none";
 
-  // Use Worker to create user (avoids exposing service role key in browser)
-  // For now use Supabase Admin API via Worker
-  const res = await fetch(`${PROXY_URL}admin/create-user`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json",
-               "Authorization": `Bearer ${currentSession.access_token}` },
-    body: JSON.stringify({ email, password, name, role, two_fa_required: twoFa })
-  });
+  // Show loading state
+  const createBtn = errEl.previousElementSibling?.querySelector('button');
+  if (createBtn) { createBtn.textContent = "Creating..."; createBtn.disabled = true; }
 
-  if (res.ok) {
-    errEl.style.display = "none";
-    document.getElementById("add-user-form").style.display = "none";
-    // Clear form
-    ["new-user-name","new-user-email","new-user-password"].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.value = "";
+  try {
+    const res = await fetch(`${PROXY_URL}admin/create-user`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${currentSession?.access_token}`
+      },
+      body: JSON.stringify({ email, password, name, role, two_fa_required: twoFa })
     });
-    await loadUsersTable();
-  } else {
-    const err = await res.text();
-    errEl.textContent = `Error: ${err}`;
+
+    const resText = await res.text();
+    let resData;
+    try { resData = JSON.parse(resText); } catch { resData = { error: resText }; }
+
+    if (res.ok && resData.success) {
+      errEl.style.display = "none";
+      document.getElementById("add-user-form").style.display = "none";
+      ["new-user-name","new-user-email","new-user-password"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = "";
+      });
+      document.getElementById("new-user-2fa").checked = false;
+      await loadUsersTable();
+      showBubbleStatus(`✅ User ${email} created successfully.`, "ok");
+    } else {
+      errEl.textContent = resData.error || `Error ${res.status}: ${resText}`;
+      errEl.style.display = "block";
+      console.error("createUser error:", res.status, resText);
+    }
+  } catch(e) {
+    errEl.textContent = `Network error: ${e.message}`;
     errEl.style.display = "block";
+    console.error("createUser exception:", e);
+  } finally {
+    if (createBtn) { createBtn.textContent = "Create User"; createBtn.disabled = false; }
   }
 }
 
