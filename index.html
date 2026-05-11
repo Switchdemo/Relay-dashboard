@@ -4729,6 +4729,7 @@ async function loadUsersTable() {
   wrap.appendChild(table);
   container.innerHTML = "";
   container.appendChild(wrap);
+  console.log("Table rendered, container children:", container.children.length);
 }
 
 async function updateUserRole(userId, role) {
