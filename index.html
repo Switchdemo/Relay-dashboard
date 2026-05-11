@@ -1652,34 +1652,60 @@ async function createSchedule() {
 
 async function loadSchedules() {
   const list = document.getElementById("sched-list");
+  if (!list) return;
+  list.innerHTML = `<div class="sched-empty">Loading...</div>`;
   const range = document.getElementById("sched-range")?.value;
+
+  // Build query against schedule_queue for full event history
   let query = "schedule_queue?order=fire_at.desc&limit=200";
   if (range === "future") {
-    // Current and upcoming — fire_at from 2 hours ago onwards (catch active events)
     const since = new Date(Date.now() - 2*60*60*1000).toISOString();
     query += `&fire_at=gte.${since}&status=not.eq.cancelled`;
   } else if (range) {
     const since = new Date(Date.now() - parseInt(range)*60*60*1000).toISOString();
     query += `&fire_at=gte.${since}`;
   }
+
   const rows = await supabaseGet(query);
-  if (!rows || rows.length === 0) { list.innerHTML = `<div class="sched-empty">No events found.</div>`; return; }
+  if (!rows || rows.length === 0) {
+    list.innerHTML = `<div class="sched-empty">No events found for selected range.</div>`;
+    return;
+  }
+
+  const statusColors = {
+    sent:"var(--blue-dark)", received:"var(--green-dark)", started:"#166534",
+    ended:"var(--text-secondary)", cancelled:"var(--text-hint)", pending:"var(--amber)"
+  };
+
   list.innerHTML = rows.map(s => {
-    const daysStr = s.frequency === "weekly" && s.days_of_week
-      ? s.days_of_week.map(d => DAY_NAMES[d]).join(", ")
-      : "Every day";
-    const tzParts = s.timezone.split("/");
-    const tzCity = tzParts[tzParts.length-1].replace("_"," ");
-    const tzRegion = tzParts[0] === "America" ? "" : tzParts[0] + " ";
-    const tzShort = tzCity;
-    return `<div class="sched-item ${s.enabled ? "" : "disabled"}">
+    const fireStr = s.fire_at ? new Date(s.fire_at).toLocaleString() : "—";
+    const dur     = s.duration_minutes ? formatDuration(s.duration_minutes) : "—";
+    const sc      = statusColors[s.status] || "var(--text-secondary)";
+    const isCancellable = ["sent","received","started","pending"].includes(s.status);
+    const displayName = s.name || s.target_name || `Queue #${s.id}`;
+
+    // Extract the LC event ID from the hex if we have it, otherwise use lc_strategy as proxy
+    // The actual device event ID is tracked in device_events table
+    const cancelBtn = isCancellable
+      ? `<button class="sched-delete-btn" style="color:var(--red);"
+           onclick="cancelSpecificEvent(${s.id},'${s.target_id}','${s.target_type || "device"}','${s.relay_action || "all_on"}','${displayName.replace(/'/g,"\'")}',${s.lc_strategy||1})">
+           Cancel Event
+         </button>`
+      : "";
+
+    return `<div class="sched-item">
       <div class="sched-info">
-        <div class="sched-name">${s.name}</div>
-        <div class="sched-detail">${s.target_name} &bull; ${RELAY_ACTION_LABELS[s.relay_action]} &bull; ${s.event_date ? s.event_date + " " : ""}${formatTimeAMPM(s.action_time)} &mdash; ${calcEndTime(s.action_time, s.duration_minutes)} ${tzShort}${(() => { if (!s.duration_minutes || !s.lc_timeout || !s.lc_cycle) return ""; const onTime = Math.round((s.lc_timeout / s.lc_cycle) * s.duration_minutes); const offTime = s.duration_minutes - onTime; return " &bull; On " + onTime + " min / Off " + offTime + " min"; })()} &bull; <span style='color:var(--amber);font-weight:500;'>One Time</span></div>
+        <div class="sched-name">
+          ${displayName}
+          <span style="font-size:10px;font-weight:600;padding:2px 6px;border-radius:8px;background:${s.status==='sent'?'var(--blue-bg)':s.status==='received'?'var(--green-bg)':s.status==='ended'?'var(--surface2)':'var(--surface2)'};color:${sc};margin-left:6px;">${s.status}</span>
+        </div>
+        <div class="sched-detail">
+          ${s.target_name || "—"} &bull; ${RELAY_ACTION_LABELS[s.relay_action] || s.relay_action || "—"}
+          &bull; 📅 ${fireStr} &bull; ⏱ ${dur}
+          ${s.lc_mode ? "&bull; " + s.lc_mode.toUpperCase() : ""}
+        </div>
       </div>
-      <div class="sched-actions">
-        <button class="sched-delete-btn" onclick="deleteSchedule(${s.id})">Delete</button>
-      </div>
+      <div class="sched-actions">${cancelBtn}</div>
     </div>`;
   }).join("");
 }
