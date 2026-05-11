@@ -28,6 +28,10 @@
   .page-sub { font-size: 13px; color: var(--text-hint); margin-top: 4px; }
   .tabs { display: flex; gap: 6px; justify-content: center; margin-bottom: 0.75rem; flex-wrap: wrap; }
   .tab-btn { padding: 7px 16px; border-radius: 20px; border: 0.5px solid var(--border-md); background: var(--surface); color: var(--text-secondary); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+  .sub-tabs { display: flex; gap: 4px; justify-content: center; padding: 0 1rem 0.5rem; flex-wrap: wrap; border-bottom: 0.5px solid var(--border); margin-bottom: 2px; }
+  .sub-tab-btn { padding: 5px 14px; border-radius: 20px; border: 0.5px solid var(--border); background: transparent; color: var(--text-hint); font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+  .sub-tab-btn.active { background: var(--surface2); color: var(--text-primary); border-color: var(--border-md); font-weight: 600; }
+  .sub-tab-btn:hover { color: var(--text-primary); border-color: var(--border-md); }
   .tab-btn.active { background: var(--text-primary); color: #fff; border-color: var(--text-primary); }
   .status-bar { display: flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: var(--radius-sm); background: var(--surface); border: 0.5px solid var(--border); font-size: 12px; color: var(--text-secondary); max-width: 900px; margin: 0 auto; }
   .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-hint); flex-shrink: 0; transition: background 0.3s; }
@@ -249,6 +253,15 @@
   .event-pill.received { background: var(--green-bg); border-color: var(--green); color: var(--green-dark); }
   .event-pill.started { background: #F0FDF4; border-color: #16a34a; color: #166534; }
 
+  /* ── Header Weather Strip ── */
+  .header-wx { display:flex; gap:8px; justify-content:center; padding:6px 1rem 8px; overflow-x:auto; flex-wrap:nowrap; }
+  .header-wx-day { display:flex; flex-direction:column; align-items:center; min-width:72px; padding:6px 10px; border-radius:var(--radius-sm); background:var(--surface); border:0.5px solid var(--border); flex-shrink:0; }
+  .header-wx-day-name { font-size:11px; font-weight:600; color:var(--text-hint); text-transform:uppercase; margin-bottom:2px; }
+  .header-wx-icon { font-size:24px; margin:3px 0; line-height:1; }
+  .header-wx-high { font-size:16px; font-weight:700; color:var(--text-primary); }
+  .header-wx-low  { font-size:13px; color:var(--text-hint); margin-top:1px; }
+  .header-wx-loc  { font-size:11px; color:var(--text-hint); text-align:center; margin-bottom:3px; }
+
   /* ── Weather Forecast ── */
   .wx-days { display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-top:4px; }
   .wx-day  { background:var(--surface2);border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:8px 6px;text-align:center;cursor:pointer;transition:all 0.15s;position:relative; }
@@ -297,17 +310,30 @@
     <div class="page-title">Load Control Device Panel</div>
     <div class="page-sub">Load control &amp; scheduling</div>
   </div>
-  <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('summary', this)">Program Summary</button>
-    <button class="tab-btn" onclick="switchTab('scheduler', this)">Event Scheduler</button>
-    <button class="tab-btn" onclick="switchTab('controls', this)">Device Controls</button>
-    <button class="tab-btn" onclick="switchTab('data', this)">Current Device Status</button>
-    <button class="tab-btn" onclick="switchTab('history', this)">Device History</button>
-    <button class="tab-btn" onclick="switchTab('groups', this)">Groups</button>
-    <button class="tab-btn" onclick="switchTab('eventstats', this)">Event Statistics</button>
-    <button class="tab-btn" onclick="switchTab('weather', this)">Weather</button>
-    <button class="tab-btn" onclick="switchTab('map', this)">Device Location</button>
-    <button class="tab-btn" onclick="switchTab('settings', this)">Device Settings</button>
+  <!-- 7-day weather strip -->
+  <div id="header-wx-strip" style="display:none;">
+    <div class="header-wx-loc" id="header-wx-loc"></div>
+    <div class="header-wx" id="header-wx-days"></div>
+  </div>
+  <!-- Main tabs -->
+  <div class="tabs" id="main-tabs">
+    <button class="tab-btn active" id="main-summary" onclick="switchMain('summary', this)">Program Summary</button>
+    <button class="tab-btn" id="main-events" onclick="switchMain('events', this)">Events</button>
+    <button class="tab-btn" id="main-devices" onclick="switchMain('devices', this)">Devices</button>
+    <button class="tab-btn" id="main-weather" onclick="switchMain('weather', this)">Weather</button>
+  </div>
+  <!-- Sub-tabs (shown contextually) -->
+  <div class="sub-tabs" id="sub-tabs-events" style="display:none;">
+    <button class="sub-tab-btn active" id="sub-scheduler" onclick="switchSub('events','scheduler',this)">Event Scheduler</button>
+    <button class="sub-tab-btn" id="sub-eventstats" onclick="switchSub('events','eventstats',this)">Event Statistics</button>
+  </div>
+  <div class="sub-tabs" id="sub-tabs-devices" style="display:none;">
+    <button class="sub-tab-btn active" id="sub-controls" onclick="switchSub('devices','controls',this)">Device Controls</button>
+    <button class="sub-tab-btn" id="sub-data" onclick="switchSub('devices','data',this)">Current Device Status</button>
+    <button class="sub-tab-btn" id="sub-history" onclick="switchSub('devices','history',this)">Device History</button>
+    <button class="sub-tab-btn" id="sub-groups" onclick="switchSub('devices','groups',this)">Groups</button>
+    <button class="sub-tab-btn" id="sub-map" onclick="switchSub('devices','map',this)">Device Location</button>
+    <button class="sub-tab-btn" id="sub-settings" onclick="switchSub('devices','settings',this)">Device Settings</button>
   </div>
   <div class="status-bar">
     <div class="dot ready" id="dot"></div>
@@ -833,7 +859,7 @@
           <button class="group-cmd-btn off" onclick="applyBubbleUpPreset(60)" style="flex:none;padding:6px 12px;font-size:11px;">1 hr<br><span style="font-size:10px;color:var(--text-hint);">Low Monitor</span></button>
           <button class="group-cmd-btn off" onclick="applyBubbleUpPreset(240)" style="flex:none;padding:6px 12px;font-size:11px;">4 hr<br><span style="font-size:10px;color:var(--text-hint);">Off-Season</span></button>
           <button class="group-cmd-btn off" onclick="applyBubbleUpPreset(720)" style="flex:none;padding:6px 12px;font-size:11px;">12 hr<br><span style="font-size:10px;color:var(--text-hint);">Minimal</span></button>
-          <button class="group-cmd-btn off" style="flex:none;padding:6px 12px;font-size:11px;color:var(--red);border-color:var(--red);" onclick="applyBubbleUpPreset(null)">Clear<br><span style="font-size:10px;">Use Firmware Default</span></button>
+          <button class="group-cmd-btn off" style="flex:none;padding:6px 12px;font-size:11px;color:var(--red);border-color:var(--red);" onclick="applyBubbleUpPreset(null)">Reset to 30 min<br><span style="font-size:10px;">Factory Default</span></button>
         </div>
 
         <!-- Per-device controls -->
@@ -1097,21 +1123,56 @@ function setStatus(type, msg) {
 }
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
-function switchTab(name, btn) {
-  document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
+let currentMain = 'summary';
+let currentSub  = { events: 'scheduler', devices: 'controls' };
+
+function switchMain(main, btn) {
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-  document.getElementById("tab-" + name).classList.add("active");
   btn.classList.add("active");
-  if (name === "summary")   initSummaryTab();
-  if (name === "scheduler") initScheduler().catch(e => console.error("Scheduler init error:", e));
-  if (name === "data")      loadLatest();
-  if (name === "history")   { loadHistory(); loadCharts(); }
-  if (name === "map")       loadMap();
-  if (name === "eventstats") initEventStats();
-  if (name === "weather")   initWeatherTab();
-  if (name === "settings")  initSettingsTab();
-  if (name === "groups")    loadGroups();
+  currentMain = main;
+  document.getElementById("sub-tabs-events").style.display  = main === "events"  ? "flex" : "none";
+  document.getElementById("sub-tabs-devices").style.display = main === "devices" ? "flex" : "none";
+  if (main === "summary") { activatePane("summary"); initSummaryTab(); }
+  else if (main === "weather") { activatePane("weather"); initWeatherTab(); }
+  else if (main === "events")  { const s = currentSub.events||"scheduler";  activatePane(s); activateSubBtn("events",s); }
+  else if (main === "devices") { const s = currentSub.devices||"controls"; activatePane(s); activateSubBtn("devices",s); }
 }
+
+function switchSub(main, sub, btn) {
+  currentSub[main] = sub;
+  document.getElementById("sub-tabs-"+main).querySelectorAll(".sub-tab-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  activatePane(sub);
+}
+
+function activatePane(name) {
+  document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
+  const el = document.getElementById("tab-"+name);
+  if (el) el.classList.add("active");
+  runTabInit(name);
+}
+
+function activateSubBtn(main, sub) {
+  const bar = document.getElementById("sub-tabs-"+main);
+  if (!bar) return;
+  bar.querySelectorAll(".sub-tab-btn").forEach(b => b.classList.remove("active"));
+  const btn = document.getElementById("sub-"+sub);
+  if (btn) btn.classList.add("active");
+}
+
+function runTabInit(name) {
+  if (name === "summary")    initSummaryTab();
+  if (name === "scheduler")  initScheduler().catch(e => console.error(e));
+  if (name === "eventstats") initEventStats();
+  if (name === "data")       loadLatest();
+  if (name === "history")    { loadHistory(); loadCharts(); }
+  if (name === "map")        loadMap();
+  if (name === "groups")     loadGroups();
+  if (name === "settings")   initSettingsTab();
+  if (name === "weather")    initWeatherTab();
+}
+
+function switchTab(name, btn) { switchMain(name, btn); }
 
 // ── Map ───────────────────────────────────────────────────────────────────────
 function makeIcon(online) {
@@ -2651,8 +2712,10 @@ async function loadEventsBar() {
 }
 
 function switchToScheduler() {
-  const btn = document.querySelector('.tab-btn[onclick*="scheduler"]');
-  if (btn) switchTab('scheduler', btn);
+  const mainBtn = document.getElementById("main-events");
+  if (mainBtn) switchMain("events", mainBtn);
+  const subBtn = document.getElementById("sub-scheduler");
+  if (subBtn) switchSub("events", "scheduler", subBtn);
 }
 
 // Refresh events bar every 60 seconds
@@ -2723,22 +2786,19 @@ function showEventDetail(data) {
 }
 
 function viewDeviceHistory(uid) {
-  // Find Device History tab button and switch to it
-  const allBtns = document.querySelectorAll('.tab-btn');
-  let historyBtn = null;
-  allBtns.forEach(btn => { if (btn.getAttribute('onclick') && btn.getAttribute('onclick').includes('history')) historyBtn = btn; });
-  if (historyBtn) {
-    switchTab('history', historyBtn);
-    // Auto-select this device
-    setTimeout(() => {
-      const sel = document.getElementById('history-device-select');
-      if (sel) { sel.value = uid; }
-      const chartSel = document.getElementById('chart-device-select');
-      if (chartSel) { chartSel.value = uid; }
-      loadHistory();
-      loadCharts();
-    }, 100);
-  }
+  // Switch to Devices > Device History
+  const mainBtn = document.getElementById("main-devices");
+  if (mainBtn) switchMain("devices", mainBtn);
+  const subBtn = document.getElementById("sub-history");
+  if (subBtn) switchSub("devices", "history", subBtn);
+  setTimeout(() => {
+    const sel = document.getElementById('history-device-select');
+    if (sel) sel.value = uid;
+    const chartSel = document.getElementById('chart-device-select');
+    if (chartSel) chartSel.value = uid;
+    loadHistory();
+    loadCharts();
+  }, 150);
 }
 
 // ── PROGRAM SUMMARY ──────────────────────────────────────────────────────────
@@ -3060,13 +3120,16 @@ function saveBubbleSchedule() {
 
   localStorage.setItem(BUBBLE_SCHED_KEY, JSON.stringify({ rules: bubbleRules, season: bubbleSeasonConfig }));
 
-  // Apply immediately
+  // Evaluate current rule and apply via Assignment Command
   const match = evaluateAndShowCurrentRule();
   if (match) {
-    applyBubbleUpPreset(match.intervalMins);
-    showBubbleStatus(`✅ Saved — applying ${match.intervalMins} min interval (${match.label})`, "ok");
+    // Send Assignment Command to all real devices
+    const realDevices = DEVICES.filter(d => !d.uid.includes('PLACEHOLDER'));
+    showBubbleStatus(`Applying ${match.intervalMins} min (${match.label}) to ${realDevices.length} device(s)...`, "ok");
+    Promise.all(realDevices.map(d => setBubbleUp(d.uid, d.id, match.intervalMins)))
+      .then(() => showBubbleStatus(`✅ Saved & applied — ${match.intervalMins} min (${match.label})`, "ok"));
   } else {
-    showBubbleStatus("✅ Schedule saved.", "ok");
+    showBubbleStatus("✅ Schedule saved. No matching rule for current time — no command sent.", "ok");
   }
 }
 
@@ -3203,26 +3266,14 @@ function evaluateAndShowCurrentRule() {
   return match;
 }
 
-// Run schedule check every 5 minutes when dashboard is open
+// Bubble-up scheduler — advisory only, updates display but does NOT auto-send commands
+// User must click "Save & Apply" to push changes to devices
 function startBubbleScheduler() {
   if (bubbleCheckInterval) clearInterval(bubbleCheckInterval);
-  bubbleCheckInterval = setInterval(async () => {
-    // Don't auto-apply if manual override is active
-    if (bubbleManualOverrideUntil && Date.now() < bubbleManualOverrideUntil) {
-      const remainMins = Math.round((bubbleManualOverrideUntil - Date.now()) / 60000);
-      console.log(`Bubble-up scheduler paused — manual override active for ${remainMins} more min`);
-      evaluateAndShowCurrentRule();
-      return;
-    }
-    const match = evaluateRules(new Date());
-    if (match) {
-      console.log(`Bubble-up schedule: applying ${match.intervalMins} min (${match.label})`);
-      for (const d of DEVICES) {
-        await setBubbleUp(d.uid, d.id, match.intervalMins);
-      }
-      evaluateAndShowCurrentRule();
-    }
-  }, 5 * 60 * 1000); // Every 5 minutes
+  bubbleCheckInterval = setInterval(() => {
+    // Just update the display — no auto-sending of Assignment Commands
+    evaluateAndShowCurrentRule();
+  }, 60 * 1000); // Check every 60 seconds for display update only
 }
 
 // ── BUBBLE-UP INTERVAL CONTROL ───────────────────────────────────────────────
@@ -3447,7 +3498,7 @@ async function loadBubbleUpIntervals() {
       </td>
       <td style="padding:6px 8px;border-bottom:0.5px solid var(--border);">
         <button class="queue-refresh" onclick="setBubbleUp('${d.uid}','${d.id}')">Set</button>
-        <button class="queue-refresh" style="color:var(--red);border-color:var(--red);margin-left:4px;" onclick="clearBubbleUp('${d.uid}','${d.id}')">Clear</button>
+        <button class="queue-refresh" style="color:var(--text-secondary);border-color:var(--border-md);margin-left:4px;" onclick="clearBubbleUp('${d.uid}','${d.id}')">Clear</button>
       </td>
     </tr>`
   ).join("");
@@ -3642,6 +3693,17 @@ async function initWeather() {
     if (saved) {
       wxLocationData = JSON.parse(saved);
       showWeatherLocation();
+      await fetchWeatherForecast(); // also calls renderHeaderWeather
+    }
+  } catch(e) {}
+}
+
+async function initHeaderWeather() {
+  // Called on page load — fetch weather if location is saved
+  try {
+    const saved = localStorage.getItem(WEATHER_LOC_KEY);
+    if (saved) {
+      wxLocationData = JSON.parse(saved);
       await fetchWeatherForecast();
     }
   } catch(e) {}
@@ -3688,6 +3750,37 @@ function showWeatherLocation() {
   if (searchBtn) searchBtn.style.display = "none";
 }
 
+function renderHeaderWeather() {
+  // Render compact 7-day strip in the header using existing wxForecastData
+  const strip = document.getElementById("header-wx-strip");
+  const daysEl = document.getElementById("header-wx-days");
+  const locEl  = document.getElementById("header-wx-loc");
+  if (!strip || !daysEl) return;
+
+  if (!wxForecastData?.daily || !wxLocationData) {
+    strip.style.display = "none";
+    return;
+  }
+
+  const { time, temperature_2m_max, temperature_2m_min, weathercode } = wxForecastData.daily;
+
+  // Show only first 7 days in header
+  const days7 = time.slice(0, 7);
+  daysEl.innerHTML = days7.map((dateStr, i) => {
+    const d    = new Date(dateStr + "T12:00:00");
+    const name = i === 0 ? "Today" : d.toLocaleDateString("en-US", { weekday: "short" });
+    return `<div class="header-wx-day">
+      <div class="header-wx-day-name">${name}</div>
+      <div class="header-wx-icon">${wxIcon(weathercode[i])}</div>
+      <div class="header-wx-high">${Math.round(temperature_2m_max[i])}°</div>
+      <div class="header-wx-low">${Math.round(temperature_2m_min[i])}°</div>
+    </div>`;
+  }).join("");
+
+  if (locEl) locEl.textContent = `📍 ${wxLocationData.name}`;
+  strip.style.display = "block";
+}
+
 function clearWeatherLocation() {
   wxLocationData = null;
   wxForecastData = null;
@@ -3701,6 +3794,9 @@ function clearWeatherLocation() {
   if (container) container.innerHTML = `<div class="sched-empty">Enter a location to see the forecast.</div>`;
   if (input)     { input.style.display = ""; input.value = ""; }
   if (searchBtn) searchBtn.style.display = "";
+  // Hide header strip
+  const strip = document.getElementById("header-wx-strip");
+  if (strip) strip.style.display = "none";
 }
 
 async function fetchWeatherForecast() {
@@ -3720,6 +3816,7 @@ async function fetchWeatherForecast() {
     wxForecastData = data;
     wxSelectedDay  = null;
     renderWeatherForecast();
+    renderHeaderWeather(); // Update header strip
   } catch(e) {
     container.innerHTML = `<div class="wx-loading" style="color:var(--red);">Error loading forecast: ${e.message}</div>`;
   }
@@ -4082,6 +4179,7 @@ buildControls();
 buildDataCards();
 autoDetectTimezones();
 loadEventsBar();
+initHeaderWeather();
 // Init summary tab since it's the default active tab
 setTimeout(() => initSummaryTab(), 100);
 </script>
