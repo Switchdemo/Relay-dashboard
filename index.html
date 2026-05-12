@@ -5012,6 +5012,40 @@ function relayDot(val) {
   const on = val > 0;
   return `<span class="relay-dot ${on?"on":"off"}"></span>${on?"On":"Off"}`;
 }
+async function requestHealthCheck(uid, deviceId) {
+  // Set _restart env var to force Notecard restart → new session → _session.qo fires
+  setStatus("sending", "Requesting health check — restarting Notecard...");
+  try {
+    const res = await fetch(`${PROXY_URL}env`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        deviceUID: uid,
+        environment_variables: { _restart: "true" }
+      })
+    });
+    if (res.ok) {
+      setStatus("ready", "Health check requested — device will restart on next sync and send fresh health data.");
+      // Clear the restart flag after 30 seconds
+      setTimeout(async () => {
+        await fetch(`${PROXY_URL}env`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            deviceUID: uid,
+            environment_variables: { _restart: "" }
+          })
+        });
+      }, 30000);
+    } else {
+      const err = await res.text();
+      setStatus("error", `Health check failed: ${err}`);
+    }
+  } catch(e) {
+    setStatus("error", `Network error: ${e.message}`);
+  }
+}
+
 async function loadLatestDevice(deviceId) {
   const device    = DEVICES.find(d => d.id === deviceId);
   const container = document.getElementById(`data-fields-${deviceId}`);
@@ -5063,15 +5097,33 @@ async function loadLatestDevice(deviceId) {
     </div>`;
     tsEl.textContent = `Last updated: ${new Date(r.recorded_at).toLocaleString()}`;
 
-    // Load health data from device_health table
+    // Load health data - use device_readings SW/SQ as primary, device_health for voltage/temp
     const healthEl = document.getElementById(`health-strip-${deviceId}`);
     if (healthEl) {
       try {
         const hRows = await supabaseGet(
           `device_health?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1`
         );
-        if (Array.isArray(hRows) && hRows.length > 0) {
-          const h = hRows[0];
+        // Merge: prefer device_health for voltage/temp/firmware, use bubble-up for signal
+        const h = (Array.isArray(hRows) && hRows.length > 0) ? {
+          ...hRows[0],
+          // Override signal values with latest bubble-up if available
+          rsrp: hRows[0].rsrp,
+          rsrq: hRows[0].rsrq,
+          bars: hRows[0].bars,
+          // Add SW/SQ from current bubble-up reading
+          sw_value: r.sw_value,
+          sq_value: r.sq_value
+        } : {
+          // No device_health yet - use what we can from bubble-up
+          rsrp: null, rsrq: null, bars: null,
+          voltage: null, temperature: null,
+          firmware_version: null, orientation: null,
+          moved: null, location: r.location,
+          sw_value: r.sw_value, sq_value: r.sq_value,
+          recorded_at: r.recorded_at
+        };
+        if (true) {
           const voltColor  = !h.voltage ? "" : h.voltage >= 3.6 ? "health-good" : h.voltage >= 3.3 ? "health-warn" : "health-bad";
           const tempColor  = !h.temperature ? "" : h.temperature <= 60 ? "health-good" : h.temperature <= 75 ? "health-warn" : "health-bad";
           const rsrpColor  = !h.rsrp ? "" : h.rsrp >= -90 ? "health-good" : h.rsrp >= -105 ? "health-warn" : "health-bad";
@@ -5100,12 +5152,12 @@ async function loadLatestDevice(deviceId) {
                 </div>
               </div>
               <div class="health-item">
-                <div class="health-label">RSRP</div>
-                <div class="health-value ${rsrpColor}">${h.rsrp ?? "—"}</div>
+                <div class="health-label">${h.rsrp ? "RSRP" : "SW"}</div>
+                <div class="health-value ${rsrpColor}">${h.rsrp ?? (h.sw_value ?? "—")}</div>
               </div>
               <div class="health-item">
-                <div class="health-label">RSRQ</div>
-                <div class="health-value">${h.rsrq ?? "—"}</div>
+                <div class="health-label">${h.rsrq ? "RSRQ" : "SQ"}</div>
+                <div class="health-value">${h.rsrq ?? (h.sq_value ?? "—")}</div>
               </div>
               <div class="health-item">
                 <div class="health-label">RAT</div>
@@ -5124,7 +5176,7 @@ async function loadLatestDevice(deviceId) {
               📍 ${h.location || "—"} &bull; 🕐 ${new Date(h.recorded_at).toLocaleString()}
             </div>`;
         } else {
-          healthEl.innerHTML = `<div style="font-size:11px;color:var(--text-hint);padding:6px 0;">No health data yet — add Notehub route for _session.qo → /session</div>`;
+          healthEl.innerHTML = `<div style="font-size:11px;color:var(--text-hint);padding:6px 0;">Signal: SW=${r.sw_value ?? "—"} SQ=${r.sq_value ?? "—"} &bull; No extended health data yet</div>`;
         }
       } catch(e) { console.error("Health load error:", e); }
     }
