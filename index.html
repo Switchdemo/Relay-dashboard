@@ -1998,22 +1998,24 @@ async function loadDeviceEvents() {
       if (Array.isArray(qRows)) qRows.forEach(q => { if (q.lc_event_id) eventNameMap[q.lc_event_id] = q.name; });
     } catch(e) {}
 
-    list.innerHTML = rows.map(e => {
-      const devName   = DEVICES.find(d => d.uid === e.device_uid)?.name ?? unitName(e.device_uid || "");
-      const sc        = statusClass[e.lc_status] || "pending";
-      const icon      = statusIcon[e.lc_status] || "📡";
+    list.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px;">` +
+      rows.map(e => {
+      const devName    = DEVICES.find(d => d.uid === e.device_uid)?.name ?? unitName(e.device_uid || "");
+      const sc         = statusClass[e.lc_status] || "pending";
+      const icon       = statusIcon[e.lc_status] || "📡";
       const receivedAt = new Date(e.received_at).toLocaleString();
-      const eventName = eventNameMap[e.event_id] ? `${eventNameMap[e.event_id]} ` : "";
-      const rData     = encodeURIComponent(JSON.stringify({ type:"device_event", item:e }));
+      const eventTime  = e.event_time ? new Date(e.event_time).toLocaleString() : "—";
+      const eventName  = eventNameMap[e.event_id] || "—";
+      const rData      = encodeURIComponent(JSON.stringify({ type:"device_event", item:e }));
       return `<div class="queue-item ${sc}" style="cursor:pointer;" onclick="showDeviceEventDetail(JSON.parse(decodeURIComponent('${rData}')))">
         <div class="queue-info">
-          <div class="queue-name">${devName} &bull; ${eventName}<span style="font-family:monospace;font-size:11px;">LC#${e.event_id ?? "—"}</span></div>
-          <div class="queue-detail">${icon} ${e.lc_status_label || "Unknown"} &bull; ${receivedAt}</div>
-          <div class="queue-detail" style="font-family:monospace;font-size:10px;color:var(--text-hint);">${e.raw_hex || ""} ${e.checksum_ok ? "✅" : "❌"} &nbsp;|&nbsp; <span style="color:var(--blue);text-decoration:underline;">Click for details</span></div>
+          <div class="queue-name">${eventName} &bull; ${devName} &bull; <span style="font-family:monospace;">LC#${e.event_id ?? "—"}</span></div>
+          <div class="queue-detail">${icon} ${e.lc_status_label || "Unknown"} &bull; 📅 ${receivedAt} &bull; ⏱ Event time: ${eventTime}</div>
+          <div class="queue-detail" style="color:var(--text-hint);margin-top:1px;">Raw: <span style="font-family:monospace;font-size:10px;">${e.raw_hex || "—"}</span> ${e.checksum_ok ? "✅" : "❌"} &nbsp;|&nbsp; <span style="color:var(--blue);text-decoration:underline;">Click to view details</span></div>
         </div>
         <span class="queue-status ${sc}">${e.lc_status_label || sc}</span>
       </div>`;
-    }).join("");
+    }).join("") + `</div>`;
   } catch(err) {
     list.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error: ${err.message}</div>`;
     console.error("loadDeviceEvents:", err);
