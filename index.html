@@ -5022,7 +5022,7 @@ async function requestHealthCheck(uid, deviceId) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         deviceUID: uid,
-        environment_variables: { _restart: "true" }
+        environment_variables: { _restart: String(Math.floor(Date.now()/1000)) }
       })
     });
     if (res.ok) {
