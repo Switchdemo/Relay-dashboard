@@ -390,8 +390,8 @@
 
 <div class="sticky-header">
   <div class="page-header">
-    <div class="page-title">Green Mountain Power — Load Control Panel</div>
-    <div class="page-sub">GMP Load Control &amp; Demand Response</div>
+    <div class="page-title">Load Control Device Panel</div>
+    <div class="page-sub">Load control &amp; scheduling</div>
   </div>
   <!-- 7-day weather strip -->
   <div id="header-wx-strip" style="display:none;">
@@ -1253,15 +1253,17 @@
 </div>
 
 <script>
-const PROXY_URL    = "https://gmp-relay.hurd71185.workers.dev/";
-const SUPABASE_URL = "https://lqisreketpdzhpqjcqke.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxxaXNyZWtldHBkemhwcWpjcWtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5OTM3OTAsImV4cCI6MjA5MzU2OTc5MH0.dHTih6XYSFbtMrljcb3SYtORTzxM8QVcx1i38x0izTo";
+const PROXY_URL    = "https://patient-shadow-e2b7.hurd71185.workers.dev/";
+const SUPABASE_URL = "https://diurqiuzknxzcdxqjfig.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRpdXJxaXV6a254emNkeHFqZmlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5ODQ3OTYsImV4cCI6MjA5MzU2MDc5Nn0.jUs0QYAyaOQmirQgCTjP7ldGqn9hhpzBunGLMVv0x8U";
 
 function unitName(uid) { return "Unit " + uid.slice(-4); }
 
 const DEVICES = [
-  { id: "device0", uid: "dev:868032061489682" },
   { id: "device1", uid: "dev:868032061596023" },
+  { id: "device2", uid: "dev:868050045717135" },
+  { id: "device3", uid: "dev:PLACEHOLDER0003" },
+  { id: "device4", uid: "dev:PLACEHOLDER0004" },
 ].map(d => ({ ...d, name: unitName(d.uid) }));
 
 const COMMANDS = {
