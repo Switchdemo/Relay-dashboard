@@ -4851,7 +4851,8 @@ function buildDataCards() {
         <button class="data-refresh-btn" style="color:var(--green-dark);border-color:var(--green);" onclick="requestHealthCheck('${device.uid}','${device.id}')">🩺 Health Check</button>
       </div>
       <div id="data-fields-${device.id}"><div class="data-empty">No data yet</div></div>
-      <div class="data-timestamp" id="data-ts-${device.id}"></div>`;
+      <div class="data-timestamp" id="data-ts-${device.id}"></div>
+      <div id="health-strip-${device.id}"></div>`;
     grid.appendChild(card);
     const opt = document.createElement("option");
     opt.value = device.uid; opt.textContent = device.name;
