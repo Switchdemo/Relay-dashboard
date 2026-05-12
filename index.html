@@ -1789,6 +1789,7 @@ async function createSchedule() {
 
     // Build LC hex with scheduled start time baked in
     const lcHex = buildLCHex(action, mode, stratNum, reps, schedUnix);
+  const lastEventId = lcEventId > 1 ? lcEventId - 1 : 254; // capture ID just used
     console.log(`Sending LC hex immediately: ${lcHex} (startTime=${schedUnix})`);
 
     // Send payload to device(s) immediately — device stores and executes at scheduled time
@@ -1817,7 +1818,7 @@ async function createSchedule() {
       lc_timeout: stratTimeout || null,
       lc_cycle: stratCycle || null,
       lc_reps: reps,
-      lc_event_id: currentEventId,
+      lc_event_id: lastEventId,
       one_time: true,
       status: "sent",
       fired_at: new Date().toISOString()
@@ -5081,4 +5082,29 @@ async function loadHistory() {
     if (deviceFilter) query += `&device_uid=eq.${encodeURIComponent(deviceFilter)}`;
     if (rangeHours) { const since = new Date(Date.now() - parseInt(rangeHours)*60*60*1000).toISOString(); query += `&recorded_at=gte.${since}`; }
     const rows = await supabaseGet(query);
-    if (!rows || rows.length === 0) { t
+    if (!rows || rows.length === 0) { tbody.innerHTML = `<tr><td colspan="11" class="no-data">No history found</td></tr>`; return; }
+    tbody.innerHTML = rows.map(r => {
+      const devName = DEVICES.find(d => d.uid === r.device_uid)?.name ?? unitName(r.device_uid);
+      return `<tr>
+        <td>${new Date(r.recorded_at).toLocaleString()}</td><td>${devName}</td>
+        <td>${relayDot(r.relay_status_r1)}</td><td>${relayDot(r.relay_status_r2)}</td>
+        <td>${relayDot(r.relay_status_r3)}</td><td>${relayDot(r.relay_status_r4)}</td>
+        <td>${r.voltage ?? "—"}</td><td>${r.current ?? "—"}</td>
+        <td>${r.watts_consumed ?? "—"}</td><td>${r.power_factor ?? "—"}</td>
+        <td>${r.customer_comfort > 0 ? "On" : "Off"}</td>
+      </tr>`;
+    }).join("");
+  } catch(e) { tbody.innerHTML = `<tr><td colspan="11" class="no-data">Error loading history</td></tr>`; }
+}
+
+buildControls();
+buildDataCards();
+autoDetectTimezones();
+loadEventsBar();
+initHeaderWeather();
+initAuth();
+// Init summary tab since it's the default active tab
+setTimeout(() => initSummaryTab(), 100);
+</script>
+</body>
+</html>
