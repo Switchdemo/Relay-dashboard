@@ -254,6 +254,18 @@
   .event-pill.received { background: var(--green-bg); border-color: var(--green); color: var(--green-dark); }
   .event-pill.started { background: #F0FDF4; border-color: #16a34a; color: #166534; }
 
+  /* ── Device Health Strip ── */
+  .health-strip { display:flex;flex-wrap:wrap;gap:8px;padding:8px 0;border-top:0.5px solid var(--border);margin-top:8px; }
+  .health-item  { display:flex;flex-direction:column;align-items:center;min-width:52px;padding:4px 8px;border-radius:var(--radius-sm);background:var(--surface2);border:0.5px solid var(--border); }
+  .health-label { font-size:9px;font-weight:600;color:var(--text-hint);text-transform:uppercase;margin-bottom:2px; }
+  .health-value { font-size:12px;font-weight:700;color:var(--text-primary); }
+  .health-good  { color:var(--green-dark); }
+  .health-warn  { color:var(--amber); }
+  .health-bad   { color:var(--red); }
+  .signal-bars  { display:flex;align-items:flex-end;gap:2px;height:14px; }
+  .signal-bar   { width:4px;border-radius:1px;background:var(--border-md); }
+  .signal-bar.active { background:var(--green-dark); }
+
   /* ── Header Weather Strip ── */
   .header-wx { display:flex; gap:8px; justify-content:center; padding:6px 1rem 8px; overflow-x:auto; flex-wrap:nowrap; }
   .header-wx-day { display:flex; flex-direction:column; align-items:center; min-width:72px; padding:6px 10px; border-radius:var(--radius-sm); background:var(--surface); border:0.5px solid var(--border); flex-shrink:0; }
@@ -5050,6 +5062,73 @@ async function loadLatestDevice(deviceId) {
       <div class="data-field"><span class="data-field-name">Location</span><span class="data-field-value">${r.location ?? "—"}</span></div>
     </div>`;
     tsEl.textContent = `Last updated: ${new Date(r.recorded_at).toLocaleString()}`;
+
+    // Load health data from device_health table
+    const healthEl = document.getElementById(`health-strip-${deviceId}`);
+    if (healthEl) {
+      try {
+        const hRows = await supabaseGet(
+          `device_health?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1`
+        );
+        if (Array.isArray(hRows) && hRows.length > 0) {
+          const h = hRows[0];
+          const voltColor  = !h.voltage ? "" : h.voltage >= 3.6 ? "health-good" : h.voltage >= 3.3 ? "health-warn" : "health-bad";
+          const tempColor  = !h.temperature ? "" : h.temperature <= 60 ? "health-good" : h.temperature <= 75 ? "health-warn" : "health-bad";
+          const rsrpColor  = !h.rsrp ? "" : h.rsrp >= -90 ? "health-good" : h.rsrp >= -105 ? "health-warn" : "health-bad";
+          const barsHtml   = [1,2,3,4,5].map(b =>
+            `<div class="signal-bar ${h.bars >= b ? "active" : ""}" style="height:${b*3}px;"></div>`
+          ).join("");
+          const movedAgo   = h.moved ? Math.round((Date.now()/1000 - h.moved)/86400) : null;
+          const movedStr   = movedAgo !== null ? (movedAgo < 1 ? "Today" : movedAgo + "d ago") : "—";
+          const movedColor = movedAgo !== null && movedAgo < 1 ? "health-warn" : "health-good";
+          const fwShort    = h.firmware_version ? h.firmware_version.replace("notecard-u5-","v") : "—";
+
+          healthEl.innerHTML = `
+            <div class="health-strip">
+              <div class="health-item">
+                <div class="health-label">Voltage</div>
+                <div class="health-value ${voltColor}">${h.voltage ? h.voltage.toFixed(2)+"V" : "—"}</div>
+              </div>
+              <div class="health-item">
+                <div class="health-label">Temp</div>
+                <div class="health-value ${tempColor}">${h.temperature ? h.temperature.toFixed(1)+"°C" : "—"}</div>
+              </div>
+              <div class="health-item">
+                <div class="health-label">Signal</div>
+                <div class="health-value">
+                  <div class="signal-bars">${barsHtml}</div>
+                </div>
+              </div>
+              <div class="health-item">
+                <div class="health-label">RSRP</div>
+                <div class="health-value ${rsrpColor}">${h.rsrp ?? "—"}</div>
+              </div>
+              <div class="health-item">
+                <div class="health-label">RSRQ</div>
+                <div class="health-value">${h.rsrq ?? "—"}</div>
+              </div>
+              <div class="health-item">
+                <div class="health-label">RAT</div>
+                <div class="health-value" style="font-size:10px;">${(h.rat||"—").toUpperCase()}</div>
+              </div>
+              <div class="health-item">
+                <div class="health-label">Moved</div>
+                <div class="health-value ${movedColor}">${movedStr}</div>
+              </div>
+              <div class="health-item">
+                <div class="health-label">Firmware</div>
+                <div class="health-value" style="font-size:10px;">${fwShort}</div>
+              </div>
+            </div>
+            <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">
+              📍 ${h.location || "—"} &bull; 🕐 ${new Date(h.recorded_at).toLocaleString()}
+            </div>`;
+        } else {
+          healthEl.innerHTML = `<div style="font-size:11px;color:var(--text-hint);padding:6px 0;">No health data yet — add Notehub route for _session.qo → /session</div>`;
+        }
+      } catch(e) { console.error("Health load error:", e); }
+    }
+
   } catch(e) { container.innerHTML = `<div class="data-empty">Error loading data</div>`; }
 }
 async function loadLatest() { DEVICES.forEach(d => loadLatestDevice(d.id)); }
