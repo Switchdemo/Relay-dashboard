@@ -2030,7 +2030,7 @@ async function loadDeviceEvents() {
           <div class="queue-info">
             <div class="queue-name">${r.name || r.target_name || "Unnamed Event"} &bull; ${r.target_name || "—"} &bull; ${RELAY_ACTION_LABELS[r.relay_action] || r.relay_action || "—"}</div>
             <div class="queue-detail">${icon} ${r.status} &bull; 📅 ${fireStr} &bull; ⏱ ${dur} &bull; ends ${endStr}</div>
-            <div class="queue-detail" style="color:var(--text-hint);margin-top:1px;">Mode: ${(r.lc_mode||"—").toUpperCase()} &bull; Strategy: ${r.lc_strategy||"—"} &bull; Reps: ${r.lc_reps||"—"} &nbsp;|&nbsp; <span style="color:var(--blue);text-decoration:underline;">Click to view hex &amp; details</span></div>
+            <div class="queue-detail" style="color:var(--text-hint);margin-top:1px;">Mode: ${(r.lc_mode||"—").toUpperCase()} &bull; Strategy: ${r.lc_strategy||"—"} &bull; Duration: ${r.duration_minutes ? formatDuration(r.duration_minutes) : "—"} &nbsp;|&nbsp; <span style="color:var(--blue);text-decoration:underline;">Click to view hex &amp; details</span></div>
           </div>
           <span class="queue-status ${sc}">${r.status}</span>
         </div>`;
@@ -2042,27 +2042,8 @@ async function loadDeviceEvents() {
 }
 
 function showDeviceEventDetail(data) {
-  const e       = data.item;
-  const devName = DEVICES.find(d => d.uid === e.device_uid)?.name ?? unitName(e.device_uid || "");
-  const modal   = document.getElementById("event-modal");
-  const body    = document.getElementById("event-modal-body");
-  if (!modal || !body) return;
-
-  body.innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:1rem;">
-      <div><div style="font-size:10px;color:var(--text-hint);">Device</div><div style="font-weight:600;">${devName}</div></div>
-      <div><div style="font-size:10px;color:var(--text-hint);">LC Event ID</div><div style="font-family:monospace;font-weight:600;">${e.event_id ?? "—"}</div></div>
-      <div><div style="font-size:10px;color:var(--text-hint);">Status</div><div style="font-weight:600;">${e.lc_status_label || "—"}</div></div>
-      <div><div style="font-size:10px;color:var(--text-hint);">Checksum</div><div>${e.checksum_ok ? "✅ Valid" : "❌ Invalid"}</div></div>
-      <div><div style="font-size:10px;color:var(--text-hint);">Event Time</div><div>${e.event_time ? new Date(e.event_time).toLocaleString() : "—"}</div></div>
-      <div><div style="font-size:10px;color:var(--text-hint);">Received At</div><div>${e.received_at ? new Date(e.received_at).toLocaleString() : "—"}</div></div>
-    </div>
-    <div style="margin-top:0.75rem;">
-      <div style="font-size:10px;color:var(--text-hint);margin-bottom:4px;">Raw LC Response Hex</div>
-      <div style="font-family:monospace;font-size:13px;background:var(--surface2);padding:8px 12px;border-radius:var(--radius-sm);letter-spacing:2px;">${e.raw_hex || "—"}</div>
-    </div>`;
-
-  modal.style.display = "flex";
+  // Route to showEventDetail since rows now contain merged queue data
+  showEventDetail({ type: "queue", item: data.queue || data.item });
 }
 
 // Keep loadQueue as alias for backward compat
@@ -3731,7 +3712,7 @@ async function loadEventHistory() {
           <div class="queue-info">
             <div class="queue-name">${r.name || r.target_name || "Unnamed Event"} &bull; ${r.target_name || "—"} &bull; ${RELAY_ACTION_LABELS[r.relay_action] || r.relay_action || "—"}</div>
             <div class="queue-detail">${icon} ${r.status} &bull; 📅 ${fireStr} &bull; ⏱ ${dur} &bull; ends ${endStr}</div>
-            <div class="queue-detail" style="color:var(--text-hint);margin-top:1px;">Mode: ${(r.lc_mode||"—").toUpperCase()} &bull; Strategy: ${r.lc_strategy||"—"} &bull; Reps: ${r.lc_reps||"—"} &nbsp;|&nbsp; <span style="color:var(--blue);text-decoration:underline;">Click to view hex &amp; details</span></div>
+            <div class="queue-detail" style="color:var(--text-hint);margin-top:1px;">Mode: ${(r.lc_mode||"—").toUpperCase()} &bull; Strategy: ${r.lc_strategy||"—"} &bull; Duration: ${r.duration_minutes ? formatDuration(r.duration_minutes) : "—"} &nbsp;|&nbsp; <span style="color:var(--blue);text-decoration:underline;">Click to view hex &amp; details</span></div>
           </div>
           <span class="queue-status ${sc}">${r.status}</span>
         </div>`;
