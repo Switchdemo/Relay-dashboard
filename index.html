@@ -1817,6 +1817,7 @@ async function createSchedule() {
       lc_timeout: stratTimeout || null,
       lc_cycle: stratCycle || null,
       lc_reps: reps,
+      lc_event_id: currentEventId,
       one_time: true,
       status: "sent",
       fired_at: new Date().toISOString()
@@ -1989,16 +1990,26 @@ async function loadDeviceEvents() {
     }
     const statusIcon = { 0:"📥", 1:"▶️", 2:"✅", 3:"⚠️", 4:"❌", 5:"❌", 6:"🚫", 7:"🔄", 8:"🔄" };
     const statusClass = { 0:"received", 1:"started", 2:"ended", 3:"pending", 4:"rejected", 5:"rejected", 6:"cancelled" };
+
+    // Build a lookup of lc_event_id -> event name from schedule_queue
+    let eventNameMap = {};
+    try {
+      const qRows = await supabaseGet(`schedule_queue?select=lc_event_id,name&lc_event_id=not.is.null&order=fired_at.desc&limit=200`);
+      if (Array.isArray(qRows)) qRows.forEach(q => { if (q.lc_event_id) eventNameMap[q.lc_event_id] = q.name; });
+    } catch(e) {}
+
     list.innerHTML = rows.map(e => {
-      const devName = DEVICES.find(d => d.uid === e.device_uid)?.name ?? unitName(e.device_uid || "");
-      const sc = statusClass[e.lc_status] || "pending";
-      const icon = statusIcon[e.lc_status] || "📡";
+      const devName   = DEVICES.find(d => d.uid === e.device_uid)?.name ?? unitName(e.device_uid || "");
+      const sc        = statusClass[e.lc_status] || "pending";
+      const icon      = statusIcon[e.lc_status] || "📡";
       const receivedAt = new Date(e.received_at).toLocaleString();
-      return `<div class="queue-item ${sc}">
+      const eventName = eventNameMap[e.event_id] ? `${eventNameMap[e.event_id]} ` : "";
+      const rData     = encodeURIComponent(JSON.stringify({ type:"device_event", item:e }));
+      return `<div class="queue-item ${sc}" style="cursor:pointer;" onclick="showDeviceEventDetail(JSON.parse(decodeURIComponent('${rData}')))">
         <div class="queue-info">
-          <div class="queue-name">${devName} &bull; Event ID: ${e.event_id ?? "—"}</div>
+          <div class="queue-name">${devName} &bull; ${eventName}<span style="font-family:monospace;font-size:11px;">LC#${e.event_id ?? "—"}</span></div>
           <div class="queue-detail">${icon} ${e.lc_status_label || "Unknown"} &bull; ${receivedAt}</div>
-          <div class="queue-detail" style="font-family:monospace;font-size:10px;color:var(--text-hint);">${e.raw_hex || ""} ${e.checksum_ok ? "✅" : "❌"}</div>
+          <div class="queue-detail" style="font-family:monospace;font-size:10px;color:var(--text-hint);">${e.raw_hex || ""} ${e.checksum_ok ? "✅" : "❌"} &nbsp;|&nbsp; <span style="color:var(--blue);text-decoration:underline;">Click for details</span></div>
         </div>
         <span class="queue-status ${sc}">${e.lc_status_label || sc}</span>
       </div>`;
@@ -2007,6 +2018,30 @@ async function loadDeviceEvents() {
     list.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error: ${err.message}</div>`;
     console.error("loadDeviceEvents:", err);
   }
+}
+
+function showDeviceEventDetail(data) {
+  const e       = data.item;
+  const devName = DEVICES.find(d => d.uid === e.device_uid)?.name ?? unitName(e.device_uid || "");
+  const modal   = document.getElementById("event-modal");
+  const body    = document.getElementById("event-modal-body");
+  if (!modal || !body) return;
+
+  body.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:1rem;">
+      <div><div style="font-size:10px;color:var(--text-hint);">Device</div><div style="font-weight:600;">${devName}</div></div>
+      <div><div style="font-size:10px;color:var(--text-hint);">LC Event ID</div><div style="font-family:monospace;font-weight:600;">${e.event_id ?? "—"}</div></div>
+      <div><div style="font-size:10px;color:var(--text-hint);">Status</div><div style="font-weight:600;">${e.lc_status_label || "—"}</div></div>
+      <div><div style="font-size:10px;color:var(--text-hint);">Checksum</div><div>${e.checksum_ok ? "✅ Valid" : "❌ Invalid"}</div></div>
+      <div><div style="font-size:10px;color:var(--text-hint);">Event Time</div><div>${e.event_time ? new Date(e.event_time).toLocaleString() : "—"}</div></div>
+      <div><div style="font-size:10px;color:var(--text-hint);">Received At</div><div>${e.received_at ? new Date(e.received_at).toLocaleString() : "—"}</div></div>
+    </div>
+    <div style="margin-top:0.75rem;">
+      <div style="font-size:10px;color:var(--text-hint);margin-bottom:4px;">Raw LC Response Hex</div>
+      <div style="font-family:monospace;font-size:13px;background:var(--surface2);padding:8px 12px;border-radius:var(--radius-sm);letter-spacing:2px;">${e.raw_hex || "—"}</div>
+    </div>`;
+
+  modal.style.display = "flex";
 }
 
 // Keep loadQueue as alias for backward compat
