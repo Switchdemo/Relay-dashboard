@@ -4848,6 +4848,7 @@ function buildDataCards() {
         <div class="data-card-title">${device.name} — Latest</div>
         <button class="data-refresh-btn" onclick="loadLatestDevice('${device.id}')">Refresh</button>
         <button class="data-refresh-btn" style="color:var(--blue-dark);border-color:var(--blue);background:var(--blue-bg);" onclick="viewDeviceHistory('${device.uid}')">📋 History</button>
+        <button class="data-refresh-btn" style="color:var(--green-dark);border-color:var(--green);" onclick="requestHealthCheck('${device.uid}','${device.id}')">🩺 Health Check</button>
       </div>
       <div id="data-fields-${device.id}"><div class="data-empty">No data yet</div></div>
       <div class="data-timestamp" id="data-ts-${device.id}"></div>`;
