@@ -414,8 +414,8 @@
     <button class="sub-tab-btn" id="sub-eventstats" onclick="switchSub('events','eventstats',this)">Event Statistics</button>
   </div>
   <div class="sub-tabs" id="sub-tabs-devices" style="display:none;">
-    <button class="sub-tab-btn active" id="sub-controls" onclick="switchSub('devices','controls',this)">Device Controls</button>
-    <button class="sub-tab-btn" id="sub-data" onclick="switchSub('devices','data',this)">Current Device Status</button>
+    <button class="sub-tab-btn active" id="sub-data" onclick="switchSub('devices','data',this)">Current Device Status</button>
+    <button class="sub-tab-btn" id="sub-controls" onclick="switchSub('devices','controls',this)">Device Controls</button>
     <button class="sub-tab-btn" id="sub-history" onclick="switchSub('devices','history',this)">Device History</button>
     <button class="sub-tab-btn" id="sub-groups" onclick="switchSub('devices','groups',this)">Groups</button>
     <button class="sub-tab-btn" id="sub-map" onclick="switchSub('devices','map',this)">Device Location</button>
@@ -1330,7 +1330,7 @@ function setStatus(type, msg) {
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 let currentMain = 'summary';
-let currentSub  = { events: 'scheduler', devices: 'controls' };
+let currentSub  = { events: 'scheduler', devices: 'data' };
 
 function switchMain(main, btn) {
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
@@ -1342,7 +1342,7 @@ function switchMain(main, btn) {
   else if (main === "weather") { activatePane("weather"); initWeatherTab(); }
   else if (main === "admin")   { activatePane("admin"); }
   else if (main === "events")  { const s = currentSub.events||"scheduler";  activatePane(s); activateSubBtn("events",s); }
-  else if (main === "devices") { const s = currentSub.devices||"controls"; activatePane(s); activateSubBtn("devices",s); }
+  else if (main === "devices") { const s = currentSub.devices||"data"; activatePane(s); activateSubBtn("devices",s); }
 }
 
 function switchSub(main, sub, btn) {
@@ -4999,16 +4999,43 @@ function relayDot(val) {
   return `<span class="relay-dot ${on?"on":"off"}"></span>${on?"On":"Off"}`;
 }
 async function loadLatestDevice(deviceId) {
-  const device = DEVICES.find(d => d.id === deviceId);
+  const device    = DEVICES.find(d => d.id === deviceId);
   const container = document.getElementById(`data-fields-${deviceId}`);
-  const tsEl = document.getElementById(`data-ts-${deviceId}`);
+  const tsEl      = document.getElementById(`data-ts-${deviceId}`);
   container.innerHTML = `<div class="data-empty">Loading...</div>`;
   try {
     const rows = await supabaseGet(`device_readings?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1`);
     if (!rows || rows.length === 0) { container.innerHTML = `<div class="data-empty">No data yet</div>`; tsEl.textContent = ""; return; }
     const r = rows[0];
     document.getElementById(`badge-${deviceId}`)?.classList.add("online");
-    container.innerHTML = `<div class="data-fields">
+
+    // Check for active event for this device
+    const now = new Date();
+    const lookback = new Date(now - 24*60*60*1000).toISOString();
+    const activeEvents = await supabaseGet(
+      `schedule_queue?status=not.eq.cancelled&target_id=eq.${encodeURIComponent(device.uid)}&fire_at=gte.${lookback}&order=fire_at.desc&limit=5`
+    );
+    let activeEventPill = "";
+    if (Array.isArray(activeEvents)) {
+      const active = activeEvents.find(q => {
+        const fireAt  = new Date(q.fire_at);
+        const endAt   = new Date(fireAt.getTime() + ((q.duration_minutes||240)*60*1000));
+        return fireAt <= now && endAt > now;
+      });
+      if (active) {
+        const endAt   = new Date(new Date(active.fire_at).getTime() + ((active.duration_minutes||0)*60*1000));
+        const endStr  = endAt.toLocaleTimeString("en-US", {hour:"numeric",minute:"2-digit"});
+        const qData   = encodeURIComponent(JSON.stringify({type:"queue",item:active}));
+        activeEventPill = `<div style="margin-bottom:8px;">
+          <span class="event-pill started" onclick="showEventDetail(JSON.parse(decodeURIComponent('${qData}')))"
+            style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+            🟢 Active: ${active.name || active.target_name} &bull; ends ${endStr}
+          </span>
+        </div>`;
+      }
+    }
+
+    container.innerHTML = activeEventPill + `<div class="data-fields">
       <div class="data-field"><span class="data-field-name">Relay 1</span><span class="data-field-value">${relayDot(r.relay_status_r1)}</span></div>
       <div class="data-field"><span class="data-field-name">Relay 2</span><span class="data-field-value">${relayDot(r.relay_status_r2)}</span></div>
       <div class="data-field"><span class="data-field-name">Relay 3</span><span class="data-field-value">${relayDot(r.relay_status_r3)}</span></div>
