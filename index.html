@@ -5126,53 +5126,37 @@ async function loadLatestDevice(deviceId) {
           recorded_at: r.recorded_at
         };
         if (true) {
-          const voltColor  = !h.voltage ? "" : h.voltage >= 3.6 ? "health-good" : h.voltage >= 3.3 ? "health-warn" : "health-bad";
-          const tempColor  = !h.temperature ? "" : h.temperature <= 60 ? "health-good" : h.temperature <= 75 ? "health-warn" : "health-bad";
-          const rsrpColor  = !h.rsrp ? "" : h.rsrp >= -90 ? "health-good" : h.rsrp >= -105 ? "health-warn" : "health-bad";
+          const volt = h.voltage ? parseFloat(h.voltage) : null;
+          const temp = h.temperature ? parseFloat(h.temperature) : null;
+          const rsrp = h.rsrp ? parseInt(h.rsrp) : null;
+          const bars = h.bars ? parseInt(h.bars) : null;
+
+          const voltColor  = !volt ? "" : volt >= 3.6 ? "health-good" : volt >= 3.3 ? "health-warn" : "health-bad";
+          const tempColor  = !temp ? "" : temp <= 60 ? "health-good" : temp <= 75 ? "health-warn" : "health-bad";
+          const rsrpColor  = !rsrp ? "" : rsrp >= -90 ? "health-good" : rsrp >= -105 ? "health-warn" : "health-bad";
           const barsHtml   = [1,2,3,4,5].map(b =>
-            `<div class="signal-bar ${h.bars >= b ? "active" : ""}" style="height:${b*3}px;"></div>`
+            `<div class="signal-bar ${bars && bars >= b ? "active" : ""}" style="height:${b*3}px;"></div>`
           ).join("");
-          const movedAgo   = h.moved ? Math.round((Date.now()/1000 - h.moved)/86400) : null;
+          const movedAgo   = h.moved ? Math.round((Date.now()/1000 - parseInt(h.moved))/86400) : null;
           const movedStr   = movedAgo !== null ? (movedAgo < 1 ? "Today" : movedAgo + "d ago") : "—";
           const movedColor = movedAgo !== null && movedAgo < 1 ? "health-warn" : "health-good";
           const fwShort    = h.firmware_version ? h.firmware_version.replace("notecard-u5-","v") : "—";
+          const ratStr     = h.rat ? h.rat.toUpperCase() : "—";
+          const voltStr    = volt ? volt.toFixed(3)+"V" : "—";
+          const tempStr    = temp ? temp.toFixed(1)+"°C" : "—";
+          const signalStr  = rsrp ? rsrp+"dBm" : (h.sw_value ?? "—");
+          const qualStr    = h.rsrq ? h.rsrq+"dB" : (h.sq_value ?? "—");
 
-          healthEl.innerHTML = `
-            <div class="health-strip">
-              <div class="health-item">
-                <div class="health-label">Voltage</div>
-                <div class="health-value ${voltColor}">${h.voltage ? h.voltage.toFixed(2)+"V" : "—"}</div>
-              </div>
-              <div class="health-item">
-                <div class="health-label">Temp</div>
-                <div class="health-value ${tempColor}">${h.temperature ? h.temperature.toFixed(1)+"°C" : "—"}</div>
-              </div>
-              <div class="health-item">
-                <div class="health-label">Signal</div>
-                <div class="health-value">
-                  <div class="signal-bars">${barsHtml}</div>
-                </div>
-              </div>
-              <div class="health-item">
-                <div class="health-label">${h.rsrp ? "RSRP" : "SW"}</div>
-                <div class="health-value ${rsrpColor}">${h.rsrp ?? (h.sw_value ?? "—")}</div>
-              </div>
-              <div class="health-item">
-                <div class="health-label">${h.rsrq ? "RSRQ" : "SQ"}</div>
-                <div class="health-value">${h.rsrq ?? (h.sq_value ?? "—")}</div>
-              </div>
-              <div class="health-item">
-                <div class="health-label">RAT</div>
-                <div class="health-value" style="font-size:10px;">${(h.rat||"—").toUpperCase()}</div>
-              </div>
-              <div class="health-item">
-                <div class="health-label">Moved</div>
-                <div class="health-value ${movedColor}">${movedStr}</div>
-              </div>
-              <div class="health-item">
-                <div class="health-label">Firmware</div>
-                <div class="health-value" style="font-size:10px;">${fwShort}</div>
-              </div>
+          healthEl.innerHTML =
+            `<div class="health-strip">
+              <div class="health-item"><div class="health-label">Voltage</div><div class="health-value ${voltColor}">${voltStr}</div></div>
+              <div class="health-item"><div class="health-label">Temp</div><div class="health-value ${tempColor}">${tempStr}</div></div>
+              <div class="health-item"><div class="health-label">Signal</div><div class="health-value"><div class="signal-bars">${barsHtml}</div></div></div>
+              <div class="health-item"><div class="health-label">${rsrp ? "RSRP" : "SW"}</div><div class="health-value ${rsrpColor}">${signalStr}</div></div>
+              <div class="health-item"><div class="health-label">${h.rsrq ? "RSRQ" : "SQ"}</div><div class="health-value">${qualStr}</div></div>
+              <div class="health-item"><div class="health-label">RAT</div><div class="health-value" style="font-size:10px;">${ratStr}</div></div>
+              <div class="health-item"><div class="health-label">Moved</div><div class="health-value ${movedColor}">${movedStr}</div></div>
+              <div class="health-item"><div class="health-label">Firmware</div><div class="health-value" style="font-size:10px;">${fwShort}</div></div>
             </div>
             <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">
               📍 ${h.location || "—"} &bull; 🕐 ${new Date(h.recorded_at).toLocaleString()}
