@@ -5753,9 +5753,13 @@ async function startMonitoringSession() {
   if (statusEl) { statusEl.textContent = "Starting session..."; statusEl.style.color = "var(--text-secondary)"; }
 
   try {
-    // Save original intervals (current deviceIntervals)
+    // Capture what the schedule SHOULD be right now for each device
+    // Uses evaluateRules() so restore is accurate regardless of cached values
+    const currentRule = evaluateRules(new Date());
+    const scheduleIntervalMins = currentRule?.intervalMins || 240;
     const originalIntervals = {};
-    targetIds.forEach(uid => { originalIntervals[uid] = deviceIntervals[uid] || 15; });
+    targetIds.forEach(uid => { originalIntervals[uid] = scheduleIntervalMins; });
+    console.log(`Monitoring: capturing schedule interval ${scheduleIntervalMins} min (${currentRule?.label || "no rule"}) for restore`);
 
     // Set bubble-up interval on all target devices
     for (const uid of targetIds) {
@@ -5852,6 +5856,7 @@ function updateSessionCountdown() {
   const remaining = endMs - Date.now();
 
   if (remaining <= 0) {
+    console.log("Monitoring session duration elapsed — auto-stopping");
     stopMonitoringSession();
     return;
   }
@@ -5985,15 +5990,21 @@ async function stopMonitoringSession() {
   if (sessionCountdown)  clearInterval(sessionCountdown);
 
   try {
-    // Restore original bubble-up intervals
-    const originals = activeSession.original_intervals || {};
-    for (const [uid, mins] of Object.entries(originals)) {
-      const hex = buildAssignBubbleUpHex(parseInt(mins) || 15);
+    // Restore bubble-up interval using CURRENT schedule rule at time of stop
+    // This ensures devices get the right interval for whatever time it is now
+    const restoreRule = evaluateRules(new Date());
+    const restoreMins = restoreRule?.intervalMins || 240;
+    console.log(`Monitoring: restoring to schedule interval ${restoreMins} min (${restoreRule?.label || "no rule"})`);
+
+    const targetIds = activeSession.target_ids || Object.keys(activeSession.original_intervals || {});
+    for (const uid of targetIds) {
+      const hex = buildAssignBubbleUpHex(restoreMins);
       await fetch(PROXY_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Device-UID": uid },
         body: JSON.stringify({ body: { LC: hex }, req: "note.add", sync: true })
       });
+      console.log(`Restored ${uid} to ${restoreMins} min`);
     }
 
     // Mark session as stopped
