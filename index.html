@@ -1621,24 +1621,49 @@
               style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
           </div>
           <div>
-            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Start Hour (0–23)</label>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Start Hour</label>
             <select id="em-start-hour" class="sched-select" style="width:100%;font-size:12px;">
-              ${[...Array(24)].map((_,h) => `<option value="${h}">${h === 0 ? '12 AM' : h < 12 ? h+' AM' : h === 12 ? '12 PM' : (h-12)+' PM'}</option>`).join('')}
+              <option value="0">12 AM</option><option value="1">1 AM</option>
+              <option value="2">2 AM</option><option value="3">3 AM</option>
+              <option value="4">4 AM</option><option value="5">5 AM</option>
+              <option value="6">6 AM</option><option value="7">7 AM</option>
+              <option value="8">8 AM</option><option value="9">9 AM</option>
+              <option value="10">10 AM</option><option value="11">11 AM</option>
+              <option value="12">12 PM</option><option value="13">1 PM</option>
+              <option value="14">2 PM</option><option value="15">3 PM</option>
+              <option value="16">4 PM</option><option value="17">5 PM</option>
+              <option value="18">6 PM</option><option value="19">7 PM</option>
+              <option value="20">8 PM</option><option value="21">9 PM</option>
+              <option value="22">10 PM</option><option value="23">11 PM</option>
             </select>
           </div>
           <div>
-            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Stop Hour (0–23)</label>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Stop Hour</label>
             <select id="em-stop-hour" class="sched-select" style="width:100%;font-size:12px;">
-              ${[...Array(24)].map((_,h) => `<option value="${h}" ${h===23?'selected':''}>${h === 0 ? '12 AM' : h < 12 ? h+' AM' : h === 12 ? '12 PM' : (h-12)+' PM'}</option>`).join('')}
+              <option value="0">12 AM</option><option value="1">1 AM</option>
+              <option value="2">2 AM</option><option value="3">3 AM</option>
+              <option value="4">4 AM</option><option value="5">5 AM</option>
+              <option value="6">6 AM</option><option value="7">7 AM</option>
+              <option value="8">8 AM</option><option value="9">9 AM</option>
+              <option value="10">10 AM</option><option value="11">11 AM</option>
+              <option value="12">12 PM</option><option value="13">1 PM</option>
+              <option value="14">2 PM</option><option value="15">3 PM</option>
+              <option value="16">4 PM</option><option value="17">5 PM</option>
+              <option value="18">6 PM</option><option value="19">7 PM</option>
+              <option value="20">8 PM</option><option value="21">9 PM</option>
+              <option value="22">10 PM</option><option value="23" selected>11 PM</option>
             </select>
           </div>
           <div style="grid-column:1/-1;">
             <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:5px;">Days of Week</label>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;">
-              ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d,i) =>
-                `<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;">
-                  <input type="checkbox" class="em-dow" value="${i}" checked style="accent-color:var(--text-primary);"> ${d}
-                </label>`).join('')}
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;"><input type="checkbox" class="em-dow" value="0" checked style="accent-color:var(--text-primary);"> Sun</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;"><input type="checkbox" class="em-dow" value="1" checked style="accent-color:var(--text-primary);"> Mon</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;"><input type="checkbox" class="em-dow" value="2" checked style="accent-color:var(--text-primary);"> Tue</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;"><input type="checkbox" class="em-dow" value="3" checked style="accent-color:var(--text-primary);"> Wed</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;"><input type="checkbox" class="em-dow" value="4" checked style="accent-color:var(--text-primary);"> Thu</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;"><input type="checkbox" class="em-dow" value="5" checked style="accent-color:var(--text-primary);"> Fri</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;"><input type="checkbox" class="em-dow" value="6" checked style="accent-color:var(--text-primary);"> Sat</label>
             </div>
           </div>
           <div style="grid-column:1/-1;">
