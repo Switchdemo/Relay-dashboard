@@ -1301,33 +1301,32 @@
         </div>
       </div>
 
-      <!-- Row 2: Charts -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        
-        <!-- Comms Status Donut -->
-        <div class="sched-card" style="padding:1rem;">
-          <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">Communications Status</div>
-          <canvas id="fh-chart-comms" height="180"></canvas>
+      <!-- Row 2: Charts (collapsible) -->
+      <div>
+        <button onclick="toggleFleetCharts()" id="fh-charts-btn"
+          style="padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;font-weight:500;cursor:pointer;color:var(--text-secondary);">
+          📊 Show Charts
+        </button>
+      </div>
+      <div id="fh-charts-panel" style="display:none;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="sched-card" style="padding:1rem;">
+            <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">Communications Status</div>
+            <canvas id="fh-chart-comms" height="180"></canvas>
+          </div>
+          <div class="sched-card" style="padding:1rem;">
+            <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">Voltage Distribution</div>
+            <canvas id="fh-chart-voltage" height="180"></canvas>
+          </div>
+          <div class="sched-card" style="padding:1rem;">
+            <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">Signal Quality (RSRP)</div>
+            <canvas id="fh-chart-signal" height="180"></canvas>
+          </div>
+          <div class="sched-card" style="padding:1rem;">
+            <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">Temperature Status</div>
+            <canvas id="fh-chart-temp" height="180"></canvas>
+          </div>
         </div>
-
-        <!-- Voltage Distribution Bar -->
-        <div class="sched-card" style="padding:1rem;">
-          <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">Voltage Distribution</div>
-          <canvas id="fh-chart-voltage" height="180"></canvas>
-        </div>
-
-        <!-- Signal Quality Donut -->
-        <div class="sched-card" style="padding:1rem;">
-          <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">Signal Quality (RSRP)</div>
-          <canvas id="fh-chart-signal" height="180"></canvas>
-        </div>
-
-        <!-- Temperature Status Bar -->
-        <div class="sched-card" style="padding:1rem;">
-          <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">Temperature Status</div>
-          <canvas id="fh-chart-temp" height="180"></canvas>
-        </div>
-
       </div>
 
       <!-- Row 3: Alert Count Cards (click to drill down) -->
@@ -5190,13 +5189,25 @@ async function loadFleetHealth() {
 
     updateFleetSummary();
     updateAlertCounts();
-    renderFleetCharts();
+    // Re-render charts if panel is visible
+    if (document.getElementById("fh-charts-panel")?.style.display !== "none") renderFleetCharts();
     if (statusEl) statusEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
 
   } catch(e) {
     console.error("loadFleetHealth error:", e);
     if (statusEl) statusEl.textContent = "Error loading fleet data.";
   }
+}
+
+function toggleFleetCharts() {
+  const panel = document.getElementById("fh-charts-panel");
+  const btn   = document.getElementById("fh-charts-btn");
+  if (!panel) return;
+  const showing = panel.style.display !== "none";
+  panel.style.display = showing ? "none" : "grid";
+  if (btn) btn.textContent = showing ? "📊 Show Charts" : "📊 Hide Charts";
+  // Render charts when shown for first time
+  if (!showing) renderFleetCharts();
 }
 
 function updateFleetSummary() {
