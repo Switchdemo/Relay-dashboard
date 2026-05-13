@@ -1271,144 +1271,162 @@
 <!-- ── FLEET HEALTH TAB ── -->
 <div class="tab-pane" id="tab-admin-health">
   <div class="scroll-content">
-    <div style="max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+    <div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
 
-      <!-- Health Summary Cards -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;" id="fleet-summary-cards">
-        <div class="sched-card" style="text-align:center;padding:1rem;">
-          <div style="font-size:28px;font-weight:700;color:var(--text-primary);" id="fh-total">—</div>
-          <div style="font-size:11px;color:var(--text-hint);">Total Devices</div>
+      <!-- Row 1: Scorecard Summary -->
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;" id="fh-scorecard-row">
+        <div class="sched-card" style="text-align:center;padding:0.875rem;border-top:3px solid var(--border-md);">
+          <div style="font-size:26px;font-weight:700;" id="fh-total">—</div>
+          <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Total Devices</div>
         </div>
-        <div class="sched-card" style="text-align:center;padding:1rem;border-top:3px solid var(--green);">
-          <div style="font-size:28px;font-weight:700;color:var(--green-dark);" id="fh-online">—</div>
-          <div style="font-size:11px;color:var(--text-hint);">Online</div>
+        <div class="sched-card" style="text-align:center;padding:0.875rem;border-top:3px solid var(--green);">
+          <div style="font-size:26px;font-weight:700;color:var(--green-dark);" id="fh-online">—</div>
+          <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Online</div>
         </div>
-        <div class="sched-card" style="text-align:center;padding:1rem;border-top:3px solid var(--amber);">
-          <div style="font-size:28px;font-weight:700;color:var(--amber);" id="fh-warning">—</div>
-          <div style="font-size:11px;color:var(--text-hint);">Warning</div>
+        <div class="sched-card" style="text-align:center;padding:0.875rem;border-top:3px solid var(--amber);">
+          <div style="font-size:26px;font-weight:700;color:var(--amber);" id="fh-warning">—</div>
+          <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Warning</div>
         </div>
-        <div class="sched-card" style="text-align:center;padding:1rem;border-top:3px solid var(--red);">
-          <div style="font-size:28px;font-weight:700;color:var(--red);" id="fh-critical">—</div>
-          <div style="font-size:11px;color:var(--text-hint);">Critical</div>
+        <div class="sched-card" style="text-align:center;padding:0.875rem;border-top:3px solid var(--red);">
+          <div style="font-size:26px;font-weight:700;color:var(--red);" id="fh-critical">—</div>
+          <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Critical</div>
         </div>
-        <div class="sched-card" style="text-align:center;padding:1rem;border-top:3px solid var(--text-hint);">
-          <div style="font-size:28px;font-weight:700;color:var(--text-hint);" id="fh-offline">—</div>
-          <div style="font-size:11px;color:var(--text-hint);">Offline</div>
+        <div class="sched-card" style="text-align:center;padding:0.875rem;border-top:3px solid var(--text-hint);">
+          <div style="font-size:26px;font-weight:700;color:var(--text-hint);" id="fh-offline">—</div>
+          <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Offline</div>
         </div>
-        <div class="sched-card" style="text-align:center;padding:1rem;border-top:3px solid var(--blue);">
-          <div style="font-size:28px;font-weight:700;color:var(--blue-dark);" id="fh-uptime">—</div>
-          <div style="font-size:11px;color:var(--text-hint);">Fleet Uptime</div>
+        <div class="sched-card" style="text-align:center;padding:0.875rem;border-top:3px solid var(--blue);">
+          <div style="font-size:26px;font-weight:700;color:var(--blue-dark);" id="fh-uptime">—</div>
+          <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Fleet Uptime</div>
         </div>
       </div>
 
-      <!-- Alert Cards Row -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">
+      <!-- Row 2: Charts -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         
-        <!-- No Comms Alert -->
-        <div class="sched-card">
-          <div class="sched-card-header">
-            <div class="sched-card-title">⚫ No Comms</div>
-            <span id="fh-nocomms-count" style="font-size:11px;background:var(--surface2);padding:2px 8px;border-radius:10px;">0</span>
-          </div>
-          <div id="fh-nocomms-list" style="font-size:11px;color:var(--text-hint);">Loading...</div>
-          <button class="queue-refresh" style="margin-top:8px;" onclick="exportAlertCSV('nocomms')">Export CSV</button>
+        <!-- Comms Status Donut -->
+        <div class="sched-card" style="padding:1rem;">
+          <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">Communications Status</div>
+          <canvas id="fh-chart-comms" height="180"></canvas>
         </div>
 
-        <!-- Moved/Tamper Alert -->
-        <div class="sched-card">
-          <div class="sched-card-header">
-            <div class="sched-card-title">🚨 Moved / Tamper</div>
-            <span id="fh-moved-count" style="font-size:11px;background:var(--surface2);padding:2px 8px;border-radius:10px;">0</span>
-          </div>
-          <div id="fh-moved-list" style="font-size:11px;color:var(--text-hint);">Loading...</div>
-          <button class="queue-refresh" style="margin-top:8px;" onclick="exportAlertCSV('moved')">Export CSV</button>
+        <!-- Voltage Distribution Bar -->
+        <div class="sched-card" style="padding:1rem;">
+          <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">Voltage Distribution</div>
+          <canvas id="fh-chart-voltage" height="180"></canvas>
         </div>
 
-        <!-- Temperature Alert -->
-        <div class="sched-card">
-          <div class="sched-card-header">
-            <div class="sched-card-title">🌡️ Temperature</div>
-            <span id="fh-temp-count" style="font-size:11px;background:var(--surface2);padding:2px 8px;border-radius:10px;">0</span>
-          </div>
-          <div id="fh-temp-list" style="font-size:11px;color:var(--text-hint);">Loading...</div>
-          <button class="queue-refresh" style="margin-top:8px;" onclick="exportAlertCSV('temp')">Export CSV</button>
+        <!-- Signal Quality Donut -->
+        <div class="sched-card" style="padding:1rem;">
+          <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">Signal Quality (RSRP)</div>
+          <canvas id="fh-chart-signal" height="180"></canvas>
         </div>
 
-        <!-- Voltage Alert -->
-        <div class="sched-card">
-          <div class="sched-card-header">
-            <div class="sched-card-title">🔋 Voltage</div>
-            <span id="fh-volt-count" style="font-size:11px;background:var(--surface2);padding:2px 8px;border-radius:10px;">0</span>
-          </div>
-          <div id="fh-volt-list" style="font-size:11px;color:var(--text-hint);">Loading...</div>
-          <button class="queue-refresh" style="margin-top:8px;" onclick="exportAlertCSV('voltage')">Export CSV</button>
+        <!-- Temperature Status Bar -->
+        <div class="sched-card" style="padding:1rem;">
+          <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">Temperature Status</div>
+          <canvas id="fh-chart-temp" height="180"></canvas>
         </div>
 
       </div>
 
-      <!-- Full Device Health Table -->
+      <!-- Row 3: Alert Count Cards (click to drill down) -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+        <div class="sched-card" style="cursor:pointer;transition:all 0.2s;" onclick="openDrillDown('nocomms')"
+          onmouseover="this.style.borderColor='var(--text-hint)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div>
+              <div style="font-size:11px;color:var(--text-hint);">No Comms >&nbsp;<span id="fh-nocomms-hrs">48</span>h</div>
+              <div style="font-size:32px;font-weight:700;color:var(--text-hint);" id="fh-nocomms-count">—</div>
+            </div>
+            <div style="font-size:32px;">⚫</div>
+          </div>
+          <div style="font-size:10px;color:var(--blue);margin-top:4px;">Click to view devices →</div>
+        </div>
+        <div class="sched-card" style="cursor:pointer;transition:all 0.2s;" onclick="openDrillDown('moved')"
+          onmouseover="this.style.borderColor='var(--amber)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div>
+              <div style="font-size:11px;color:var(--text-hint);">Moved / Tamper</div>
+              <div style="font-size:32px;font-weight:700;color:var(--amber);" id="fh-moved-count">—</div>
+            </div>
+            <div style="font-size:32px;">🚨</div>
+          </div>
+          <div style="font-size:10px;color:var(--blue);margin-top:4px;">Click to view devices →</div>
+        </div>
+        <div class="sched-card" style="cursor:pointer;transition:all 0.2s;" onclick="openDrillDown('temp')"
+          onmouseover="this.style.borderColor='var(--red)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div>
+              <div style="font-size:11px;color:var(--text-hint);">Temperature Alert</div>
+              <div style="font-size:32px;font-weight:700;color:var(--red);" id="fh-temp-count">—</div>
+            </div>
+            <div style="font-size:32px;">🌡️</div>
+          </div>
+          <div style="font-size:10px;color:var(--blue);margin-top:4px;">Click to view devices →</div>
+        </div>
+        <div class="sched-card" style="cursor:pointer;transition:all 0.2s;" onclick="openDrillDown('voltage')"
+          onmouseover="this.style.borderColor='var(--red)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div>
+              <div style="font-size:11px;color:var(--text-hint);">Voltage Alert</div>
+              <div style="font-size:32px;font-weight:700;color:var(--red);" id="fh-volt-count">—</div>
+            </div>
+            <div style="font-size:32px;">🔋</div>
+          </div>
+          <div style="font-size:10px;color:var(--blue);margin-top:4px;">Click to view devices →</div>
+        </div>
+      </div>
+
+      <!-- Row 4: Controls -->
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <button class="queue-refresh" onclick="initFleetHealth()">🔄 Refresh</button>
+        <button class="queue-refresh" onclick="runHealthCheckNow()" style="color:var(--green-dark);border-color:var(--green);">🩺 Run Health Check Now</button>
+        <button class="queue-refresh" onclick="exportFleetCSV()" style="color:var(--blue-dark);border-color:var(--blue);">📊 Export CSV</button>
+        <button class="queue-refresh" onclick="generateFleetPDF()" style="color:var(--blue-dark);border-color:var(--blue);background:var(--blue-bg);">📄 PDF Report</button>
+        <div id="fh-nightly-progress" style="display:none;flex:1;min-width:200px;">
+          <div style="font-size:10px;color:var(--text-hint);margin-bottom:2px;" id="fh-progress-label">0 / 0</div>
+          <div style="height:4px;background:var(--surface2);border-radius:2px;overflow:hidden;">
+            <div id="fh-progress-bar" style="height:100%;background:var(--green);width:0%;transition:width 0.3s;"></div>
+          </div>
+        </div>
+        <div id="fh-nightly-status" style="font-size:11px;color:var(--text-secondary);"></div>
+      </div>
+
+      <!-- Threshold Settings -->
       <div class="sched-card">
-        <div class="sched-card-header">
-          <div class="sched-card-title">Device Health Status</div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <select class="history-select" id="fh-filter" onchange="renderFleetTable()">
-              <option value="all">All Devices</option>
-              <option value="offline">Offline Only</option>
-              <option value="warning">Warning Only</option>
-              <option value="critical">Critical Only</option>
-              <option value="moved">Moved/Tamper</option>
-            </select>
-            <button class="queue-refresh" onclick="initFleetHealth()">Refresh</button>
-            <button class="queue-refresh" style="color:var(--green-dark);border-color:var(--green);" onclick="exportFleetCSV()">Export CSV</button>
-            <button class="queue-refresh" style="color:var(--blue-dark);border-color:var(--blue);background:var(--blue-bg);" onclick="generateFleetPDF()">📄 PDF Report</button>
-          </div>
-        </div>
-        <div id="fh-table-container" style="overflow-x:auto;">
-          <div class="sched-empty">Click Refresh to load fleet health data.</div>
-        </div>
-      </div>
-
-      <!-- Threshold Settings (Admin only) -->
-      <div class="sched-card" id="fh-thresholds">
         <div class="sched-card-header">
           <div class="sched-card-title">⚙️ Alert Thresholds</div>
           <button class="queue-refresh" onclick="saveThresholds()">Save</button>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;padding:4px 0;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
           <div>
             <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Voltage Warning (V)</label>
-            <input type="number" id="th-volt-warn" step="0.1" value="3.3"
-              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+            <input type="number" id="th-volt-warn" step="0.1" value="3.3" class="sched-input" style="width:100%;font-size:12px;" />
           </div>
           <div>
             <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Voltage Critical (V)</label>
-            <input type="number" id="th-volt-crit" step="0.1" value="3.0"
-              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+            <input type="number" id="th-volt-crit" step="0.1" value="3.0" class="sched-input" style="width:100%;font-size:12px;" />
           </div>
           <div>
             <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Temp High Warning (°C)</label>
-            <input type="number" id="th-temp-high-warn" step="1" value="60"
-              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+            <input type="number" id="th-temp-high-warn" step="1" value="60" class="sched-input" style="width:100%;font-size:12px;" />
           </div>
           <div>
             <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Temp High Critical (°C)</label>
-            <input type="number" id="th-temp-high-crit" step="1" value="75"
-              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+            <input type="number" id="th-temp-high-crit" step="1" value="75" class="sched-input" style="width:100%;font-size:12px;" />
           </div>
           <div>
             <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Temp Low Warning (°C)</label>
-            <input type="number" id="th-temp-low-warn" step="1" value="0"
-              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+            <input type="number" id="th-temp-low-warn" step="1" value="0" class="sched-input" style="width:100%;font-size:12px;" />
           </div>
           <div>
             <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">No Comms Warning (hrs)</label>
-            <input type="number" id="th-nocomms-warn" step="1" value="48"
-              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+            <input type="number" id="th-nocomms-warn" step="1" value="48" class="sched-input" style="width:100%;font-size:12px;" />
           </div>
           <div>
             <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">No Comms Critical (hrs)</label>
-            <input type="number" id="th-nocomms-crit" step="1" value="72"
-              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+            <input type="number" id="th-nocomms-crit" step="1" value="72" class="sched-input" style="width:100%;font-size:12px;" />
           </div>
           <div>
             <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Nightly Health Check</label>
@@ -1421,24 +1439,37 @@
         <div id="th-save-status" style="font-size:11px;margin-top:8px;display:none;"></div>
       </div>
 
-      <!-- Nightly Check Status -->
-      <div class="sched-card">
-        <div class="sched-card-header">
-          <div class="sched-card-title">🌙 Nightly Health Check</div>
-          <button class="queue-refresh" onclick="runHealthCheckNow()">Run Now</button>
-        </div>
-        <div id="fh-nightly-status" style="font-size:12px;color:var(--text-secondary);padding:4px 0;">
-          Checks run automatically midnight–2am. Each device is staggered to avoid traffic spikes.
-        </div>
-        <div id="fh-nightly-progress" style="display:none;margin-top:8px;">
-          <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;" id="fh-progress-label">0 / 0 devices checked</div>
-          <div style="height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;">
-            <div id="fh-progress-bar" style="height:100%;background:var(--green);width:0%;transition:width 0.3s;"></div>
-          </div>
-        </div>
-      </div>
-
     </div>
+  </div>
+</div>
+
+<!-- ── DRILL DOWN SIDE PANEL ── -->
+<div id="fh-drill-panel" style="position:fixed;top:0;right:-480px;width:480px;height:100vh;background:var(--surface);border-left:0.5px solid var(--border-md);z-index:1000;transition:right 0.3s ease;display:flex;flex-direction:column;box-shadow:-4px 0 20px rgba(0,0,0,0.15);">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:0.5px solid var(--border-md);">
+    <div>
+      <div style="font-size:14px;font-weight:700;" id="fh-drill-title">Alert Details</div>
+      <div style="font-size:11px;color:var(--text-hint);margin-top:2px;" id="fh-drill-subtitle"></div>
+    </div>
+    <button onclick="closeDrillDown()" style="padding:6px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;cursor:pointer;">✕ Close</button>
+  </div>
+  <div style="padding:0.75rem 1.25rem;border-bottom:0.5px solid var(--border);display:flex;gap:8px;align-items:center;">
+    <input type="text" id="fh-drill-search" placeholder="Search by UID or name..." oninput="renderDrillList()"
+      style="flex:1;padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+    <button class="queue-refresh" onclick="exportDrillCSV()">Export CSV</button>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:0.5rem 1.25rem;" id="fh-drill-list">
+    <div class="sched-empty">Loading...</div>
+  </div>
+  <div style="padding:0.75rem 1.25rem;border-top:0.5px solid var(--border);display:flex;gap:8px;align-items:center;justify-content:space-between;">
+    <button onclick="drillPage(-1)" id="fh-drill-prev" class="queue-refresh">← Prev</button>
+    <span style="font-size:11px;color:var(--text-hint);" id="fh-drill-page-label">Page 1</span>
+    <button onclick="drillPage(1)" id="fh-drill-next" class="queue-refresh">Next →</button>
+  </div>
+</div>
+<!-- Drill panel backdrop -->
+<div id="fh-drill-backdrop" onclick="closeDrillDown()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:999;"></div>
+
+<!-- Device detail modal reused for drill-down -->    </div>
   </div>
 </div>
 
@@ -5002,13 +5033,18 @@ async function changeMyPassword() {
 }
 
 // ── FLEET HEALTH ─────────────────────────────────────────────────────────────
-let fleetHealthData = [];
-let fleetThresholds = {
+let fleetHealthData  = [];
+let drillDownData    = [];
+let drillDownType    = null;
+let drillDownPage    = 0;
+const DRILL_PAGE_SIZE = 25;
+let fleetCharts      = {};
+let nightlyCheckTimer = null;
+let fleetThresholds  = {
   voltWarn: 3.3, voltCrit: 3.0,
   tempHighWarn: 60, tempHighCrit: 75, tempLowWarn: 0,
   noCommsWarn: 48, noCommsCrit: 72
 };
-let nightlyCheckTimer = null;
 
 async function initFleetHealth() {
   await loadThresholds();
@@ -5022,33 +5058,35 @@ async function loadThresholds() {
     if (Array.isArray(rows)) {
       rows.forEach(r => {
         switch(r.setting_key) {
-          case "voltage_warn":      fleetThresholds.voltWarn      = parseFloat(r.setting_value); break;
-          case "voltage_critical":  fleetThresholds.voltCrit      = parseFloat(r.setting_value); break;
-          case "temp_high_warn":    fleetThresholds.tempHighWarn  = parseFloat(r.setting_value); break;
-          case "temp_high_critical":fleetThresholds.tempHighCrit  = parseFloat(r.setting_value); break;
-          case "temp_low_warn":     fleetThresholds.tempLowWarn   = parseFloat(r.setting_value); break;
-          case "no_comms_warn_hrs": fleetThresholds.noCommsWarn   = parseFloat(r.setting_value); break;
-          case "no_comms_crit_hrs": fleetThresholds.noCommsCrit   = parseFloat(r.setting_value); break;
-          case "health_check_enabled": 
+          case "voltage_warn":       fleetThresholds.voltWarn      = parseFloat(r.setting_value); break;
+          case "voltage_critical":   fleetThresholds.voltCrit      = parseFloat(r.setting_value); break;
+          case "temp_high_warn":     fleetThresholds.tempHighWarn  = parseFloat(r.setting_value); break;
+          case "temp_high_critical": fleetThresholds.tempHighCrit  = parseFloat(r.setting_value); break;
+          case "temp_low_warn":      fleetThresholds.tempLowWarn   = parseFloat(r.setting_value); break;
+          case "no_comms_warn_hrs":  fleetThresholds.noCommsWarn   = parseFloat(r.setting_value); break;
+          case "no_comms_crit_hrs":  fleetThresholds.noCommsCrit   = parseFloat(r.setting_value); break;
+          case "health_check_enabled":
             const sel = document.getElementById("th-health-enabled");
             if (sel) sel.value = r.setting_value;
             break;
         }
       });
-      // Update threshold inputs
       const fields = {
-        "th-volt-warn": fleetThresholds.voltWarn,
-        "th-volt-crit": fleetThresholds.voltCrit,
-        "th-temp-high-warn": fleetThresholds.tempHighWarn,
-        "th-temp-high-crit": fleetThresholds.tempHighCrit,
-        "th-temp-low-warn": fleetThresholds.tempLowWarn,
-        "th-nocomms-warn": fleetThresholds.noCommsWarn,
-        "th-nocomms-crit": fleetThresholds.noCommsCrit
+        "th-volt-warn":       fleetThresholds.voltWarn,
+        "th-volt-crit":       fleetThresholds.voltCrit,
+        "th-temp-high-warn":  fleetThresholds.tempHighWarn,
+        "th-temp-high-crit":  fleetThresholds.tempHighCrit,
+        "th-temp-low-warn":   fleetThresholds.tempLowWarn,
+        "th-nocomms-warn":    fleetThresholds.noCommsWarn,
+        "th-nocomms-crit":    fleetThresholds.noCommsCrit
       };
       Object.entries(fields).forEach(([id, val]) => {
         const el = document.getElementById(id);
         if (el) el.value = val;
       });
+      // Update no comms label
+      const ncEl = document.getElementById("fh-nocomms-hrs");
+      if (ncEl) ncEl.textContent = fleetThresholds.noCommsWarn;
     }
   } catch(e) { console.error("loadThresholds error:", e); }
 }
@@ -5056,14 +5094,14 @@ async function loadThresholds() {
 async function saveThresholds() {
   const statusEl = document.getElementById("th-save-status");
   const mappings = [
-    ["voltage_warn",      "th-volt-warn"],
-    ["voltage_critical",  "th-volt-crit"],
-    ["temp_high_warn",    "th-temp-high-warn"],
-    ["temp_high_critical","th-temp-high-crit"],
-    ["temp_low_warn",     "th-temp-low-warn"],
-    ["no_comms_warn_hrs", "th-nocomms-warn"],
-    ["no_comms_crit_hrs", "th-nocomms-crit"],
-    ["health_check_enabled", "th-health-enabled"]
+    ["voltage_warn",       "th-volt-warn"],
+    ["voltage_critical",   "th-volt-crit"],
+    ["temp_high_warn",     "th-temp-high-warn"],
+    ["temp_high_critical", "th-temp-high-crit"],
+    ["temp_low_warn",      "th-temp-low-warn"],
+    ["no_comms_warn_hrs",  "th-nocomms-warn"],
+    ["no_comms_crit_hrs",  "th-nocomms-crit"],
+    ["health_check_enabled","th-health-enabled"]
   ];
   try {
     for (const [key, elId] of mappings) {
@@ -5078,20 +5116,23 @@ async function saveThresholds() {
     await loadThresholds();
     if (statusEl) { statusEl.textContent = "✅ Thresholds saved."; statusEl.style.color = "var(--green-dark)"; statusEl.style.display = "block"; }
     setTimeout(() => { if (statusEl) statusEl.style.display = "none"; }, 3000);
+    // Refresh fleet health with new thresholds
+    await loadFleetHealth();
   } catch(e) {
-    if (statusEl) { statusEl.textContent = "❌ Error saving: " + e.message; statusEl.style.color = "var(--red)"; statusEl.style.display = "block"; }
+    if (statusEl) { statusEl.textContent = "❌ Error: " + e.message; statusEl.style.color = "var(--red)"; statusEl.style.display = "block"; }
   }
 }
 
 async function loadFleetHealth() {
-  const container = document.getElementById("fh-table-container");
-  if (container) container.innerHTML = `<div class="sched-empty">Loading fleet health data...</div>`;
+  const statusEl = document.getElementById("fh-nightly-status");
+  if (statusEl) statusEl.textContent = "Loading fleet health data...";
 
   try {
-    // Get latest health record per device
+    // Build fleet health array from device_health table
+    // At scale this would query device_health_daily aggregate instead
     const healthRows = [];
     for (const device of DEVICES.filter(d => !d.uid.includes('PLACEHOLDER'))) {
-      // Get most recent health with signal data first, fall back to any
+      // Get best health record (prefer session.begin with signal data)
       let rows = await supabaseGet(
         `device_health?device_uid=eq.${encodeURIComponent(device.uid)}&rsrp=not.is.null&order=recorded_at.desc&limit=1`
       );
@@ -5100,77 +5141,61 @@ async function loadFleetHealth() {
           `device_health?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1`
         );
       }
-      // Also get latest bubble-up for last_seen
+      // Get last bubble-up for comms freshness
       const readings = await supabaseGet(
         `device_readings?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1`
       );
       const lastReading = Array.isArray(readings) && readings.length > 0 ? readings[0] : null;
-      const lastSeen = lastReading?.recorded_at || rows[0]?.recorded_at || null;
-      healthRows.push({
-        device,
-        health: Array.isArray(rows) && rows.length > 0 ? rows[0] : null,
-        lastSeen
-      });
+      const lastSeen = lastReading?.recorded_at || rows?.[0]?.recorded_at || null;
+      healthRows.push({ device, health: rows?.[0] || null, lastSeen });
     }
 
+    // Score each device
     fleetHealthData = healthRows.map(({ device, health, lastSeen }) => {
       const now = Date.now();
       const lastSeenMs = lastSeen ? new Date(lastSeen).getTime() : 0;
-      const hoursAgo = lastSeenMs ? (now - lastSeenMs) / 3600000 : 999;
-      const voltage = health?.voltage ? parseFloat(health.voltage) : null;
-      const temp    = health?.temperature ? parseFloat(health.temperature) : null;
+      const hoursAgo = lastSeenMs ? (now - lastSeenMs) / 3600000 : 9999;
+      const voltage = health?.voltage != null ? parseFloat(health.voltage) : null;
+      const temp    = health?.temperature != null ? parseFloat(health.temperature) : null;
       const movedTs = health?.moved ? parseInt(health.moved) : null;
-      // Device moved if moved timestamp is more recent than 24hrs before last health check
       const lastHealthMs = health?.recorded_at ? new Date(health.recorded_at).getTime() : 0;
-      const movedRecently = movedTs && movedTs * 1000 > (lastHealthMs - 86400000);
+      const movedRecently = movedTs && (movedTs * 1000) > (lastHealthMs - 86400000) && hoursAgo < fleetThresholds.noCommsWarn;
 
-      // Calculate status
-      let commsStatus = "ok";
-      if (hoursAgo > fleetThresholds.noCommsCrit) commsStatus = "critical";
-      else if (hoursAgo > fleetThresholds.noCommsWarn) commsStatus = "warning";
+      let commsStatus = hoursAgo > fleetThresholds.noCommsCrit ? "critical"
+        : hoursAgo > fleetThresholds.noCommsWarn ? "warning" : "ok";
+      let voltStatus  = voltage == null ? "unknown"
+        : voltage < fleetThresholds.voltCrit ? "critical"
+        : voltage < fleetThresholds.voltWarn ? "warning" : "ok";
+      let tempStatus  = temp == null ? "unknown"
+        : (temp > fleetThresholds.tempHighCrit || temp < fleetThresholds.tempLowWarn) ? "critical"
+        : temp > fleetThresholds.tempHighWarn ? "warning" : "ok";
 
-      let voltStatus = "ok";
-      if (voltage !== null) {
-        if (voltage < fleetThresholds.voltCrit) voltStatus = "critical";
-        else if (voltage < fleetThresholds.voltWarn) voltStatus = "warning";
-      }
-
-      let tempStatus = "ok";
-      if (temp !== null) {
-        if (temp > fleetThresholds.tempHighCrit || temp < fleetThresholds.tempLowWarn) tempStatus = "critical";
-        else if (temp > fleetThresholds.tempHighWarn) tempStatus = "warning";
-      }
-
-      const overallStatus = 
-        commsStatus === "critical" || voltStatus === "critical" || tempStatus === "critical" ? "critical" :
-        movedRecently ? "warning" :
-        commsStatus === "warning" || voltStatus === "warning" || tempStatus === "warning" ? "warning" :
-        hoursAgo > fleetThresholds.noCommsWarn ? "offline" : "ok";
+      const overallStatus =
+        commsStatus === "critical" || voltStatus === "critical" || tempStatus === "critical" ? "critical"
+        : movedRecently ? "warning"
+        : commsStatus === "warning" || voltStatus === "warning" || tempStatus === "warning" ? "warning"
+        : hoursAgo > fleetThresholds.noCommsWarn ? "offline" : "ok";
 
       return {
-        uid: device.uid,
-        name: device.name,
-        lastSeen,
-        hoursAgo,
-        voltage,
-        temp,
-        rsrp: health?.rsrp ?? null,
-        bars: health?.bars ?? null,
+        uid: device.uid, name: device.name,
+        lastSeen, hoursAgo, voltage, temp,
+        rsrp: health?.rsrp ?? null, bars: health?.bars ?? null,
         firmware: health?.firmware_version ?? null,
         location: health?.location ?? null,
-        movedRecently,
-        movedTs,
+        orientation: health?.orientation ?? null,
+        movedRecently, movedTs,
         commsStatus, voltStatus, tempStatus, overallStatus
       };
     });
 
     updateFleetSummary();
-    updateAlertCards();
-    renderFleetTable();
+    updateAlertCounts();
+    renderFleetCharts();
+    if (statusEl) statusEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
 
   } catch(e) {
     console.error("loadFleetHealth error:", e);
-    if (container) container.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error loading fleet health data.</div>`;
+    if (statusEl) statusEl.textContent = "Error loading fleet data.";
   }
 }
 
@@ -5179,7 +5204,7 @@ function updateFleetSummary() {
   const online   = fleetHealthData.filter(d => d.overallStatus === "ok").length;
   const warning  = fleetHealthData.filter(d => d.overallStatus === "warning").length;
   const critical = fleetHealthData.filter(d => d.overallStatus === "critical").length;
-  const offline  = fleetHealthData.filter(d => d.overallStatus === "offline").length;
+  const offline  = fleetHealthData.filter(d => ["offline","critical"].includes(d.overallStatus)).length;
   const uptime   = total > 0 ? Math.round(((online + warning) / total) * 100) : 0;
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
@@ -5191,123 +5216,267 @@ function updateFleetSummary() {
   set("fh-uptime",   uptime + "%");
 }
 
-function updateAlertCards() {
-  const noComms = fleetHealthData.filter(d => d.commsStatus !== "ok");
-  const moved   = fleetHealthData.filter(d => d.movedRecently);
-  const temp    = fleetHealthData.filter(d => d.tempStatus !== "ok");
-  const volt    = fleetHealthData.filter(d => d.voltStatus !== "ok");
+function updateAlertCounts() {
+  const noComms = fleetHealthData.filter(d => d.commsStatus !== "ok").length;
+  const moved   = fleetHealthData.filter(d => d.movedRecently).length;
+  const temp    = fleetHealthData.filter(d => d.tempStatus !== "ok" && d.tempStatus !== "unknown").length;
+  const volt    = fleetHealthData.filter(d => d.voltStatus !== "ok" && d.voltStatus !== "unknown").length;
 
-  const renderList = (items, fields) => {
-    if (items.length === 0) return `<div style="color:var(--green-dark);padding:4px 0;">✅ No alerts</div>`;
-    return items.slice(0, 5).map(d =>
-      `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:0.5px solid var(--border);">
-        <span style="font-weight:500;">${d.name}</span>
-        <span style="color:var(--text-hint);">${fields(d)}</span>
-      </div>`
-    ).join("") + (items.length > 5 ? `<div style="color:var(--text-hint);padding:4px 0;">+${items.length - 5} more</div>` : "");
+  const setCount = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = val; el.style.color = val > 0 ? "var(--red)" : "var(--text-hint)"; }
   };
-
-  const setCard = (listId, countId, items, fields) => {
-    const el = document.getElementById(listId);
-    const ct = document.getElementById(countId);
-    if (el) el.innerHTML = renderList(items, fields);
-    if (ct) { ct.textContent = items.length; ct.style.background = items.length > 0 ? "var(--red)" : "var(--surface2)"; ct.style.color = items.length > 0 ? "white" : "var(--text-hint)"; }
-  };
-
-  setCard("fh-nocomms-list", "fh-nocomms-count", noComms, d => `${Math.round(d.hoursAgo)}h ago`);
-  setCard("fh-moved-list",   "fh-moved-count",   moved,   d => d.movedTs ? new Date(d.movedTs*1000).toLocaleDateString() : "—");
-  setCard("fh-temp-list",    "fh-temp-count",     temp,    d => d.temp ? d.temp.toFixed(1)+"°C" : "—");
-  setCard("fh-volt-list",    "fh-volt-count",     volt,    d => d.voltage ? d.voltage.toFixed(3)+"V" : "—");
+  setCount("fh-nocomms-count", noComms);
+  setCount("fh-moved-count",   moved);
+  setCount("fh-temp-count",    temp);
+  setCount("fh-volt-count",    volt);
 }
 
-function renderFleetTable() {
-  const container = document.getElementById("fh-table-container");
-  if (!container || !fleetHealthData.length) return;
+function renderFleetCharts() {
+  // Destroy existing charts
+  Object.values(fleetCharts).forEach(c => { try { c.destroy(); } catch(e){} });
+  fleetCharts = {};
 
-  const filter = document.getElementById("fh-filter")?.value || "all";
-  let data = fleetHealthData;
-  if (filter === "offline")  data = data.filter(d => d.overallStatus === "offline");
-  if (filter === "warning")  data = data.filter(d => d.overallStatus === "warning");
-  if (filter === "critical") data = data.filter(d => d.overallStatus === "critical");
-  if (filter === "moved")    data = data.filter(d => d.movedRecently);
+  const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+  const textColor = isDark ? "#a0a0a0" : "#666";
+  Chart.defaults.color = textColor;
 
-  if (data.length === 0) {
-    container.innerHTML = `<div class="sched-empty">No devices match the selected filter.</div>`;
+  // 1. Comms Status Donut
+  const commsCtx = document.getElementById("fh-chart-comms")?.getContext("2d");
+  if (commsCtx) {
+    const online   = fleetHealthData.filter(d => d.commsStatus === "ok").length;
+    const warning  = fleetHealthData.filter(d => d.commsStatus === "warning").length;
+    const critical = fleetHealthData.filter(d => d.commsStatus === "critical").length;
+    fleetCharts.comms = new Chart(commsCtx, {
+      type: "doughnut",
+      data: {
+        labels: ["Online", "Warning", "Critical/Offline"],
+        datasets: [{ data: [online, warning, critical],
+          backgroundColor: ["#16a34a","#f59e0b","#dc2626"],
+          borderWidth: 0 }]
+      },
+      options: { plugins: { legend: { position: "bottom", labels: { font: { size: 11 } } } }, cutout: "65%" }
+    });
+  }
+
+  // 2. Voltage Distribution Bar
+  const voltCtx = document.getElementById("fh-chart-voltage")?.getContext("2d");
+  if (voltCtx) {
+    const buckets = [
+      { label: ">3.6V (Good)",    min: 3.6,  max: 99,  color: "#16a34a" },
+      { label: "3.3-3.6V (OK)",   min: 3.3,  max: 3.6, color: "#2563eb" },
+      { label: "3.0-3.3V (Warn)", min: 3.0,  max: 3.3, color: "#f59e0b" },
+      { label: "<3.0V (Critical)", min: -99,  max: 3.0, color: "#dc2626" },
+      { label: "No Data",         min: null, max: null, color: "#999" }
+    ];
+    const counts = buckets.map(b =>
+      b.min === null ? fleetHealthData.filter(d => d.voltage == null).length
+      : fleetHealthData.filter(d => d.voltage != null && d.voltage >= b.min && d.voltage < b.max).length
+    );
+    fleetCharts.voltage = new Chart(voltCtx, {
+      type: "bar",
+      data: { labels: buckets.map(b => b.label),
+        datasets: [{ label: "Devices", data: counts,
+          backgroundColor: buckets.map(b => b.color), borderWidth: 0 }] },
+      options: { plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+    });
+  }
+
+  // 3. Signal Quality Donut
+  const sigCtx = document.getElementById("fh-chart-signal")?.getContext("2d");
+  if (sigCtx) {
+    const excellent = fleetHealthData.filter(d => d.rsrp != null && d.rsrp >= -80).length;
+    const good      = fleetHealthData.filter(d => d.rsrp != null && d.rsrp >= -90 && d.rsrp < -80).length;
+    const fair      = fleetHealthData.filter(d => d.rsrp != null && d.rsrp >= -100 && d.rsrp < -90).length;
+    const poor      = fleetHealthData.filter(d => d.rsrp != null && d.rsrp < -100).length;
+    const noSig     = fleetHealthData.filter(d => d.rsrp == null).length;
+    fleetCharts.signal = new Chart(sigCtx, {
+      type: "doughnut",
+      data: { labels: ["Excellent (≥-80)", "Good (-80 to -90)", "Fair (-90 to -100)", "Poor (<-100)", "No Data"],
+        datasets: [{ data: [excellent, good, fair, poor, noSig],
+          backgroundColor: ["#16a34a","#2563eb","#f59e0b","#dc2626","#999"],
+          borderWidth: 0 }] },
+      options: { plugins: { legend: { position: "bottom", labels: { font: { size: 10 } } } }, cutout: "65%" }
+    });
+  }
+
+  // 4. Temperature Status Bar
+  const tempCtx = document.getElementById("fh-chart-temp")?.getContext("2d");
+  if (tempCtx) {
+    const normal  = fleetHealthData.filter(d => d.tempStatus === "ok").length;
+    const warn    = fleetHealthData.filter(d => d.tempStatus === "warning").length;
+    const crit    = fleetHealthData.filter(d => d.tempStatus === "critical").length;
+    const noTemp  = fleetHealthData.filter(d => d.tempStatus === "unknown").length;
+    fleetCharts.temp = new Chart(tempCtx, {
+      type: "bar",
+      data: { labels: ["Normal", "Warning", "Critical", "No Data"],
+        datasets: [{ label: "Devices", data: [normal, warn, crit, noTemp],
+          backgroundColor: ["#16a34a","#f59e0b","#dc2626","#999"],
+          borderWidth: 0 }] },
+      options: { plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+    });
+  }
+}
+
+// ── Drill Down Side Panel ─────────────────────────────────────────────────────
+function openDrillDown(type) {
+  const titles = {
+    nocomms: { title: "No Communications", sub: `Devices silent > ${fleetThresholds.noCommsWarn}h` },
+    moved:   { title: "Moved / Tamper Alert", sub: "Devices that have moved recently" },
+    temp:    { title: "Temperature Alert", sub: "Devices outside temperature threshold" },
+    voltage: { title: "Voltage Alert", sub: "Devices below voltage threshold" }
+  };
+  const filters = {
+    nocomms: d => d.commsStatus !== "ok",
+    moved:   d => d.movedRecently,
+    temp:    d => d.tempStatus !== "ok" && d.tempStatus !== "unknown",
+    voltage: d => d.voltStatus !== "ok" && d.voltStatus !== "unknown"
+  };
+
+  drillDownType = type;
+  drillDownData = fleetHealthData.filter(filters[type] || (() => true));
+  drillDownPage = 0;
+
+  const titleEl = document.getElementById("fh-drill-title");
+  const subEl   = document.getElementById("fh-drill-subtitle");
+  if (titleEl) titleEl.textContent = titles[type]?.title || "Device Details";
+  if (subEl)   subEl.textContent   = `${drillDownData.length} devices — ${titles[type]?.sub || ""}`;
+
+  // Clear search
+  const searchEl = document.getElementById("fh-drill-search");
+  if (searchEl) searchEl.value = "";
+
+  renderDrillList();
+
+  // Slide in panel
+  const panel    = document.getElementById("fh-drill-panel");
+  const backdrop = document.getElementById("fh-drill-backdrop");
+  if (panel)    panel.style.right = "0px";
+  if (backdrop) backdrop.style.display = "block";
+}
+
+function closeDrillDown() {
+  const panel    = document.getElementById("fh-drill-panel");
+  const backdrop = document.getElementById("fh-drill-backdrop");
+  if (panel)    panel.style.right = "-480px";
+  if (backdrop) backdrop.style.display = "none";
+  drillDownType = null;
+}
+
+function drillPage(dir) {
+  const search   = document.getElementById("fh-drill-search")?.value?.toLowerCase() || "";
+  const filtered = drillDownData.filter(d =>
+    !search || d.uid.toLowerCase().includes(search) || d.name.toLowerCase().includes(search)
+  );
+  const maxPage = Math.ceil(filtered.length / DRILL_PAGE_SIZE) - 1;
+  drillDownPage = Math.max(0, Math.min(maxPage, drillDownPage + dir));
+  renderDrillList();
+}
+
+function renderDrillList() {
+  const list     = document.getElementById("fh-drill-list");
+  const search   = document.getElementById("fh-drill-search")?.value?.toLowerCase() || "";
+  const prevBtn  = document.getElementById("fh-drill-prev");
+  const nextBtn  = document.getElementById("fh-drill-next");
+  const pageLabel= document.getElementById("fh-drill-page-label");
+  if (!list) return;
+
+  const filtered = drillDownData.filter(d =>
+    !search || d.uid.toLowerCase().includes(search) || d.name.toLowerCase().includes(search)
+  );
+  const totalPages = Math.ceil(filtered.length / DRILL_PAGE_SIZE) || 1;
+  const page = drillDownData.slice(
+    drillDownPage * DRILL_PAGE_SIZE,
+    (drillDownPage + 1) * DRILL_PAGE_SIZE
+  );
+
+  if (pageLabel) pageLabel.textContent = `Page ${drillDownPage+1} of ${totalPages} (${filtered.length} devices)`;
+  if (prevBtn)   prevBtn.disabled = drillDownPage === 0;
+  if (nextBtn)   nextBtn.disabled = drillDownPage >= totalPages - 1;
+
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="sched-empty">No devices match.</div>`;
     return;
   }
 
-  const statusBadge = (status) => {
-    const colors = { ok:"var(--green-dark)", warning:"var(--amber)", critical:"var(--red)", offline:"var(--text-hint)" };
-    const labels = { ok:"✅ OK", warning:"⚠️ Warning", critical:"🔴 Critical", offline:"⚫ Offline" };
-    return `<span style="color:${colors[status]||'var(--text-secondary)'};font-weight:600;font-size:11px;">${labels[status]||status}</span>`;
-  };
+  const statusColors = { ok:"var(--green-dark)", warning:"var(--amber)", critical:"var(--red)", offline:"var(--text-hint)" };
 
-  const wrap = document.createElement("div");
-  wrap.style.overflowX = "auto";
-  const table = document.createElement("table");
-  table.style.cssText = "width:100%;border-collapse:collapse;font-size:12px;";
-
-  const thead = table.createTHead();
-  const hrow  = thead.insertRow();
-  ["Device","Last Seen","Voltage","Temp","Signal","Location","Firmware","Status"].forEach(h => {
-    const th = document.createElement("th");
-    th.textContent = h;
-    th.style.cssText = "text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);white-space:nowrap;";
-    hrow.appendChild(th);
-  });
-
-  const tbody = table.createTBody();
-  data.forEach(d => {
-    const tr = tbody.insertRow();
-    const lastSeenStr = d.lastSeen ? new Date(d.lastSeen).toLocaleString() : "Never";
-    const hoursStr    = d.hoursAgo < 999 ? `(${Math.round(d.hoursAgo)}h ago)` : "";
-    const voltColor   = d.voltStatus === "critical" ? "var(--red)" : d.voltStatus === "warning" ? "var(--amber)" : "var(--text-primary)";
-    const tempColor   = d.tempStatus === "critical" ? "var(--red)" : d.tempStatus === "warning" ? "var(--amber)" : "var(--text-primary)";
-    const barsStr     = d.bars ? "▮".repeat(d.bars) + "▯".repeat(5-d.bars) : "—";
-
-    const cells = [
-      `<strong>${d.name}</strong><div style="font-size:10px;color:var(--text-hint);">${d.uid}</div>`,
-      `${lastSeenStr}<div style="font-size:10px;color:var(--text-hint);">${hoursStr}${d.movedRecently ? " 🚨 Moved" : ""}</div>`,
-      `<span style="color:${voltColor};font-weight:600;">${d.voltage ? d.voltage.toFixed(3)+"V" : "—"}</span>`,
-      `<span style="color:${tempColor};font-weight:600;">${d.temp ? d.temp.toFixed(1)+"°C" : "—"}</span>`,
-      `<span title="RSRP: ${d.rsrp||'—'}">${barsStr} ${d.rsrp ? d.rsrp+"dBm" : ""}</span>`,
-      d.location || "—",
-      d.firmware ? d.firmware.replace("notecard-u5-","v") : "—",
-      statusBadge(d.overallStatus)
-    ];
-
-    cells.forEach(html => {
-      const td = tr.insertCell();
-      td.innerHTML = html;
-      td.style.cssText = "padding:8px;border-bottom:0.5px solid var(--border);vertical-align:top;";
-    });
-  });
-
-  wrap.appendChild(table);
-  container.innerHTML = "";
-  container.appendChild(wrap);
+  list.innerHTML = filtered
+    .slice(drillDownPage * DRILL_PAGE_SIZE, (drillDownPage + 1) * DRILL_PAGE_SIZE)
+    .map(d => {
+      const lastSeenStr = d.lastSeen ? new Date(d.lastSeen).toLocaleString() : "Never";
+      const sc = statusColors[d.overallStatus] || "var(--text-secondary)";
+      return `<div style="padding:10px 0;border-bottom:0.5px solid var(--border);cursor:pointer;" onclick="showDeviceDrillDetail('${d.uid}')">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div style="font-weight:600;font-size:13px;">${d.name}</div>
+            <div style="font-size:10px;color:var(--text-hint);margin-top:1px;">${d.uid}</div>
+          </div>
+          <span style="color:${sc};font-size:11px;font-weight:600;">${d.overallStatus.toUpperCase()}</span>
+        </div>
+        <div style="display:flex;gap:12px;margin-top:6px;font-size:11px;color:var(--text-secondary);">
+          <span>🕐 ${lastSeenStr}</span>
+          ${d.voltage ? `<span>🔋 ${d.voltage.toFixed(3)}V</span>` : ""}
+          ${d.temp ? `<span>🌡️ ${d.temp.toFixed(1)}°C</span>` : ""}
+          ${d.rsrp ? `<span>📶 ${d.rsrp}dBm</span>` : ""}
+          ${d.movedRecently ? `<span style="color:var(--amber);">🚨 Moved</span>` : ""}
+        </div>
+        ${d.location ? `<div style="font-size:10px;color:var(--text-hint);margin-top:2px;">📍 ${d.location}</div>` : ""}
+        <div style="font-size:10px;color:var(--blue);margin-top:3px;">Click for details & health check →</div>
+      </div>`;
+    }).join("");
 }
 
-function exportAlertCSV(type) {
-  const maps = {
-    nocomms: { data: fleetHealthData.filter(d => d.commsStatus !== "ok"), label: "No_Comms" },
-    moved:   { data: fleetHealthData.filter(d => d.movedRecently),        label: "Moved_Tamper" },
-    temp:    { data: fleetHealthData.filter(d => d.tempStatus !== "ok"),   label: "Temperature" },
-    voltage: { data: fleetHealthData.filter(d => d.voltStatus !== "ok"),   label: "Voltage" }
-  };
-  const { data, label } = maps[type] || {};
-  if (!data) return;
-  const csv = ["Device Name,Device UID,Last Seen,Voltage,Temp,RSRP,Bars,Location,Status",
-    ...data.map(d => `"${d.name}","${d.uid}","${d.lastSeen||''}","${d.voltage||''}","${d.temp||''}","${d.rsrp||''}","${d.bars||''}","${d.location||''}","${d.overallStatus}"`)
+function showDeviceDrillDetail(uid) {
+  const d = fleetHealthData.find(x => x.uid === uid);
+  if (!d) return;
+  const modal = document.getElementById("event-modal");
+  const body  = document.getElementById("event-modal-body");
+  if (!modal || !body) return;
+
+  body.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:1rem;">
+      <div><div style="font-size:10px;color:var(--text-hint);">Device</div><div style="font-weight:600;">${d.name}</div></div>
+      <div><div style="font-size:10px;color:var(--text-hint);">UID</div><div style="font-family:monospace;font-size:11px;">${d.uid}</div></div>
+      <div><div style="font-size:10px;color:var(--text-hint);">Last Seen</div><div>${d.lastSeen ? new Date(d.lastSeen).toLocaleString() : "Never"}</div></div>
+      <div><div style="font-size:10px;color:var(--text-hint);">Hours Ago</div><div>${Math.round(d.hoursAgo)}h</div></div>
+      <div><div style="font-size:10px;color:var(--text-hint);">Voltage</div><div style="font-weight:600;color:${d.voltStatus==='critical'?'var(--red)':d.voltStatus==='warning'?'var(--amber)':'inherit'}">${d.voltage ? d.voltage.toFixed(3)+"V" : "—"}</div></div>
+      <div><div style="font-size:10px;color:var(--text-hint);">Temperature</div><div style="font-weight:600;color:${d.tempStatus==='critical'?'var(--red)':d.tempStatus==='warning'?'var(--amber)':'inherit'}">${d.temp ? d.temp.toFixed(1)+"°C" : "—"}</div></div>
+      <div><div style="font-size:10px;color:var(--text-hint);">RSRP</div><div>${d.rsrp ? d.rsrp+"dBm" : "—"}</div></div>
+      <div><div style="font-size:10px;color:var(--text-hint);">Signal Bars</div><div>${d.bars ? "▮".repeat(d.bars)+"▯".repeat(5-d.bars) : "—"}</div></div>
+      <div><div style="font-size:10px;color:var(--text-hint);">Firmware</div><div>${d.firmware ? d.firmware.replace("notecard-u5-","v") : "—"}</div></div>
+      <div><div style="font-size:10px;color:var(--text-hint);">Orientation</div><div>${d.orientation || "—"}</div></div>
+      <div><div style="font-size:10px;color:var(--text-hint);">Location</div><div>${d.location || "—"}</div></div>
+      <div><div style="font-size:10px;color:var(--text-hint);">Moved Recently</div><div>${d.movedRecently ? "🚨 Yes" : "✅ No"}</div></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;">
+      <button onclick="requestHealthCheck('${uid}','${uid}');document.getElementById('event-modal').style.display='none';"
+        style="padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--green);background:transparent;color:var(--green-dark);font-size:12px;cursor:pointer;">
+        🩺 Request Health Check
+      </button>
+    </div>`;
+
+  modal.style.display = "flex";
+}
+
+function exportDrillCSV() {
+  if (!drillDownData.length) return;
+  const csv = ["Device Name,Device UID,Last Seen,Hours Ago,Voltage,Temp,RSRP,Bars,Firmware,Location,Moved,Overall Status",
+    ...drillDownData.map(d =>
+      `"${d.name}","${d.uid}","${d.lastSeen||''}","${Math.round(d.hoursAgo)}","${d.voltage||''}","${d.temp||''}","${d.rsrp||''}","${d.bars||''}","${d.firmware||''}","${d.location||''}","${d.movedRecently?'Yes':'No'}","${d.overallStatus}"`)
   ].join("\n");
-  downloadCSV(csv, `Fleet_Health_${label}_${new Date().toISOString().split("T")[0]}.csv`);
+  downloadCSV(csv, `Fleet_Alert_${drillDownType}_${new Date().toISOString().split("T")[0]}.csv`);
 }
 
 function exportFleetCSV() {
-  const csv = ["Device Name,Device UID,Last Seen,Hours Since Comms,Voltage,Temp,RSRP,Bars,Firmware,Location,Comms Status,Volt Status,Temp Status,Overall Status",
-    ...fleetHealthData.map(d => `"${d.name}","${d.uid}","${d.lastSeen||''}","${Math.round(d.hoursAgo)}","${d.voltage||''}","${d.temp||''}","${d.rsrp||''}","${d.bars||''}","${d.firmware||''}","${d.location||''}","${d.commsStatus}","${d.voltStatus}","${d.tempStatus}","${d.overallStatus}"`)
+  if (!fleetHealthData.length) return;
+  const csv = ["Device Name,Device UID,Last Seen,Hours Ago,Voltage,Temp,RSRP,Bars,Firmware,Location,Moved,Comms,Volt,Temp Status,Overall",
+    ...fleetHealthData.map(d =>
+      `"${d.name}","${d.uid}","${d.lastSeen||''}","${Math.round(d.hoursAgo)}","${d.voltage||''}","${d.temp||''}","${d.rsrp||''}","${d.bars||''}","${d.firmware||''}","${d.location||''}","${d.movedRecently?'Yes':'No'}","${d.commsStatus}","${d.voltStatus}","${d.tempStatus}","${d.overallStatus}"`)
   ].join("\n");
-  downloadCSV(csv, `Fleet_Health_Full_${new Date().toISOString().split("T")[0]}.csv`);
+  downloadCSV(csv, `Fleet_Health_${new Date().toISOString().split("T")[0]}.csv`);
 }
 
 function downloadCSV(csv, filename) {
@@ -5320,49 +5489,41 @@ function downloadCSV(csv, filename) {
 }
 
 async function generateFleetPDF() {
-  // Load skill and generate PDF
-  alert("PDF report generation coming soon — export CSV for now.");
+  alert("PDF generation will be built next. Use Export CSV for now.");
 }
 
 async function runHealthCheckNow() {
-  const statusEl = document.getElementById("fh-nightly-status");
+  const statusEl   = document.getElementById("fh-nightly-status");
   const progressEl = document.getElementById("fh-nightly-progress");
-  const progressBar = document.getElementById("fh-progress-bar");
-  const progressLabel = document.getElementById("fh-progress-label");
+  const progressBar= document.getElementById("fh-progress-bar");
+  const progressLbl= document.getElementById("fh-progress-label");
 
   const realDevices = DEVICES.filter(d => !d.uid.includes('PLACEHOLDER'));
   const total = realDevices.length;
-  if (total === 0) { if (statusEl) statusEl.textContent = "No devices to check."; return; }
+  if (!total) { if (statusEl) statusEl.textContent = "No devices to check."; return; }
 
-  if (progressEl) progressEl.style.display = "block";
-  if (statusEl) statusEl.textContent = `Running health check on ${total} device(s)...`;
+  if (progressEl) progressEl.style.display = "flex";
+  if (statusEl)   statusEl.textContent = `Sending health check to ${total} device(s)...`;
 
   for (let i = 0; i < realDevices.length; i++) {
-    const device = realDevices[i];
     const pct = Math.round(((i+1)/total)*100);
     if (progressBar) progressBar.style.width = pct + "%";
-    if (progressLabel) progressLabel.textContent = `${i+1} / ${total} devices checked`;
-
-    // Send _restart env var
+    if (progressLbl) progressLbl.textContent = `${i+1} / ${total} devices`;
     try {
       await fetch(`${PROXY_URL}env`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          deviceUID: device.uid,
+          deviceUID: realDevices[i].uid,
           environment_variables: { _restart: String(Math.floor(Date.now()/1000)) }
         })
       });
-    } catch(e) { console.error("Health check send error:", device.uid, e); }
-
-    // Stagger — wait 100ms between devices (adjustable for large fleets)
-    await new Promise(r => setTimeout(r, 100));
+    } catch(e) { console.error("Health check error:", realDevices[i].uid, e); }
+    await new Promise(r => setTimeout(r, 150));
   }
 
-  if (statusEl) statusEl.textContent = `✅ Health check sent to ${total} device(s). Data will populate as devices respond.`;
-  setTimeout(() => { if (progressEl) progressEl.style.display = "none"; }, 5000);
-
-  // Reload health data after 60 seconds
+  if (statusEl) statusEl.textContent = `✅ Health check sent to ${total} device(s). Refreshing in 60s...`;
+  setTimeout(() => { if (progressEl) progressEl.style.display = "none"; }, 3000);
   setTimeout(() => loadFleetHealth(), 60000);
 }
 
@@ -5370,22 +5531,17 @@ function scheduleNightlyCheck() {
   if (nightlyCheckTimer) clearTimeout(nightlyCheckTimer);
   const enabled = document.getElementById("th-health-enabled")?.value !== "false";
   if (!enabled) return;
-
   const now = new Date();
   const midnight = new Date(now);
-  midnight.setHours(0, 0, 0, 0);
-  midnight.setDate(midnight.getDate() + (now.getHours() >= 2 ? 1 : 0));
-
-  const msUntilMidnight = midnight.getTime() - now.getTime();
+  midnight.setHours(0,0,0,0);
+  if (now.getHours() >= 2) midnight.setDate(midnight.getDate() + 1);
+  const msUntil = midnight.getTime() - now.getTime();
   nightlyCheckTimer = setTimeout(() => {
     runHealthCheckNow();
-    // Re-schedule for next night
-    setTimeout(scheduleNightlyCheck, 2 * 60 * 60 * 1000);
-  }, msUntilMidnight);
-
-  console.log(`Nightly health check scheduled in ${Math.round(msUntilMidnight/3600000)}h`);
+    setTimeout(scheduleNightlyCheck, 2*60*60*1000);
+  }, msUntil);
+  console.log(`Nightly health check scheduled in ${Math.round(msUntil/3600000)}h`);
 }
-
 function buildControls() {
   const grid = document.getElementById("devices-grid");
   grid.innerHTML = "";
