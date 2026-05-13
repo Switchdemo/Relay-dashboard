@@ -1609,6 +1609,38 @@
             <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Select Group</label>
             <select id="em-target-group" class="sched-select" style="width:100%;font-size:12px;"></select>
           </div>
+          <!-- Schedule Fields -->
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Start Date</label>
+            <input type="date" id="em-start-date"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Stop Date</label>
+            <input type="date" id="em-stop-date"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Start Hour (0–23)</label>
+            <select id="em-start-hour" class="sched-select" style="width:100%;font-size:12px;">
+              ${[...Array(24)].map((_,h) => `<option value="${h}">${h === 0 ? '12 AM' : h < 12 ? h+' AM' : h === 12 ? '12 PM' : (h-12)+' PM'}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Stop Hour (0–23)</label>
+            <select id="em-stop-hour" class="sched-select" style="width:100%;font-size:12px;">
+              ${[...Array(24)].map((_,h) => `<option value="${h}" ${h===23?'selected':''}>${h === 0 ? '12 AM' : h < 12 ? h+' AM' : h === 12 ? '12 PM' : (h-12)+' PM'}</option>`).join('')}
+            </select>
+          </div>
+          <div style="grid-column:1/-1;">
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:5px;">Days of Week</label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d,i) =>
+                `<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;">
+                  <input type="checkbox" class="em-dow" value="${i}" checked style="accent-color:var(--text-primary);"> ${d}
+                </label>`).join('')}
+            </div>
+          </div>
           <div style="grid-column:1/-1;">
             <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Notes (optional)</label>
             <input type="text" id="em-notes" placeholder="Purpose of this energy monitor..."
@@ -1620,7 +1652,7 @@
             style="padding:8px 20px;border-radius:var(--radius-sm);border:none;background:var(--text-primary);color:white;font-size:13px;font-weight:600;cursor:pointer;">
             ⚡ Start Energy Monitor
           </button>
-          <div style="font-size:11px;color:var(--text-hint);">Collects data every 5 minutes continuously until stopped</div>
+          <div style="font-size:11px;color:var(--text-hint);">Collects data every 5 min within scheduled window</div>
         </div>
         <div id="em-form-status" style="font-size:12px;margin-top:8px;display:none;"></div>
       </div>
@@ -6302,6 +6334,36 @@ async function startEnergyMonitor() {
       });
     }
 
+    // Get schedule fields
+    const startDate  = document.getElementById("em-start-date")?.value || null;
+    const stopDate   = document.getElementById("em-stop-date")?.value  || null;
+    const startHour  = parseInt(document.getElementById("em-start-hour")?.value || "0");
+    const stopHour   = parseInt(document.getElementById("em-stop-hour")?.value  || "23");
+    const dowChecked = [...document.querySelectorAll(".em-dow:checked")].map(cb => parseInt(cb.value));
+    const daysOfWeek = dowChecked.length ? dowChecked : [0,1,2,3,4,5,6];
+
+    // Validate schedule
+    if (startDate && stopDate && startDate > stopDate) {
+      if (statusEl) { statusEl.textContent = "Stop date must be after start date."; statusEl.style.color = "var(--red)"; statusEl.style.display = "block"; }
+      return;
+    }
+
+    // Check if we're currently in the monitoring window
+    const now = new Date();
+    const inWindow = isInEnergyWindow({ start_date: startDate, stop_date: stopDate, start_hour: startHour, stop_hour: stopHour, days_of_week: daysOfWeek }, now);
+
+    // Only set 5-min bubble-up if we're currently in the window
+    if (inWindow) {
+      for (const uid of targetIds) {
+        const hex = buildAssignBubbleUpHex(5);
+        await fetch(PROXY_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Device-UID": uid },
+          body: JSON.stringify({ body: { LC: hex }, req: "note.add", sync: true })
+        });
+      }
+    }
+
     // Create monitor record
     const res = await fetch(`${SUPABASE_URL}/rest/v1/energy_monitors`, {
       method: "POST",
@@ -6314,7 +6376,10 @@ async function startEnergyMonitor() {
       body: JSON.stringify({
         name, created_by: currentUser?.id,
         status: "active", target_type: type,
-        target_ids: targetIds, notes: notes || null
+        target_ids: targetIds, notes: notes || null,
+        start_date: startDate, stop_date: stopDate,
+        start_hour: startHour, stop_hour: stopHour,
+        days_of_week: daysOfWeek
       })
     });
 
@@ -6338,13 +6403,69 @@ async function startEnergyMonitor() {
   }
 }
 
+function isInEnergyWindow(monitor, now = new Date()) {
+  const { start_date, stop_date, start_hour, stop_hour, days_of_week } = monitor;
+  const dateStr = now.toISOString().split("T")[0];
+  const hour    = now.getHours();
+  const dow     = now.getDay();
+
+  if (start_date && dateStr < start_date) return false;
+  if (stop_date  && dateStr > stop_date)  return false;
+  if (Array.isArray(days_of_week) && days_of_week.length && !days_of_week.includes(dow)) return false;
+  if (start_hour != null && stop_hour != null) {
+    if (start_hour <= stop_hour) {
+      if (hour < start_hour || hour > stop_hour) return false;
+    } else {
+      // Overnight window (e.g. 22:00 to 06:00)
+      if (hour < start_hour && hour > stop_hour) return false;
+    }
+  }
+  return true;
+}
+
 function startEnergyPoll(monitor) {
-  // Clear existing timer for this monitor
   if (energyPollTimers[monitor.id]) clearInterval(energyPollTimers[monitor.id]);
 
-  // Collect immediately then every 5 minutes
-  collectEnergyReadings(monitor);
-  energyPollTimers[monitor.id] = setInterval(() => collectEnergyReadings(monitor), 5 * 60 * 1000);
+  // Check window and collect/adjust bubble-up every 5 minutes
+  const tick = async () => {
+    const now = new Date();
+    const inWindow = isInEnergyWindow(monitor, now);
+
+    // Auto-stop if past stop_date
+    if (monitor.stop_date && now.toISOString().split("T")[0] > monitor.stop_date) {
+      console.log(`Energy monitor ${monitor.id} reached stop date — auto-stopping`);
+      await stopEnergyMonitor(monitor.id, monitor.name);
+      return;
+    }
+
+    if (inWindow) {
+      // Ensure 5-min bubble-up is set
+      for (const uid of (monitor.target_ids || [])) {
+        const hex = buildAssignBubbleUpHex(5);
+        await fetch(PROXY_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Device-UID": uid },
+          body: JSON.stringify({ body: { LC: hex }, req: "note.add", sync: true })
+        });
+      }
+      collectEnergyReadings(monitor);
+    } else {
+      // Outside window — restore schedule interval
+      const restoreRule = evaluateRules(now);
+      const restoreMins = restoreRule?.intervalMins || 240;
+      for (const uid of (monitor.target_ids || [])) {
+        const hex = buildAssignBubbleUpHex(restoreMins);
+        await fetch(PROXY_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Device-UID": uid },
+          body: JSON.stringify({ body: { LC: hex }, req: "note.add", sync: true })
+        });
+      }
+    }
+  };
+
+  tick(); // Run immediately
+  energyPollTimers[monitor.id] = setInterval(tick, 5 * 60 * 1000);
 }
 
 async function collectEnergyReadings(monitor) {
@@ -6442,6 +6563,11 @@ async function loadEnergyMonitors() {
             </span>
           </div>
           <div class="sched-detail">${devCount} device(s) · 5 min interval · Started ${startStr}</div>
+          <div class="sched-detail" style="color:var(--text-hint);">
+            ${m.start_date || 'No start'} → ${m.stop_date || 'No end'} · 
+            Hours: ${m.start_hour ?? 0}:00–${m.stop_hour ?? 23}:59 · 
+            Days: ${(m.days_of_week||[0,1,2,3,4,5,6]).map(d=>['Su','Mo','Tu','We','Th','Fr','Sa'][d]).join(', ')}
+          </div>
           ${m.notes ? `<div class="sched-detail" style="color:var(--text-hint);">${m.notes}</div>` : ""}
         </div>
         <div class="sched-actions">
