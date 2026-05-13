@@ -5162,7 +5162,10 @@ async function loadLatestDevice(deviceId) {
               📍 ${h.location || "—"} &bull; 🕐 ${new Date(h.recorded_at).toLocaleString()}
             </div>`;
         } else {
-          healthEl.innerHTML = `<div style="font-size:11px;color:var(--text-hint);padding:6px 0;">Signal: SW=${r.sw_value ?? "—"} SQ=${r.sq_value ?? "—"} &bull; No extended health data yet</div>`;
+          // Only show "no data" message if strip is currently empty
+          if (!healthEl.innerHTML.includes('health-strip')) {
+            healthEl.innerHTML = `<div style="font-size:11px;color:var(--text-hint);padding:6px 0;">SW=${r.sw_value ?? "—"} SQ=${r.sq_value ?? "—"} &bull; No health data yet — click 🩺 Health Check</div>`;
+          }
         }
       } catch(e) { console.error("Health load error:", e); }
     }
