@@ -425,6 +425,7 @@
     <button class="sub-tab-btn active" id="sub-admin-users" onclick="switchSub('admin','admin-users',this)">User Management</button>
     <button class="sub-tab-btn" id="sub-admin-health" onclick="switchSub('admin','admin-health',this)">Fleet Health</button>
     <button class="sub-tab-btn" id="sub-admin-monitor" onclick="switchSub('admin','admin-monitor',this)">Device Monitoring</button>
+    <button class="sub-tab-btn" id="sub-admin-energy" onclick="switchSub('admin','admin-energy',this)">Energy Monitor</button>
   </div>
   <div class="sub-tabs" id="sub-tabs-events" style="display:none;">
     <button class="sub-tab-btn active" id="sub-scheduler" onclick="switchSub('events','scheduler',this)">Event Scheduler</button>
@@ -1566,6 +1567,121 @@
   </div>
 </div>
 
+<!-- ── ENERGY MONITOR TAB ── -->
+<div class="tab-pane" id="tab-admin-energy">
+  <div class="scroll-content">
+    <div style="max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <!-- Active Monitors Banner -->
+      <div id="em-active-banner" style="display:none;background:var(--blue-bg);border:0.5px solid var(--blue);border-radius:var(--radius-sm);padding:10px 16px;">
+        <span style="font-size:12px;font-weight:600;color:var(--blue-dark);">📊 <span id="em-active-count">0</span> Active Energy Monitor(s)</span>
+      </div>
+
+      <!-- New Monitor Form -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">New Energy Monitor</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div style="grid-column:1/-1;">
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Monitor Name</label>
+            <input type="text" id="em-name" placeholder="e.g. Unit 6023 AC Load Research"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Target Type</label>
+            <select id="em-target-type" class="sched-select" style="width:100%;font-size:12px;" onchange="updateEnergyTargetUI()">
+              <option value="device">Individual Device</option>
+              <option value="list">Custom Device List</option>
+              <option value="group">Group</option>
+            </select>
+          </div>
+          <div id="em-target-device-wrap">
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Select Device</label>
+            <select id="em-target-device" class="sched-select" style="width:100%;font-size:12px;"></select>
+          </div>
+          <div id="em-target-list-wrap" style="display:none;grid-column:1/-1;">
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Device UIDs (one per line)</label>
+            <textarea id="em-target-list" rows="3" placeholder="dev:868032061596023"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;font-family:monospace;resize:vertical;"></textarea>
+          </div>
+          <div id="em-target-group-wrap" style="display:none;">
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Select Group</label>
+            <select id="em-target-group" class="sched-select" style="width:100%;font-size:12px;"></select>
+          </div>
+          <div style="grid-column:1/-1;">
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Notes (optional)</label>
+            <input type="text" id="em-notes" placeholder="Purpose of this energy monitor..."
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button onclick="startEnergyMonitor()"
+            style="padding:8px 20px;border-radius:var(--radius-sm);border:none;background:var(--text-primary);color:white;font-size:13px;font-weight:600;cursor:pointer;">
+            ⚡ Start Energy Monitor
+          </button>
+          <div style="font-size:11px;color:var(--text-hint);">Collects data every 5 minutes continuously until stopped</div>
+        </div>
+        <div id="em-form-status" style="font-size:12px;margin-top:8px;display:none;"></div>
+      </div>
+
+      <!-- Chart View -->
+      <div class="sched-card" id="em-chart-card" style="display:none;">
+        <div class="sched-card-header">
+          <div class="sched-card-title">Energy Trend</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <select id="em-chart-monitor" class="history-select" onchange="loadEnergyChartData()"></select>
+            <select id="em-chart-device" class="history-select" onchange="loadEnergyChartData()"></select>
+            <select id="em-chart-window" class="history-select" onchange="loadEnergyChartData()">
+              <option value="24">Last 24 Hours</option>
+              <option value="72">Last 3 Days</option>
+              <option value="168" selected>Last 7 Days</option>
+              <option value="336">Last 14 Days</option>
+              <option value="720">Last 30 Days</option>
+            </select>
+            <button class="queue-refresh" onclick="loadEnergyChartData()">Refresh</button>
+            <button class="queue-refresh" style="color:var(--green-dark);border-color:var(--green);" onclick="exportEnergyCSV()">Export CSV</button>
+          </div>
+        </div>
+
+        <!-- Summary Stats -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px;" id="em-stats-row">
+          <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px;text-align:center;">
+            <div style="font-size:18px;font-weight:700;color:var(--text-primary);" id="em-avg-watts">—</div>
+            <div style="font-size:10px;color:var(--text-hint);">Avg Watts</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px;text-align:center;">
+            <div style="font-size:18px;font-weight:700;color:var(--text-primary);" id="em-max-watts">—</div>
+            <div style="font-size:10px;color:var(--text-hint);">Peak Watts</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px;text-align:center;">
+            <div style="font-size:18px;font-weight:700;color:var(--text-primary);" id="em-avg-current">—</div>
+            <div style="font-size:10px;color:var(--text-hint);">Avg Current</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px;text-align:center;">
+            <div style="font-size:18px;font-weight:700;color:var(--text-primary);" id="em-readings-count">—</div>
+            <div style="font-size:10px;color:var(--text-hint);">Readings</div>
+          </div>
+        </div>
+
+        <canvas id="em-energy-chart" height="280"></canvas>
+      </div>
+
+      <!-- Active & Past Monitors -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">Energy Monitors</div>
+          <button class="queue-refresh" onclick="loadEnergyMonitors()">Refresh</button>
+        </div>
+        <div id="em-monitors-list">
+          <div class="sched-empty">Loading monitors...</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- ── DRILL DOWN SIDE PANEL ── -->
 <div id="fh-drill-panel" style="position:fixed;top:0;right:-480px;width:480px;height:100vh;background:var(--surface);border-left:0.5px solid var(--border-md);z-index:1000;transition:right 0.3s ease;display:flex;flex-direction:column;box-shadow:-4px 0 20px rgba(0,0,0,0.15);">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:0.5px solid var(--border-md);">
@@ -1743,6 +1859,7 @@ function runTabInit(name) {
   if (name === "admin-users") { updateAdminHeader(); loadUsersTable(); }
   if (name === "admin-health") { initFleetHealth(); }
   if (name === "admin-monitor") { initMonitoring(); }
+  if (name === "admin-energy")  { initEnergyMonitor(); }
 }
 
 function switchTab(name, btn) { switchMain(name, btn); }
@@ -6110,6 +6227,445 @@ async function exportSessionCSV(sessionId, sessionName) {
 
 async function exportMonitoringCSV() {
   if (activeSession) await exportSessionCSV(activeSession.id, activeSession.name);
+}
+
+// ── ENERGY MONITOR ───────────────────────────────────────────────────────────
+let energyChart       = null;
+let energyChartData   = [];
+let activeEnergyMonitors = [];
+let energyPollTimers  = {}; // { monitorId: intervalId }
+
+async function initEnergyMonitor() {
+  // Populate device dropdowns
+  const devSel = document.getElementById("em-target-device");
+  if (devSel) {
+    devSel.innerHTML = DEVICES.filter(d => !d.uid.includes('PLACEHOLDER'))
+      .map(d => `<option value="${d.uid}">${d.name}</option>`).join("");
+  }
+  const grpSel = document.getElementById("em-target-group");
+  if (grpSel) {
+    const gNames = Object.entries(groupNames || {});
+    grpSel.innerHTML = gNames.length
+      ? gNames.map(([num, name]) => `<option value="group_${num}">${name}</option>`).join("")
+      : `<option value="">No groups defined</option>`;
+  }
+  await loadEnergyMonitors();
+}
+
+function updateEnergyTargetUI() {
+  const type = document.getElementById("em-target-type")?.value;
+  document.getElementById("em-target-device-wrap").style.display = type === "device" ? "" : "none";
+  document.getElementById("em-target-list-wrap").style.display   = type === "list"   ? "" : "none";
+  document.getElementById("em-target-group-wrap").style.display  = type === "group"  ? "" : "none";
+}
+
+async function startEnergyMonitor() {
+  const name    = document.getElementById("em-name")?.value?.trim();
+  const type    = document.getElementById("em-target-type")?.value;
+  const notes   = document.getElementById("em-notes")?.value?.trim();
+  const statusEl= document.getElementById("em-form-status");
+
+  if (!name) {
+    if (statusEl) { statusEl.textContent = "Please enter a monitor name."; statusEl.style.color = "var(--red)"; statusEl.style.display = "block"; }
+    return;
+  }
+
+  // Get target UIDs
+  let targetIds = [];
+  if (type === "device") {
+    const uid = document.getElementById("em-target-device")?.value;
+    if (uid) targetIds = [uid];
+  } else if (type === "list") {
+    const raw = document.getElementById("em-target-list")?.value || "";
+    targetIds = raw.split("\n").map(s => s.trim()).filter(s => s.startsWith("dev:"));
+  } else if (type === "group") {
+    const gVal = document.getElementById("em-target-group")?.value;
+    const gNum = parseInt(gVal?.replace("group_",""));
+    targetIds = DEVICES.filter(d => (groupAssignments[d.uid]||[]).includes(gNum)).map(d => d.uid);
+  }
+
+  if (!targetIds.length) {
+    if (statusEl) { statusEl.textContent = "No valid devices selected."; statusEl.style.color = "var(--red)"; statusEl.style.display = "block"; }
+    return;
+  }
+
+  if (statusEl) { statusEl.textContent = "Starting energy monitor..."; statusEl.style.color = "var(--text-secondary)"; statusEl.style.display = "block"; }
+
+  try {
+    // Set 5-minute bubble-up on all target devices
+    for (const uid of targetIds) {
+      const hex = buildAssignBubbleUpHex(5);
+      await fetch(PROXY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Device-UID": uid },
+        body: JSON.stringify({ body: { LC: hex }, req: "note.add", sync: true })
+      });
+    }
+
+    // Create monitor record
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/energy_monitors`, {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+      },
+      body: JSON.stringify({
+        name, created_by: currentUser?.id,
+        status: "active", target_type: type,
+        target_ids: targetIds, notes: notes || null
+      })
+    });
+
+    if (!res.ok) throw new Error(await res.text());
+    const [saved] = await res.json();
+
+    // Start polling every 5 minutes to collect readings
+    startEnergyPoll(saved);
+
+    if (statusEl) { statusEl.textContent = `✅ Energy monitor started — collecting data every 5 min from ${targetIds.length} device(s).`; statusEl.style.color = "var(--green-dark)"; }
+
+    // Clear form
+    document.getElementById("em-name").value = "";
+    document.getElementById("em-notes").value = "";
+
+    await loadEnergyMonitors();
+
+  } catch(e) {
+    console.error("startEnergyMonitor:", e);
+    if (statusEl) { statusEl.textContent = `Error: ${e.message}`; statusEl.style.color = "var(--red)"; }
+  }
+}
+
+function startEnergyPoll(monitor) {
+  // Clear existing timer for this monitor
+  if (energyPollTimers[monitor.id]) clearInterval(energyPollTimers[monitor.id]);
+
+  // Collect immediately then every 5 minutes
+  collectEnergyReadings(monitor);
+  energyPollTimers[monitor.id] = setInterval(() => collectEnergyReadings(monitor), 5 * 60 * 1000);
+}
+
+async function collectEnergyReadings(monitor) {
+  if (!monitor?.target_ids?.length) return;
+  for (const uid of monitor.target_ids) {
+    try {
+      // Get latest device_readings for this device
+      const rows = await supabaseGet(
+        `device_readings?device_uid=eq.${encodeURIComponent(uid)}&order=recorded_at.desc&limit=1`
+      );
+      if (!Array.isArray(rows) || !rows.length) continue;
+      const r = rows[0];
+
+      // Get current outside temp from weather data if available
+      const outsideTemp = wxForecastData?.current_weather?.temperature ?? null;
+
+      // Write to energy_readings
+      await fetch(`${SUPABASE_URL}/rest/v1/energy_readings`, {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+          "Content-Type": "application/json",
+          "Prefer": "return=minimal"
+        },
+        body: JSON.stringify({
+          monitor_id:      monitor.id,
+          recorded_at:     new Date().toISOString(),
+          device_uid:      uid,
+          relay_status_r1: r.relay_status_r1,
+          relay_status_r2: r.relay_status_r2,
+          relay_status_r3: r.relay_status_r3,
+          relay_status_r4: r.relay_status_r4,
+          voltage:         r.voltage,
+          current:         r.current,
+          power_factor:    r.power_factor,
+          watts_consumed:  r.watts_consumed,
+          sw_value:        r.sw_value,
+          sq_value:        r.sq_value,
+          outside_temp:    outsideTemp
+        })
+      });
+    } catch(e) { console.error("collectEnergyReadings error:", uid, e); }
+  }
+}
+
+async function loadEnergyMonitors() {
+  const container = document.getElementById("em-monitors-list");
+  const banner    = document.getElementById("em-active-banner");
+  const countEl   = document.getElementById("em-active-count");
+  if (!container) return;
+
+  try {
+    const rows = await supabaseGet("energy_monitors?order=created_at.desc&limit=50");
+    if (!Array.isArray(rows) || !rows.length) {
+      container.innerHTML = `<div class="sched-empty">No energy monitors yet.</div>`;
+      return;
+    }
+
+    activeEnergyMonitors = rows.filter(r => r.status === "active");
+    const activeCount = activeEnergyMonitors.length;
+
+    if (banner) banner.style.display = activeCount > 0 ? "block" : "none";
+    if (countEl) countEl.textContent = activeCount;
+
+    // Resume polling for active monitors
+    activeEnergyMonitors.forEach(m => {
+      if (!energyPollTimers[m.id]) startEnergyPoll(m);
+    });
+
+    // Populate chart monitor selector
+    const monSel = document.getElementById("em-chart-monitor");
+    if (monSel) {
+      monSel.innerHTML = rows.map(r =>
+        `<option value="${r.id}">${r.name} (${r.status})</option>`
+      ).join("");
+      // Populate device selector for first monitor
+      updateEnergyDeviceSelector(rows[0]);
+    }
+
+    // Show chart card
+    const chartCard = document.getElementById("em-chart-card");
+    if (chartCard) chartCard.style.display = "block";
+
+    container.innerHTML = rows.map(m => {
+      const startStr = m.created_at ? new Date(m.created_at).toLocaleString() : "—";
+      const devCount = m.target_ids?.length || 0;
+      const isActive = m.status === "active";
+      return `<div class="sched-item">
+        <div class="sched-info">
+          <div class="sched-name">
+            ${m.name}
+            <span style="font-size:10px;font-weight:600;margin-left:6px;color:${isActive?"var(--green-dark)":"var(--text-hint)"};">
+              ${isActive ? "🟢 Active" : m.status}
+            </span>
+          </div>
+          <div class="sched-detail">${devCount} device(s) · 5 min interval · Started ${startStr}</div>
+          ${m.notes ? `<div class="sched-detail" style="color:var(--text-hint);">${m.notes}</div>` : ""}
+        </div>
+        <div class="sched-actions">
+          <button class="sched-delete-btn" onclick="viewEnergyMonitor(${m.id})">View</button>
+          <button class="sched-delete-btn" style="color:var(--green-dark);" onclick="exportEnergyMonitorCSV(${m.id},'${m.name.replace(/'/g,"\\'")}')">CSV</button>
+          ${isActive ? `<button class="sched-delete-btn" style="color:var(--red);" onclick="stopEnergyMonitor(${m.id},'${m.name.replace(/'/g,"\\'")}')">Stop</button>` : ""}
+        </div>
+      </div>`;
+    }).join("");
+
+  } catch(e) {
+    console.error("loadEnergyMonitors:", e);
+    container.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error loading monitors.</div>`;
+  }
+}
+
+function updateEnergyDeviceSelector(monitor) {
+  const sel = document.getElementById("em-chart-device");
+  if (!sel || !monitor?.target_ids) return;
+  sel.innerHTML = monitor.target_ids.map(uid => {
+    const name = DEVICES.find(d => d.uid === uid)?.name || unitName(uid);
+    return `<option value="${uid}">${name}</option>`;
+  }).join("");
+}
+
+async function viewEnergyMonitor(monitorId) {
+  const sel = document.getElementById("em-chart-monitor");
+  if (sel) sel.value = monitorId;
+  const monitor = activeEnergyMonitors.find(m => m.id === monitorId)
+    || (await supabaseGet(`energy_monitors?id=eq.${monitorId}&limit=1`))?.[0];
+  if (monitor) updateEnergyDeviceSelector(monitor);
+  await loadEnergyChartData();
+  document.getElementById("em-chart-card")?.scrollIntoView({ behavior: "smooth" });
+}
+
+async function loadEnergyChartData() {
+  const monitorId = document.getElementById("em-chart-monitor")?.value;
+  const deviceUid = document.getElementById("em-chart-device")?.value;
+  const windowHrs = parseInt(document.getElementById("em-chart-window")?.value || "168");
+  if (!monitorId || !deviceUid) return;
+
+  const since = new Date(Date.now() - windowHrs * 3600000).toISOString();
+  const rows = await supabaseGet(
+    `energy_readings?monitor_id=eq.${monitorId}&device_uid=eq.${encodeURIComponent(deviceUid)}&recorded_at=gte.${since}&order=recorded_at.asc&limit=2000`
+  );
+
+  if (!Array.isArray(rows) || !rows.length) {
+    if (energyChart) { try { energyChart.destroy(); } catch(e){} }
+    return;
+  }
+
+  energyChartData = rows;
+
+  // Summary stats
+  const watts   = rows.map(r => r.watts_consumed).filter(v => v != null);
+  const current = rows.map(r => r.current).filter(v => v != null);
+  const avgW    = watts.length ? Math.round(watts.reduce((a,b)=>a+b,0)/watts.length) : null;
+  const maxW    = watts.length ? Math.max(...watts) : null;
+  const avgA    = current.length ? (current.reduce((a,b)=>a+b,0)/current.length/10).toFixed(1) : null;
+
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val ?? "—"; };
+  set("em-avg-watts",      avgW ? avgW+"W" : "—");
+  set("em-max-watts",      maxW ? maxW+"W" : "—");
+  set("em-avg-current",    avgA ? avgA+"A" : "—");
+  set("em-readings-count", rows.length);
+
+  renderEnergyChart(rows);
+}
+
+function renderEnergyChart(rows) {
+  const ctx = document.getElementById("em-energy-chart")?.getContext("2d");
+  if (!ctx) return;
+  if (energyChart) { try { energyChart.destroy(); } catch(e){} }
+
+  // Downsample for readability if too many points
+  const maxPoints = 500;
+  const step = Math.max(1, Math.floor(rows.length / maxPoints));
+  const sampled = rows.filter((_, i) => i % step === 0);
+
+  const labels  = sampled.map(r => {
+    const d = new Date(r.recorded_at);
+    return d.toLocaleDateString("en-US", { month:"short", day:"numeric" }) + " " +
+           d.toLocaleTimeString("en-US", { hour:"numeric", minute:"2-digit", hour12:true });
+  });
+  const watts   = sampled.map(r => r.watts_consumed ?? null);
+  const amps    = sampled.map(r => r.current != null ? (r.current/10).toFixed(2) : null);
+  const temps   = sampled.map(r => r.outside_temp ?? null);
+  const hasTemp = temps.some(t => t != null);
+
+  const datasets = [
+    {
+      label: "Watts",
+      data: watts,
+      borderColor: "#2563eb",
+      backgroundColor: "rgba(37,99,235,0.08)",
+      fill: true,
+      tension: 0.3,
+      pointRadius: sampled.length > 100 ? 0 : 3,
+      borderWidth: 2,
+      yAxisID: "y"
+    },
+    {
+      label: "Current (A)",
+      data: amps,
+      borderColor: "#7c3aed",
+      backgroundColor: "transparent",
+      fill: false,
+      tension: 0.3,
+      pointRadius: sampled.length > 100 ? 0 : 3,
+      borderWidth: 2,
+      borderDash: [4,4],
+      yAxisID: "y"
+    }
+  ];
+
+  const scales = {
+    x: {
+      ticks: { maxTicksLimit: 12, maxRotation: 45, font: { size: 10 } },
+      grid: { color: "rgba(128,128,128,0.1)" }
+    },
+    y: {
+      type: "linear", position: "left",
+      title: { display: true, text: "Watts / Amps×10" },
+      beginAtZero: true,
+      grid: { color: "rgba(128,128,128,0.1)" }
+    }
+  };
+
+  if (hasTemp) {
+    datasets.push({
+      label: "Outside Temp (°F)",
+      data: temps,
+      borderColor: "#f59e0b",
+      backgroundColor: "transparent",
+      fill: false,
+      tension: 0.3,
+      pointRadius: 0,
+      borderWidth: 2,
+      borderDash: [8,4],
+      yAxisID: "y2"
+    });
+    scales.y2 = {
+      type: "linear", position: "right",
+      title: { display: true, text: "Temp (°F)" },
+      grid: { drawOnChartArea: false }
+    };
+  }
+
+  energyChart = new Chart(ctx, {
+    type: "line",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { position: "top", labels: { font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            title: (items) => items[0]?.label || "",
+            label: (item) => `${item.dataset.label}: ${item.raw ?? "—"}`
+          }
+        }
+      },
+      scales
+    }
+  });
+}
+
+async function stopEnergyMonitor(monitorId, monitorName) {
+  if (!confirm(`Stop energy monitor "${monitorName}"?\n\nNote: Bubble-up interval will be restored to current schedule.`)) return;
+
+  // Clear poll timer
+  if (energyPollTimers[monitorId]) {
+    clearInterval(energyPollTimers[monitorId]);
+    delete energyPollTimers[monitorId];
+  }
+
+  // Restore bubble-up interval using current schedule rule
+  const monitor = await supabaseGet(`energy_monitors?id=eq.${monitorId}&limit=1`);
+  if (Array.isArray(monitor) && monitor[0]?.target_ids) {
+    const restoreRule = evaluateRules(new Date());
+    const restoreMins = restoreRule?.intervalMins || 240;
+    for (const uid of monitor[0].target_ids) {
+      const hex = buildAssignBubbleUpHex(restoreMins);
+      await fetch(PROXY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Device-UID": uid },
+        body: JSON.stringify({ body: { LC: hex }, req: "note.add", sync: true })
+      });
+    }
+  }
+
+  // Update status
+  await fetch(`${SUPABASE_URL}/rest/v1/energy_monitors?id=eq.${monitorId}`, {
+    method: "PATCH",
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+      "Prefer": "return=minimal"
+    },
+    body: JSON.stringify({ status: "stopped" })
+  });
+
+  await loadEnergyMonitors();
+  showBubbleStatus(`✅ Energy monitor stopped. Bubble-up interval restored.`, "ok");
+}
+
+async function exportEnergyMonitorCSV(monitorId, monitorName) {
+  const rows = await supabaseGet(
+    `energy_readings?monitor_id=eq.${monitorId}&order=recorded_at.asc&limit=50000`
+  );
+  if (!Array.isArray(rows) || !rows.length) { alert("No readings found."); return; }
+  const csv = ["Time,Device UID,R1,R2,R3,R4,Watts,Current(A),Power Factor,Voltage,SW,SQ,Outside Temp",
+    ...rows.map(r =>
+      `"${new Date(r.recorded_at).toLocaleString()}","${r.device_uid}","${r.relay_status_r1||0}","${r.relay_status_r2||0}","${r.relay_status_r3||0}","${r.relay_status_r4||0}","${r.watts_consumed||''}","${r.current?r.current/10:''}","${r.power_factor||''}","${r.voltage?r.voltage/10:''}","${r.sw_value||''}","${r.sq_value||''}","${r.outside_temp||''}"`)
+  ].join("\n");
+  downloadCSV(csv, `Energy_Monitor_${monitorName.replace(/[^a-z0-9]/gi,'_')}.csv`);
+}
+
+async function exportEnergyCSV() {
+  const monitorId = document.getElementById("em-chart-monitor")?.value;
+  const name = document.getElementById("em-chart-monitor")?.selectedOptions[0]?.text || "export";
+  if (monitorId) await exportEnergyMonitorCSV(monitorId, name);
 }
 
 function buildControls() {
