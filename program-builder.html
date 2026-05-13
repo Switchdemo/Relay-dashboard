@@ -401,6 +401,7 @@
     </div>
     <div class="nav-row">
       <div></div>
+      <div id="step1-errors" style="font-size:11px;color:var(--red);display:none;margin-top:4px;"></div>
       <button class="btn btn-primary" onclick="nextStep(1)">Next: Infrastructure →</button>
     </div>
   </div>
@@ -658,17 +659,18 @@ function nextStep(n) {
 
 function validateStep(n) {
   clearStatus();
+  const err = (msg) => { showStatus(msg, "error"); return false; };
   if (n === 1) {
-    if (!document.getElementById("p-name").value.trim()) { showStatus("Program name is required.", "error"); return false; }
-    if (!document.getElementById("p-abbr").value.trim()) { showStatus("Program abbreviation is required.", "error"); return false; }
-    if (!document.getElementById("p-admin-email").value.trim()) { showStatus("Admin email is required.", "error"); return false; }
+    if (!document.getElementById("p-name")?.value.trim())        return err("⚠️ Program name is required.");
+    if (!document.getElementById("p-abbr")?.value.trim())        return err("⚠️ Program abbreviation is required.");
+    if (!document.getElementById("p-admin-email")?.value.trim()) return err("⚠️ Admin email is required.");
   }
   if (n === 2) {
-    if (!document.getElementById("i-supabase-url").value.trim()) { showStatus("Supabase URL is required.", "error"); return false; }
-    if (!document.getElementById("i-supabase-key").value.trim()) { showStatus("Supabase anon key is required.", "error"); return false; }
-    if (!document.getElementById("i-worker-url").value.trim()) { showStatus("Cloudflare Worker URL is required.", "error"); return false; }
-    if (!document.getElementById("i-notehub-project").value.trim()) { showStatus("Notehub Project UID is required.", "error"); return false; }
-    if (!document.getElementById("i-notehub-token").value.trim()) { showStatus("Notehub API token is required.", "error"); return false; }
+    if (!document.getElementById("i-supabase-url")?.value.trim())   return err("⚠️ Supabase URL is required.");
+    if (!document.getElementById("i-supabase-key")?.value.trim())   return err("⚠️ Supabase anon key is required.");
+    if (!document.getElementById("i-worker-url")?.value.trim())     return err("⚠️ Cloudflare Worker URL is required.");
+    if (!document.getElementById("i-notehub-project")?.value.trim())return err("⚠️ Notehub Project UID is required.");
+    if (!document.getElementById("i-notehub-token")?.value.trim())  return err("⚠️ Notehub API token is required.");
   }
   return true;
 }
@@ -679,7 +681,8 @@ function showStatus(msg, type) {
   el.textContent = msg;
   el.className = `status-msg status-${type}`;
   el.style.display = "block";
-  setTimeout(() => el.style.display = "none", 4000);
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  if (type !== "error") setTimeout(() => el.style.display = "none", 4000);
 }
 function clearStatus() {
   document.getElementById("status-msg").style.display = "none";
