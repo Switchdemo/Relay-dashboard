@@ -1805,12 +1805,17 @@ async function createSchedule() {
     console.log(`Sending LC hex immediately: ${lcHex} (startTime=${schedUnix})`);
 
     // Send payload to device(s) immediately — device stores and executes at scheduled time
+    // Capture targetVal locally to prevent any dropdown change affecting this
+    const sendTarget = String(targetVal);
+    console.log(`Sending to target: ${sendTarget} (type: ${type})`);
     if (type === "group") {
-      const gNum = parseInt(targetVal.replace("group_", ""));
+      const gNum = parseInt(sendTarget.replace("group_", ""));
       const members = DEVICES.filter(d => (groupAssignments[d.uid] || []).includes(gNum));
+      console.log(`Group ${gNum} members:`, members.map(d => d.uid));
       for (const device of members) await sendLCToDevice(device.uid, lcHex);
     } else {
-      await sendLCToDevice(targetVal, lcHex);
+      console.log(`Sending LC to single device: ${sendTarget}`);
+      await sendLCToDevice(sendTarget, lcHex);
     }
 
     // Log to queue as sent
