@@ -5103,9 +5103,16 @@ async function loadLatestDevice(deviceId) {
     const healthEl = document.getElementById(`health-strip-${deviceId}`);
     if (healthEl) {
       try {
-        const hRows = await supabaseGet(
-          `device_health?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1`
+        // Get most recent session.begin row (has full signal data)
+        // Fall back to most recent any row if no signal data available
+        let hRows = await supabaseGet(
+          `device_health?device_uid=eq.${encodeURIComponent(device.uid)}&rsrp=not.is.null&order=recorded_at.desc&limit=1`
         );
+        if (!Array.isArray(hRows) || hRows.length === 0) {
+          hRows = await supabaseGet(
+            `device_health?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1`
+          );
+        }
         // Merge: prefer device_health for voltage/temp/firmware, use bubble-up for signal
         const h = (Array.isArray(hRows) && hRows.length > 0) ? {
           ...hRows[0],
