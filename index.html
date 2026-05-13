@@ -4371,6 +4371,21 @@ async function initAuth() {
       showLoginOverlay();
     } else if (event === "PASSWORD_RECOVERY") {
       showStep(3);
+    } else if (event === "TOKEN_REFRESHED" && session) {
+      currentSession = session;
+    } else if (event === "SIGNED_OUT" || event === "USER_DELETED") {
+      currentUser = null; currentUserRole = null; currentSession = null;
+      showLoginOverlay();
+    }
+  });
+
+  // Handle token refresh failures — re-prompt login
+  supabaseClient.auth.onAuthStateChange((event) => {
+    if (event === "SIGNED_OUT") {
+      currentUser = null; currentUserRole = null; currentSession = null;
+      showLoginOverlay();
+      showLoginError("login-error", "Your session expired. Please sign in again.");
+      document.getElementById("login-step-1").style.display = "block";
     }
   });
 }
