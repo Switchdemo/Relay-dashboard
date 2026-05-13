@@ -421,6 +421,10 @@
     <button class="tab-btn" id="main-admin" onclick="switchMain('admin', this)" style="display:none;">Admin</button>
   </div>
   <!-- Sub-tabs (shown contextually) -->
+  <div class="sub-tabs" id="sub-tabs-admin" style="display:none;">
+    <button class="sub-tab-btn active" id="sub-admin-users" onclick="switchSub('admin','admin-users',this)">User Management</button>
+    <button class="sub-tab-btn" id="sub-admin-health" onclick="switchSub('admin','admin-health',this)">Fleet Health</button>
+  </div>
   <div class="sub-tabs" id="sub-tabs-events" style="display:none;">
     <button class="sub-tab-btn active" id="sub-scheduler" onclick="switchSub('events','scheduler',this)">Event Scheduler</button>
     <button class="sub-tab-btn" id="sub-eventstats" onclick="switchSub('events','eventstats',this)">Event Statistics</button>
@@ -1159,8 +1163,8 @@
   </div>
 </div>
 
-<!-- ── ADMIN TAB ── -->
-<div class="tab-pane" id="tab-admin">
+<!-- ── ADMIN USERS TAB ── -->
+<div class="tab-pane" id="tab-admin-users">
   <div class="scroll-content">
     <div style="max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
 
@@ -1264,6 +1268,180 @@
   </div>
 </div>
 
+<!-- ── FLEET HEALTH TAB ── -->
+<div class="tab-pane" id="tab-admin-health">
+  <div class="scroll-content">
+    <div style="max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <!-- Health Summary Cards -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;" id="fleet-summary-cards">
+        <div class="sched-card" style="text-align:center;padding:1rem;">
+          <div style="font-size:28px;font-weight:700;color:var(--text-primary);" id="fh-total">—</div>
+          <div style="font-size:11px;color:var(--text-hint);">Total Devices</div>
+        </div>
+        <div class="sched-card" style="text-align:center;padding:1rem;border-top:3px solid var(--green);">
+          <div style="font-size:28px;font-weight:700;color:var(--green-dark);" id="fh-online">—</div>
+          <div style="font-size:11px;color:var(--text-hint);">Online</div>
+        </div>
+        <div class="sched-card" style="text-align:center;padding:1rem;border-top:3px solid var(--amber);">
+          <div style="font-size:28px;font-weight:700;color:var(--amber);" id="fh-warning">—</div>
+          <div style="font-size:11px;color:var(--text-hint);">Warning</div>
+        </div>
+        <div class="sched-card" style="text-align:center;padding:1rem;border-top:3px solid var(--red);">
+          <div style="font-size:28px;font-weight:700;color:var(--red);" id="fh-critical">—</div>
+          <div style="font-size:11px;color:var(--text-hint);">Critical</div>
+        </div>
+        <div class="sched-card" style="text-align:center;padding:1rem;border-top:3px solid var(--text-hint);">
+          <div style="font-size:28px;font-weight:700;color:var(--text-hint);" id="fh-offline">—</div>
+          <div style="font-size:11px;color:var(--text-hint);">Offline</div>
+        </div>
+        <div class="sched-card" style="text-align:center;padding:1rem;border-top:3px solid var(--blue);">
+          <div style="font-size:28px;font-weight:700;color:var(--blue-dark);" id="fh-uptime">—</div>
+          <div style="font-size:11px;color:var(--text-hint);">Fleet Uptime</div>
+        </div>
+      </div>
+
+      <!-- Alert Cards Row -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">
+        
+        <!-- No Comms Alert -->
+        <div class="sched-card">
+          <div class="sched-card-header">
+            <div class="sched-card-title">⚫ No Comms</div>
+            <span id="fh-nocomms-count" style="font-size:11px;background:var(--surface2);padding:2px 8px;border-radius:10px;">0</span>
+          </div>
+          <div id="fh-nocomms-list" style="font-size:11px;color:var(--text-hint);">Loading...</div>
+          <button class="queue-refresh" style="margin-top:8px;" onclick="exportAlertCSV('nocomms')">Export CSV</button>
+        </div>
+
+        <!-- Moved/Tamper Alert -->
+        <div class="sched-card">
+          <div class="sched-card-header">
+            <div class="sched-card-title">🚨 Moved / Tamper</div>
+            <span id="fh-moved-count" style="font-size:11px;background:var(--surface2);padding:2px 8px;border-radius:10px;">0</span>
+          </div>
+          <div id="fh-moved-list" style="font-size:11px;color:var(--text-hint);">Loading...</div>
+          <button class="queue-refresh" style="margin-top:8px;" onclick="exportAlertCSV('moved')">Export CSV</button>
+        </div>
+
+        <!-- Temperature Alert -->
+        <div class="sched-card">
+          <div class="sched-card-header">
+            <div class="sched-card-title">🌡️ Temperature</div>
+            <span id="fh-temp-count" style="font-size:11px;background:var(--surface2);padding:2px 8px;border-radius:10px;">0</span>
+          </div>
+          <div id="fh-temp-list" style="font-size:11px;color:var(--text-hint);">Loading...</div>
+          <button class="queue-refresh" style="margin-top:8px;" onclick="exportAlertCSV('temp')">Export CSV</button>
+        </div>
+
+        <!-- Voltage Alert -->
+        <div class="sched-card">
+          <div class="sched-card-header">
+            <div class="sched-card-title">🔋 Voltage</div>
+            <span id="fh-volt-count" style="font-size:11px;background:var(--surface2);padding:2px 8px;border-radius:10px;">0</span>
+          </div>
+          <div id="fh-volt-list" style="font-size:11px;color:var(--text-hint);">Loading...</div>
+          <button class="queue-refresh" style="margin-top:8px;" onclick="exportAlertCSV('voltage')">Export CSV</button>
+        </div>
+
+      </div>
+
+      <!-- Full Device Health Table -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">Device Health Status</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <select class="history-select" id="fh-filter" onchange="renderFleetTable()">
+              <option value="all">All Devices</option>
+              <option value="offline">Offline Only</option>
+              <option value="warning">Warning Only</option>
+              <option value="critical">Critical Only</option>
+              <option value="moved">Moved/Tamper</option>
+            </select>
+            <button class="queue-refresh" onclick="initFleetHealth()">Refresh</button>
+            <button class="queue-refresh" style="color:var(--green-dark);border-color:var(--green);" onclick="exportFleetCSV()">Export CSV</button>
+            <button class="queue-refresh" style="color:var(--blue-dark);border-color:var(--blue);background:var(--blue-bg);" onclick="generateFleetPDF()">📄 PDF Report</button>
+          </div>
+        </div>
+        <div id="fh-table-container" style="overflow-x:auto;">
+          <div class="sched-empty">Click Refresh to load fleet health data.</div>
+        </div>
+      </div>
+
+      <!-- Threshold Settings (Admin only) -->
+      <div class="sched-card" id="fh-thresholds">
+        <div class="sched-card-header">
+          <div class="sched-card-title">⚙️ Alert Thresholds</div>
+          <button class="queue-refresh" onclick="saveThresholds()">Save</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;padding:4px 0;">
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Voltage Warning (V)</label>
+            <input type="number" id="th-volt-warn" step="0.1" value="3.3"
+              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Voltage Critical (V)</label>
+            <input type="number" id="th-volt-crit" step="0.1" value="3.0"
+              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Temp High Warning (°C)</label>
+            <input type="number" id="th-temp-high-warn" step="1" value="60"
+              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Temp High Critical (°C)</label>
+            <input type="number" id="th-temp-high-crit" step="1" value="75"
+              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Temp Low Warning (°C)</label>
+            <input type="number" id="th-temp-low-warn" step="1" value="0"
+              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">No Comms Warning (hrs)</label>
+            <input type="number" id="th-nocomms-warn" step="1" value="48"
+              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">No Comms Critical (hrs)</label>
+            <input type="number" id="th-nocomms-crit" step="1" value="72"
+              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Nightly Health Check</label>
+            <select id="th-health-enabled" class="sched-select" style="width:100%;font-size:12px;">
+              <option value="true">Enabled (midnight–2am)</option>
+              <option value="false">Disabled</option>
+            </select>
+          </div>
+        </div>
+        <div id="th-save-status" style="font-size:11px;margin-top:8px;display:none;"></div>
+      </div>
+
+      <!-- Nightly Check Status -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">🌙 Nightly Health Check</div>
+          <button class="queue-refresh" onclick="runHealthCheckNow()">Run Now</button>
+        </div>
+        <div id="fh-nightly-status" style="font-size:12px;color:var(--text-secondary);padding:4px 0;">
+          Checks run automatically midnight–2am. Each device is staggered to avoid traffic spikes.
+        </div>
+        <div id="fh-nightly-progress" style="display:none;margin-top:8px;">
+          <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;" id="fh-progress-label">0 / 0 devices checked</div>
+          <div style="height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;">
+            <div id="fh-progress-bar" style="height:100%;background:var(--green);width:0%;transition:width 0.3s;"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <script>
 const PROXY_URL    = "https://patient-shadow-e2b7.hurd71185.workers.dev/";
 const SUPABASE_URL = "https://diurqiuzknxzcdxqjfig.supabase.co";
@@ -1342,7 +1520,7 @@ function setStatus(type, msg) {
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 let currentMain = 'summary';
-let currentSub  = { events: 'scheduler', devices: 'data' };
+let currentSub  = { events: 'scheduler', devices: 'data', admin: 'admin-users' };
 
 function switchMain(main, btn) {
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
@@ -1350,6 +1528,7 @@ function switchMain(main, btn) {
   currentMain = main;
   document.getElementById("sub-tabs-events").style.display  = main === "events"  ? "flex" : "none";
   document.getElementById("sub-tabs-devices").style.display = main === "devices" ? "flex" : "none";
+  document.getElementById("sub-tabs-admin").style.display   = main === "admin"   ? "flex" : "none";
   if (main === "summary") { activatePane("summary"); initSummaryTab(); }
   else if (main === "weather") { activatePane("weather"); initWeatherTab(); }
   else if (main === "admin")   { activatePane("admin"); }
@@ -1389,7 +1568,8 @@ function runTabInit(name) {
   if (name === "groups")     loadGroups();
   if (name === "settings")   initSettingsTab();
   if (name === "weather")    initWeatherTab();
-  if (name === "admin")      { updateAdminHeader(); loadUsersTable(); }
+  if (name === "admin-users") { updateAdminHeader(); loadUsersTable(); }
+  if (name === "admin-health") { initFleetHealth(); }
 }
 
 function switchTab(name, btn) { switchMain(name, btn); }
@@ -4819,6 +4999,391 @@ async function changeMyPassword() {
   if (error) { msgEl.textContent = error.message; msgEl.style.color = "var(--red)"; }
   else { msgEl.textContent = "✅ Password updated successfully."; msgEl.style.color = "var(--green-dark)"; }
   msgEl.style.display = "block";
+}
+
+// ── FLEET HEALTH ─────────────────────────────────────────────────────────────
+let fleetHealthData = [];
+let fleetThresholds = {
+  voltWarn: 3.3, voltCrit: 3.0,
+  tempHighWarn: 60, tempHighCrit: 75, tempLowWarn: 0,
+  noCommsWarn: 48, noCommsCrit: 72
+};
+let nightlyCheckTimer = null;
+
+async function initFleetHealth() {
+  await loadThresholds();
+  await loadFleetHealth();
+  scheduleNightlyCheck();
+}
+
+async function loadThresholds() {
+  try {
+    const rows = await supabaseGet("program_settings?select=setting_key,setting_value");
+    if (Array.isArray(rows)) {
+      rows.forEach(r => {
+        switch(r.setting_key) {
+          case "voltage_warn":      fleetThresholds.voltWarn      = parseFloat(r.setting_value); break;
+          case "voltage_critical":  fleetThresholds.voltCrit      = parseFloat(r.setting_value); break;
+          case "temp_high_warn":    fleetThresholds.tempHighWarn  = parseFloat(r.setting_value); break;
+          case "temp_high_critical":fleetThresholds.tempHighCrit  = parseFloat(r.setting_value); break;
+          case "temp_low_warn":     fleetThresholds.tempLowWarn   = parseFloat(r.setting_value); break;
+          case "no_comms_warn_hrs": fleetThresholds.noCommsWarn   = parseFloat(r.setting_value); break;
+          case "no_comms_crit_hrs": fleetThresholds.noCommsCrit   = parseFloat(r.setting_value); break;
+          case "health_check_enabled": 
+            const sel = document.getElementById("th-health-enabled");
+            if (sel) sel.value = r.setting_value;
+            break;
+        }
+      });
+      // Update threshold inputs
+      const fields = {
+        "th-volt-warn": fleetThresholds.voltWarn,
+        "th-volt-crit": fleetThresholds.voltCrit,
+        "th-temp-high-warn": fleetThresholds.tempHighWarn,
+        "th-temp-high-crit": fleetThresholds.tempHighCrit,
+        "th-temp-low-warn": fleetThresholds.tempLowWarn,
+        "th-nocomms-warn": fleetThresholds.noCommsWarn,
+        "th-nocomms-crit": fleetThresholds.noCommsCrit
+      };
+      Object.entries(fields).forEach(([id, val]) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val;
+      });
+    }
+  } catch(e) { console.error("loadThresholds error:", e); }
+}
+
+async function saveThresholds() {
+  const statusEl = document.getElementById("th-save-status");
+  const mappings = [
+    ["voltage_warn",      "th-volt-warn"],
+    ["voltage_critical",  "th-volt-crit"],
+    ["temp_high_warn",    "th-temp-high-warn"],
+    ["temp_high_critical","th-temp-high-crit"],
+    ["temp_low_warn",     "th-temp-low-warn"],
+    ["no_comms_warn_hrs", "th-nocomms-warn"],
+    ["no_comms_crit_hrs", "th-nocomms-crit"],
+    ["health_check_enabled", "th-health-enabled"]
+  ];
+  try {
+    for (const [key, elId] of mappings) {
+      const val = document.getElementById(elId)?.value;
+      if (val !== undefined) {
+        await supabasePatch(`program_settings?setting_key=eq.${key}`, {
+          setting_value: String(val),
+          updated_at: new Date().toISOString()
+        });
+      }
+    }
+    await loadThresholds();
+    if (statusEl) { statusEl.textContent = "✅ Thresholds saved."; statusEl.style.color = "var(--green-dark)"; statusEl.style.display = "block"; }
+    setTimeout(() => { if (statusEl) statusEl.style.display = "none"; }, 3000);
+  } catch(e) {
+    if (statusEl) { statusEl.textContent = "❌ Error saving: " + e.message; statusEl.style.color = "var(--red)"; statusEl.style.display = "block"; }
+  }
+}
+
+async function loadFleetHealth() {
+  const container = document.getElementById("fh-table-container");
+  if (container) container.innerHTML = `<div class="sched-empty">Loading fleet health data...</div>`;
+
+  try {
+    // Get latest health record per device
+    const healthRows = [];
+    for (const device of DEVICES.filter(d => !d.uid.includes('PLACEHOLDER'))) {
+      // Get most recent health with signal data first, fall back to any
+      let rows = await supabaseGet(
+        `device_health?device_uid=eq.${encodeURIComponent(device.uid)}&rsrp=not.is.null&order=recorded_at.desc&limit=1`
+      );
+      if (!Array.isArray(rows) || rows.length === 0) {
+        rows = await supabaseGet(
+          `device_health?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1`
+        );
+      }
+      // Also get latest bubble-up for last_seen
+      const readings = await supabaseGet(
+        `device_readings?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1`
+      );
+      const lastReading = Array.isArray(readings) && readings.length > 0 ? readings[0] : null;
+      const lastSeen = lastReading?.recorded_at || rows[0]?.recorded_at || null;
+      healthRows.push({
+        device,
+        health: Array.isArray(rows) && rows.length > 0 ? rows[0] : null,
+        lastSeen
+      });
+    }
+
+    fleetHealthData = healthRows.map(({ device, health, lastSeen }) => {
+      const now = Date.now();
+      const lastSeenMs = lastSeen ? new Date(lastSeen).getTime() : 0;
+      const hoursAgo = lastSeenMs ? (now - lastSeenMs) / 3600000 : 999;
+      const voltage = health?.voltage ? parseFloat(health.voltage) : null;
+      const temp    = health?.temperature ? parseFloat(health.temperature) : null;
+      const movedTs = health?.moved ? parseInt(health.moved) : null;
+      // Device moved if moved timestamp is more recent than 24hrs before last health check
+      const lastHealthMs = health?.recorded_at ? new Date(health.recorded_at).getTime() : 0;
+      const movedRecently = movedTs && movedTs * 1000 > (lastHealthMs - 86400000);
+
+      // Calculate status
+      let commsStatus = "ok";
+      if (hoursAgo > fleetThresholds.noCommsCrit) commsStatus = "critical";
+      else if (hoursAgo > fleetThresholds.noCommsWarn) commsStatus = "warning";
+
+      let voltStatus = "ok";
+      if (voltage !== null) {
+        if (voltage < fleetThresholds.voltCrit) voltStatus = "critical";
+        else if (voltage < fleetThresholds.voltWarn) voltStatus = "warning";
+      }
+
+      let tempStatus = "ok";
+      if (temp !== null) {
+        if (temp > fleetThresholds.tempHighCrit || temp < fleetThresholds.tempLowWarn) tempStatus = "critical";
+        else if (temp > fleetThresholds.tempHighWarn) tempStatus = "warning";
+      }
+
+      const overallStatus = 
+        commsStatus === "critical" || voltStatus === "critical" || tempStatus === "critical" ? "critical" :
+        movedRecently ? "warning" :
+        commsStatus === "warning" || voltStatus === "warning" || tempStatus === "warning" ? "warning" :
+        hoursAgo > fleetThresholds.noCommsWarn ? "offline" : "ok";
+
+      return {
+        uid: device.uid,
+        name: device.name,
+        lastSeen,
+        hoursAgo,
+        voltage,
+        temp,
+        rsrp: health?.rsrp ?? null,
+        bars: health?.bars ?? null,
+        firmware: health?.firmware_version ?? null,
+        location: health?.location ?? null,
+        movedRecently,
+        movedTs,
+        commsStatus, voltStatus, tempStatus, overallStatus
+      };
+    });
+
+    updateFleetSummary();
+    updateAlertCards();
+    renderFleetTable();
+
+  } catch(e) {
+    console.error("loadFleetHealth error:", e);
+    if (container) container.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error loading fleet health data.</div>`;
+  }
+}
+
+function updateFleetSummary() {
+  const total    = fleetHealthData.length;
+  const online   = fleetHealthData.filter(d => d.overallStatus === "ok").length;
+  const warning  = fleetHealthData.filter(d => d.overallStatus === "warning").length;
+  const critical = fleetHealthData.filter(d => d.overallStatus === "critical").length;
+  const offline  = fleetHealthData.filter(d => d.overallStatus === "offline").length;
+  const uptime   = total > 0 ? Math.round(((online + warning) / total) * 100) : 0;
+
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set("fh-total",    total);
+  set("fh-online",   online);
+  set("fh-warning",  warning);
+  set("fh-critical", critical);
+  set("fh-offline",  offline);
+  set("fh-uptime",   uptime + "%");
+}
+
+function updateAlertCards() {
+  const noComms = fleetHealthData.filter(d => d.commsStatus !== "ok");
+  const moved   = fleetHealthData.filter(d => d.movedRecently);
+  const temp    = fleetHealthData.filter(d => d.tempStatus !== "ok");
+  const volt    = fleetHealthData.filter(d => d.voltStatus !== "ok");
+
+  const renderList = (items, fields) => {
+    if (items.length === 0) return `<div style="color:var(--green-dark);padding:4px 0;">✅ No alerts</div>`;
+    return items.slice(0, 5).map(d =>
+      `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:0.5px solid var(--border);">
+        <span style="font-weight:500;">${d.name}</span>
+        <span style="color:var(--text-hint);">${fields(d)}</span>
+      </div>`
+    ).join("") + (items.length > 5 ? `<div style="color:var(--text-hint);padding:4px 0;">+${items.length - 5} more</div>` : "");
+  };
+
+  const setCard = (listId, countId, items, fields) => {
+    const el = document.getElementById(listId);
+    const ct = document.getElementById(countId);
+    if (el) el.innerHTML = renderList(items, fields);
+    if (ct) { ct.textContent = items.length; ct.style.background = items.length > 0 ? "var(--red)" : "var(--surface2)"; ct.style.color = items.length > 0 ? "white" : "var(--text-hint)"; }
+  };
+
+  setCard("fh-nocomms-list", "fh-nocomms-count", noComms, d => `${Math.round(d.hoursAgo)}h ago`);
+  setCard("fh-moved-list",   "fh-moved-count",   moved,   d => d.movedTs ? new Date(d.movedTs*1000).toLocaleDateString() : "—");
+  setCard("fh-temp-list",    "fh-temp-count",     temp,    d => d.temp ? d.temp.toFixed(1)+"°C" : "—");
+  setCard("fh-volt-list",    "fh-volt-count",     volt,    d => d.voltage ? d.voltage.toFixed(3)+"V" : "—");
+}
+
+function renderFleetTable() {
+  const container = document.getElementById("fh-table-container");
+  if (!container || !fleetHealthData.length) return;
+
+  const filter = document.getElementById("fh-filter")?.value || "all";
+  let data = fleetHealthData;
+  if (filter === "offline")  data = data.filter(d => d.overallStatus === "offline");
+  if (filter === "warning")  data = data.filter(d => d.overallStatus === "warning");
+  if (filter === "critical") data = data.filter(d => d.overallStatus === "critical");
+  if (filter === "moved")    data = data.filter(d => d.movedRecently);
+
+  if (data.length === 0) {
+    container.innerHTML = `<div class="sched-empty">No devices match the selected filter.</div>`;
+    return;
+  }
+
+  const statusBadge = (status) => {
+    const colors = { ok:"var(--green-dark)", warning:"var(--amber)", critical:"var(--red)", offline:"var(--text-hint)" };
+    const labels = { ok:"✅ OK", warning:"⚠️ Warning", critical:"🔴 Critical", offline:"⚫ Offline" };
+    return `<span style="color:${colors[status]||'var(--text-secondary)'};font-weight:600;font-size:11px;">${labels[status]||status}</span>`;
+  };
+
+  const wrap = document.createElement("div");
+  wrap.style.overflowX = "auto";
+  const table = document.createElement("table");
+  table.style.cssText = "width:100%;border-collapse:collapse;font-size:12px;";
+
+  const thead = table.createTHead();
+  const hrow  = thead.insertRow();
+  ["Device","Last Seen","Voltage","Temp","Signal","Location","Firmware","Status"].forEach(h => {
+    const th = document.createElement("th");
+    th.textContent = h;
+    th.style.cssText = "text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);white-space:nowrap;";
+    hrow.appendChild(th);
+  });
+
+  const tbody = table.createTBody();
+  data.forEach(d => {
+    const tr = tbody.insertRow();
+    const lastSeenStr = d.lastSeen ? new Date(d.lastSeen).toLocaleString() : "Never";
+    const hoursStr    = d.hoursAgo < 999 ? `(${Math.round(d.hoursAgo)}h ago)` : "";
+    const voltColor   = d.voltStatus === "critical" ? "var(--red)" : d.voltStatus === "warning" ? "var(--amber)" : "var(--text-primary)";
+    const tempColor   = d.tempStatus === "critical" ? "var(--red)" : d.tempStatus === "warning" ? "var(--amber)" : "var(--text-primary)";
+    const barsStr     = d.bars ? "▮".repeat(d.bars) + "▯".repeat(5-d.bars) : "—";
+
+    const cells = [
+      `<strong>${d.name}</strong><div style="font-size:10px;color:var(--text-hint);">${d.uid}</div>`,
+      `${lastSeenStr}<div style="font-size:10px;color:var(--text-hint);">${hoursStr}${d.movedRecently ? " 🚨 Moved" : ""}</div>`,
+      `<span style="color:${voltColor};font-weight:600;">${d.voltage ? d.voltage.toFixed(3)+"V" : "—"}</span>`,
+      `<span style="color:${tempColor};font-weight:600;">${d.temp ? d.temp.toFixed(1)+"°C" : "—"}</span>`,
+      `<span title="RSRP: ${d.rsrp||'—'}">${barsStr} ${d.rsrp ? d.rsrp+"dBm" : ""}</span>`,
+      d.location || "—",
+      d.firmware ? d.firmware.replace("notecard-u5-","v") : "—",
+      statusBadge(d.overallStatus)
+    ];
+
+    cells.forEach(html => {
+      const td = tr.insertCell();
+      td.innerHTML = html;
+      td.style.cssText = "padding:8px;border-bottom:0.5px solid var(--border);vertical-align:top;";
+    });
+  });
+
+  wrap.appendChild(table);
+  container.innerHTML = "";
+  container.appendChild(wrap);
+}
+
+function exportAlertCSV(type) {
+  const maps = {
+    nocomms: { data: fleetHealthData.filter(d => d.commsStatus !== "ok"), label: "No_Comms" },
+    moved:   { data: fleetHealthData.filter(d => d.movedRecently),        label: "Moved_Tamper" },
+    temp:    { data: fleetHealthData.filter(d => d.tempStatus !== "ok"),   label: "Temperature" },
+    voltage: { data: fleetHealthData.filter(d => d.voltStatus !== "ok"),   label: "Voltage" }
+  };
+  const { data, label } = maps[type] || {};
+  if (!data) return;
+  const csv = ["Device Name,Device UID,Last Seen,Voltage,Temp,RSRP,Bars,Location,Status",
+    ...data.map(d => `"${d.name}","${d.uid}","${d.lastSeen||''}","${d.voltage||''}","${d.temp||''}","${d.rsrp||''}","${d.bars||''}","${d.location||''}","${d.overallStatus}"`)
+  ].join("\n");
+  downloadCSV(csv, `Fleet_Health_${label}_${new Date().toISOString().split("T")[0]}.csv`);
+}
+
+function exportFleetCSV() {
+  const csv = ["Device Name,Device UID,Last Seen,Hours Since Comms,Voltage,Temp,RSRP,Bars,Firmware,Location,Comms Status,Volt Status,Temp Status,Overall Status",
+    ...fleetHealthData.map(d => `"${d.name}","${d.uid}","${d.lastSeen||''}","${Math.round(d.hoursAgo)}","${d.voltage||''}","${d.temp||''}","${d.rsrp||''}","${d.bars||''}","${d.firmware||''}","${d.location||''}","${d.commsStatus}","${d.voltStatus}","${d.tempStatus}","${d.overallStatus}"`)
+  ].join("\n");
+  downloadCSV(csv, `Fleet_Health_Full_${new Date().toISOString().split("T")[0]}.csv`);
+}
+
+function downloadCSV(csv, filename) {
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+async function generateFleetPDF() {
+  // Load skill and generate PDF
+  alert("PDF report generation coming soon — export CSV for now.");
+}
+
+async function runHealthCheckNow() {
+  const statusEl = document.getElementById("fh-nightly-status");
+  const progressEl = document.getElementById("fh-nightly-progress");
+  const progressBar = document.getElementById("fh-progress-bar");
+  const progressLabel = document.getElementById("fh-progress-label");
+
+  const realDevices = DEVICES.filter(d => !d.uid.includes('PLACEHOLDER'));
+  const total = realDevices.length;
+  if (total === 0) { if (statusEl) statusEl.textContent = "No devices to check."; return; }
+
+  if (progressEl) progressEl.style.display = "block";
+  if (statusEl) statusEl.textContent = `Running health check on ${total} device(s)...`;
+
+  for (let i = 0; i < realDevices.length; i++) {
+    const device = realDevices[i];
+    const pct = Math.round(((i+1)/total)*100);
+    if (progressBar) progressBar.style.width = pct + "%";
+    if (progressLabel) progressLabel.textContent = `${i+1} / ${total} devices checked`;
+
+    // Send _restart env var
+    try {
+      await fetch(`${PROXY_URL}env`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deviceUID: device.uid,
+          environment_variables: { _restart: String(Math.floor(Date.now()/1000)) }
+        })
+      });
+    } catch(e) { console.error("Health check send error:", device.uid, e); }
+
+    // Stagger — wait 100ms between devices (adjustable for large fleets)
+    await new Promise(r => setTimeout(r, 100));
+  }
+
+  if (statusEl) statusEl.textContent = `✅ Health check sent to ${total} device(s). Data will populate as devices respond.`;
+  setTimeout(() => { if (progressEl) progressEl.style.display = "none"; }, 5000);
+
+  // Reload health data after 60 seconds
+  setTimeout(() => loadFleetHealth(), 60000);
+}
+
+function scheduleNightlyCheck() {
+  if (nightlyCheckTimer) clearTimeout(nightlyCheckTimer);
+  const enabled = document.getElementById("th-health-enabled")?.value !== "false";
+  if (!enabled) return;
+
+  const now = new Date();
+  const midnight = new Date(now);
+  midnight.setHours(0, 0, 0, 0);
+  midnight.setDate(midnight.getDate() + (now.getHours() >= 2 ? 1 : 0));
+
+  const msUntilMidnight = midnight.getTime() - now.getTime();
+  nightlyCheckTimer = setTimeout(() => {
+    runHealthCheckNow();
+    // Re-schedule for next night
+    setTimeout(scheduleNightlyCheck, 2 * 60 * 60 * 1000);
+  }, msUntilMidnight);
+
+  console.log(`Nightly health check scheduled in ${Math.round(msUntilMidnight/3600000)}h`);
 }
 
 function buildControls() {
