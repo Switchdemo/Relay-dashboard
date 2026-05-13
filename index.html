@@ -426,10 +426,12 @@
     <button class="sub-tab-btn" id="sub-admin-health" onclick="switchSub('admin','admin-health',this)">Fleet Health</button>
     <button class="sub-tab-btn" id="sub-admin-monitor" onclick="switchSub('admin','admin-monitor',this)">Device Monitoring</button>
     <button class="sub-tab-btn" id="sub-admin-energy" onclick="switchSub('admin','admin-energy',this)">Energy Monitor</button>
+    <button class="sub-tab-btn" id="sub-admin-openadr" onclick="switchSub('admin','admin-openadr',this)">OpenADR Config</button>
   </div>
   <div class="sub-tabs" id="sub-tabs-events" style="display:none;">
     <button class="sub-tab-btn active" id="sub-scheduler" onclick="switchSub('events','scheduler',this)">Event Scheduler</button>
     <button class="sub-tab-btn" id="sub-eventstats" onclick="switchSub('events','eventstats',this)">Event Statistics</button>
+    <button class="sub-tab-btn" id="sub-openadr" onclick="switchSub('events','openadr',this)">OpenADR</button>
   </div>
   <div class="sub-tabs" id="sub-tabs-devices" style="display:none;">
     <button class="sub-tab-btn active" id="sub-data" onclick="switchSub('devices','data',this)">Current Device Status</button>
@@ -1739,6 +1741,218 @@
   </div>
 </div>
 
+<!-- ── OPENADR EVENTS TAB ── -->
+<div class="tab-pane" id="tab-openadr">
+  <div class="scroll-content">
+    <div style="max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <!-- VTN Status Banner -->
+      <div id="oadr-vtn-banner" style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-size:11px;color:var(--text-hint);">VTN Connection</div>
+          <div style="font-size:13px;font-weight:600;" id="oadr-vtn-status-label">Not configured — go to Admin → OpenADR Config</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <span id="oadr-vtn-status-dot" style="font-size:11px;padding:3px 10px;border-radius:10px;background:var(--surface2);color:var(--text-hint);">⚫ Disconnected</span>
+          <button class="queue-refresh" onclick="initOpenADREvents()">Refresh</button>
+        </div>
+      </div>
+
+      <!-- Summary Cards -->
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;">
+        <div class="sched-card" style="text-align:center;padding:0.875rem;">
+          <div style="font-size:22px;font-weight:700;" id="oadr-count-total">—</div>
+          <div style="font-size:10px;color:var(--text-hint);">Total Events</div>
+        </div>
+        <div class="sched-card" style="text-align:center;padding:0.875rem;border-top:3px solid var(--amber);">
+          <div style="font-size:22px;font-weight:700;color:var(--amber);" id="oadr-count-pending">—</div>
+          <div style="font-size:10px;color:var(--text-hint);">Pending</div>
+        </div>
+        <div class="sched-card" style="text-align:center;padding:0.875rem;border-top:3px solid var(--green);">
+          <div style="font-size:22px;font-weight:700;color:var(--green-dark);" id="oadr-count-active">—</div>
+          <div style="font-size:10px;color:var(--text-hint);">Active</div>
+        </div>
+        <div class="sched-card" style="text-align:center;padding:0.875rem;border-top:3px solid var(--blue);">
+          <div style="font-size:22px;font-weight:700;color:var(--blue-dark);" id="oadr-count-optin">—</div>
+          <div style="font-size:10px;color:var(--text-hint);">Opted In</div>
+        </div>
+        <div class="sched-card" style="text-align:center;padding:0.875rem;border-top:3px solid var(--red);">
+          <div style="font-size:22px;font-weight:700;color:var(--red);" id="oadr-count-optout">—</div>
+          <div style="font-size:10px;color:var(--text-hint);">Opted Out</div>
+        </div>
+      </div>
+
+      <!-- Events List -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">OpenADR Events</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select class="history-select" id="oadr-filter" onchange="loadOpenADREvents()">
+              <option value="active">Active &amp; Upcoming</option>
+              <option value="all">All Events</option>
+              <option value="completed">Completed</option>
+            </select>
+            <button class="queue-refresh" onclick="loadOpenADREvents()">Refresh</button>
+          </div>
+        </div>
+        <div id="oadr-events-list">
+          <div class="sched-empty">Loading OpenADR events...</div>
+        </div>
+      </div>
+
+      <!-- Reports -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">Telemetry Reports Sent</div>
+          <button class="queue-refresh" onclick="loadOpenADRReports()">Refresh</button>
+        </div>
+        <div id="oadr-reports-list">
+          <div class="sched-empty">No reports yet.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── OPENADR CONFIG TAB ── -->
+<div class="tab-pane" id="tab-admin-openadr">
+  <div class="scroll-content">
+    <div style="max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <!-- VTN Connection -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">VTN Connection</div>
+          <div style="display:flex;gap:8px;">
+            <button class="queue-refresh" onclick="testVTNConnection()">Test Connection</button>
+            <button class="queue-refresh" onclick="saveVTNConfig()" style="color:var(--green-dark);border-color:var(--green);">Save</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">VTN ID</label>
+            <input type="text" id="oadr-vtn-id" placeholder="VTN identifier from utility"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">VEN ID</label>
+            <input type="text" id="oadr-ven-id" placeholder="Your VEN identifier"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div style="grid-column:1/-1;">
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">VTN URL</label>
+            <input type="url" id="oadr-vtn-url" placeholder="https://vtn.utility.com/OpenADR2/Simple/2.0b"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Transport</label>
+            <select id="oadr-transport" class="sched-select" style="width:100%;font-size:12px;">
+              <option value="rest">REST/HTTP (EiXML)</option>
+              <option value="soap">SOAP/HTTP (XML)</option>
+              <option value="xmpp">XMPP (Push)</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Registration ID</label>
+            <input type="text" id="oadr-reg-id" placeholder="Assigned after registration"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+        </div>
+        <div id="oadr-config-status" style="font-size:11px;margin-top:8px;display:none;"></div>
+      </div>
+
+      <!-- VEN Endpoint -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">Your VEN Endpoint</div>
+        </div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">
+          Give the VTN administrator these URLs to send OpenADR events to your VEN:
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px 14px;">
+            <div style="font-size:10px;color:var(--text-hint);margin-bottom:3px;">Event Endpoint (VTN → VEN)</div>
+            <code style="font-size:12px;color:var(--blue-dark);" id="oadr-endpoint-event">${PROXY_URL}openadr/event</code>
+          </div>
+          <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px 14px;">
+            <div style="font-size:10px;color:var(--text-hint);margin-bottom:3px;">Cancel Endpoint</div>
+            <code style="font-size:12px;color:var(--blue-dark);" id="oadr-endpoint-cancel">${PROXY_URL}openadr/cancel</code>
+          </div>
+          <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px 14px;">
+            <div style="font-size:10px;color:var(--text-hint);margin-bottom:3px;">Report Pull Endpoint (VTN pulls telemetry)</div>
+            <code style="font-size:12px;color:var(--blue-dark);" id="oadr-endpoint-report">${PROXY_URL}openadr/report</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- Signal → Strategy Mapping -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">Signal → Strategy Mapping</div>
+          <button class="queue-refresh" onclick="saveMappings()">Save Mappings</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">
+          Configure how OpenADR signal levels map to EnTek load control strategies.
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead><tr>
+              <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Signal Level</th>
+              <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Description</th>
+              <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">LC Strategy</th>
+              <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Mode</th>
+              <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Control %</th>
+            </tr></thead>
+            <tbody id="oadr-mapping-table">
+              <!-- Populated by JS -->
+            </tbody>
+          </table>
+        </div>
+        <div id="oadr-mapping-status" style="font-size:11px;margin-top:8px;display:none;"></div>
+      </div>
+
+      <!-- Test Event -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">🧪 Test OpenADR Event</div>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">
+          Simulate an incoming OpenADR event from a VTN to test the full flow.
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Signal Level</label>
+            <select id="oadr-test-signal" class="sched-select" style="width:100%;font-size:12px;">
+              <option value="1.0">1.0 — 100% Shed</option>
+              <option value="0.75">0.75 — 75% Shed</option>
+              <option value="0.5" selected>0.5 — 50% Shed</option>
+              <option value="0.25">0.25 — 25% Shed</option>
+              <option value="0.0">0.0 — Restore All</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Start (minutes from now)</label>
+            <input type="number" id="oadr-test-start" value="1" min="0"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Duration (minutes)</label>
+            <input type="number" id="oadr-test-duration" value="30" min="5"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+        </div>
+        <button onclick="simulateOpenADREvent()"
+          style="padding:8px 20px;border-radius:var(--radius-sm);border:none;background:var(--text-primary);color:white;font-size:13px;font-weight:600;cursor:pointer;">
+          🧪 Simulate Incoming Event
+        </button>
+        <div id="oadr-test-status" style="font-size:11px;margin-top:8px;display:none;"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- ── DRILL DOWN SIDE PANEL ── -->
 <div id="fh-drill-panel" style="position:fixed;top:0;right:-480px;width:480px;height:100vh;background:var(--surface);border-left:0.5px solid var(--border-md);z-index:1000;transition:right 0.3s ease;display:flex;flex-direction:column;box-shadow:-4px 0 20px rgba(0,0,0,0.15);">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:0.5px solid var(--border-md);">
@@ -1916,7 +2130,9 @@ function runTabInit(name) {
   if (name === "admin-users") { updateAdminHeader(); loadUsersTable(); }
   if (name === "admin-health") { initFleetHealth(); }
   if (name === "admin-monitor") { initMonitoring(); }
-  if (name === "admin-energy")  { initEnergyMonitor(); }
+  if (name === "admin-energy")    { initEnergyMonitor(); }
+  if (name === "openadr")         { initOpenADREvents(); }
+  if (name === "admin-openadr")   { initOpenADRConfig(); }
 }
 
 function switchTab(name, btn) { switchMain(name, btn); }
@@ -6817,6 +7033,488 @@ async function exportEnergyCSV() {
   const monitorId = document.getElementById("em-chart-monitor")?.value;
   const name = document.getElementById("em-chart-monitor")?.selectedOptions[0]?.text || "export";
   if (monitorId) await exportEnergyMonitorCSV(monitorId, name);
+}
+
+// ── OPENADR VEN ───────────────────────────────────────────────────────────────
+let oadrVTNConfig  = null;
+let oadrMappings   = [
+  { level: 1.0,  desc: "Emergency Shed",  strategy: 19, mode: "dlc", pct: 100 },
+  { level: 0.75, desc: "High Shed",       strategy: 15, mode: "dlc", pct: 75  },
+  { level: 0.5,  desc: "Medium Shed",     strategy: 9,  mode: "di",  pct: 50  },
+  { level: 0.25, desc: "Low Shed",        strategy: 5,  mode: "di",  pct: 25  },
+  { level: 0.0,  desc: "Restore All",     strategy: 61, mode: "dlc", pct: 0   },
+];
+let oadrReportTimer = null;
+
+// ── Signal → Strategy mapping ─────────────────────────────────────────────────
+function signalToStrategy(level) {
+  const numLevel = parseFloat(level);
+  // Find closest mapping
+  let best = oadrMappings[0];
+  let bestDiff = Math.abs(numLevel - best.level);
+  oadrMappings.forEach(m => {
+    const diff = Math.abs(numLevel - m.level);
+    if (diff < bestDiff) { best = m; bestDiff = diff; }
+  });
+  return best;
+}
+
+// ── Config Tab ────────────────────────────────────────────────────────────────
+async function initOpenADRConfig() {
+  // Set endpoint URLs
+  const epEvent  = document.getElementById("oadr-endpoint-event");
+  const epCancel = document.getElementById("oadr-endpoint-cancel");
+  const epReport = document.getElementById("oadr-endpoint-report");
+  if (epEvent)  epEvent.textContent  = PROXY_URL + "openadr/event";
+  if (epCancel) epCancel.textContent = PROXY_URL + "openadr/cancel";
+  if (epReport) epReport.textContent = PROXY_URL + "openadr/report";
+
+  // Load VTN config
+  try {
+    const rows = await supabaseGet("openadr_vtn_config?order=id.desc&limit=1");
+    if (Array.isArray(rows) && rows.length > 0) {
+      oadrVTNConfig = rows[0];
+      const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+      set("oadr-vtn-id",    oadrVTNConfig.vtn_id);
+      set("oadr-ven-id",    oadrVTNConfig.ven_id);
+      set("oadr-vtn-url",   oadrVTNConfig.vtn_url);
+      set("oadr-transport", oadrVTNConfig.transport);
+      set("oadr-reg-id",    oadrVTNConfig.registration_id);
+    }
+  } catch(e) { console.error("initOpenADRConfig:", e); }
+
+  renderMappingTable();
+}
+
+function renderMappingTable() {
+  const tbody = document.getElementById("oadr-mapping-table");
+  if (!tbody) return;
+  tbody.innerHTML = oadrMappings.map((m, i) => `
+    <tr>
+      <td style="padding:8px;border-bottom:0.5px solid var(--border);">
+        <input type="number" step="0.05" min="0" max="1" value="${m.level}"
+          onchange="oadrMappings[${i}].level=parseFloat(this.value)"
+          style="width:70px;padding:4px 6px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;" />
+      </td>
+      <td style="padding:8px;border-bottom:0.5px solid var(--border);">
+        <input type="text" value="${m.desc}"
+          onchange="oadrMappings[${i}].desc=this.value"
+          style="width:140px;padding:4px 6px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;" />
+      </td>
+      <td style="padding:8px;border-bottom:0.5px solid var(--border);">
+        <input type="number" min="0" max="63" value="${m.strategy}"
+          onchange="oadrMappings[${i}].strategy=parseInt(this.value)"
+          style="width:70px;padding:4px 6px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;" />
+      </td>
+      <td style="padding:8px;border-bottom:0.5px solid var(--border);">
+        <select onchange="oadrMappings[${i}].mode=this.value"
+          style="padding:4px 6px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
+          <option value="dlc" ${m.mode==="dlc"?"selected":""}>DLC</option>
+          <option value="di"  ${m.mode==="di" ?"selected":""}>DI</option>
+        </select>
+      </td>
+      <td style="padding:8px;border-bottom:0.5px solid var(--border);color:var(--text-hint);">${m.pct}%</td>
+    </tr>`).join("");
+}
+
+async function saveVTNConfig() {
+  const config = {
+    vtn_id:          document.getElementById("oadr-vtn-id")?.value?.trim(),
+    ven_id:          document.getElementById("oadr-ven-id")?.value?.trim(),
+    vtn_url:         document.getElementById("oadr-vtn-url")?.value?.trim(),
+    transport:       document.getElementById("oadr-transport")?.value,
+    registration_id: document.getElementById("oadr-reg-id")?.value?.trim(),
+    status:          "registered",
+    updated_at:      new Date().toISOString()
+  };
+  const statusEl = document.getElementById("oadr-config-status");
+  try {
+    if (oadrVTNConfig?.id) {
+      await supabasePatch(`openadr_vtn_config?id=eq.${oadrVTNConfig.id}`, config);
+    } else {
+      await fetch(`${SUPABASE_URL}/rest/v1/openadr_vtn_config`, {
+        method: "POST",
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json", "Prefer": "return=minimal" },
+        body: JSON.stringify(config)
+      });
+    }
+    oadrVTNConfig = config;
+    if (statusEl) { statusEl.textContent = "✅ VTN config saved."; statusEl.style.color = "var(--green-dark)"; statusEl.style.display = "block"; }
+    setTimeout(() => { if (statusEl) statusEl.style.display = "none"; }, 3000);
+  } catch(e) {
+    if (statusEl) { statusEl.textContent = `Error: ${e.message}`; statusEl.style.color = "var(--red)"; statusEl.style.display = "block"; }
+  }
+}
+
+async function saveMappings() {
+  // Store in program_settings as JSON
+  await supabasePatch("program_settings?setting_key=eq.openadr_mappings",
+    { setting_value: JSON.stringify(oadrMappings), updated_at: new Date().toISOString() });
+  const statusEl = document.getElementById("oadr-mapping-status");
+  if (statusEl) { statusEl.textContent = "✅ Mappings saved."; statusEl.style.color = "var(--green-dark)"; statusEl.style.display = "block"; }
+  setTimeout(() => { if (statusEl) statusEl.style.display = "none"; }, 2000);
+}
+
+async function testVTNConnection() {
+  const url = document.getElementById("oadr-vtn-url")?.value?.trim();
+  const statusEl = document.getElementById("oadr-config-status");
+  if (!url) { if (statusEl) { statusEl.textContent = "Enter VTN URL first."; statusEl.style.color = "var(--red)"; statusEl.style.display = "block"; } return; }
+  if (statusEl) { statusEl.textContent = "Testing connection..."; statusEl.style.color = "var(--text-secondary)"; statusEl.style.display = "block"; }
+  try {
+    const res = await fetch(`${PROXY_URL}openadr/ping`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vtn_url: url })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      if (statusEl) { statusEl.textContent = `✅ Connected — VTN responded.`; statusEl.style.color = "var(--green-dark)"; }
+    } else {
+      if (statusEl) { statusEl.textContent = `⚠️ VTN returned ${res.status} — check URL.`; statusEl.style.color = "var(--amber)"; }
+    }
+  } catch(e) {
+    if (statusEl) { statusEl.textContent = `❌ Connection failed: ${e.message}`; statusEl.style.color = "var(--red)"; }
+  }
+}
+
+// ── Events Tab ────────────────────────────────────────────────────────────────
+async function initOpenADREvents() {
+  await loadOpenADRVTNStatus();
+  await loadOpenADREvents();
+  await loadOpenADRReports();
+  // Start polling for new events every 30 seconds
+  if (oadrReportTimer) clearInterval(oadrReportTimer);
+  oadrReportTimer = setInterval(async () => {
+    await loadOpenADREvents();
+    await checkAndFirePendingEvents();
+    await sendPendingReports();
+  }, 30000);
+}
+
+async function loadOpenADRVTNStatus() {
+  try {
+    const rows = await supabaseGet("openadr_vtn_config?order=id.desc&limit=1");
+    const labelEl = document.getElementById("oadr-vtn-status-label");
+    const dotEl   = document.getElementById("oadr-vtn-status-dot");
+    if (Array.isArray(rows) && rows.length > 0) {
+      oadrVTNConfig = rows[0];
+      if (labelEl) labelEl.textContent = `VTN: ${oadrVTNConfig.vtn_id} · VEN: ${oadrVTNConfig.ven_id}`;
+      if (dotEl) { dotEl.textContent = "🟢 Registered"; dotEl.style.background = "var(--green-bg)"; dotEl.style.color = "var(--green-dark)"; }
+    } else {
+      if (labelEl) labelEl.textContent = "Not configured — go to Admin → OpenADR Config";
+      if (dotEl) { dotEl.textContent = "⚫ Not Configured"; }
+    }
+  } catch(e) { console.error("loadOpenADRVTNStatus:", e); }
+}
+
+async function loadOpenADREvents() {
+  const list = document.getElementById("oadr-events-list");
+  if (!list) return;
+  try {
+    const filter = document.getElementById("oadr-filter")?.value || "active";
+    let query = "openadr_events?order=dtstart.desc&limit=50";
+    if (filter === "active")    query += "&event_status=not.in.(completed,cancelled)";
+    if (filter === "completed") query += "&event_status=in.(completed,cancelled)";
+
+    const rows = await supabaseGet(query);
+
+    // Update counts
+    const all       = await supabaseGet("openadr_events?select=id,event_status,opt_type");
+    const total     = all?.length || 0;
+    const pending   = all?.filter(e => e.event_status === "far" || e.event_status === "near").length || 0;
+    const active    = all?.filter(e => e.event_status === "active").length || 0;
+    const optIn     = all?.filter(e => e.opt_type === "optIn").length || 0;
+    const optOut    = all?.filter(e => e.opt_type === "optOut").length || 0;
+
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    set("oadr-count-total",  total);
+    set("oadr-count-pending", pending);
+    set("oadr-count-active",  active);
+    set("oadr-count-optin",   optIn);
+    set("oadr-count-optout",  optOut);
+
+    if (!Array.isArray(rows) || !rows.length) {
+      list.innerHTML = `<div class="sched-empty">No OpenADR events found.</div>`;
+      return;
+    }
+
+    const statusColors = {
+      far:"var(--text-hint)", near:"var(--amber)", active:"var(--green-dark)",
+      completed:"var(--text-secondary)", cancelled:"var(--red)"
+    };
+
+    list.innerHTML = rows.map(e => {
+      const dtstart  = e.dtstart ? new Date(e.dtstart).toLocaleString() : "—";
+      const end      = e.dtstart && e.duration_mins
+        ? new Date(new Date(e.dtstart).getTime() + e.duration_mins*60000).toLocaleString()
+        : "—";
+      const sc       = statusColors[e.event_status] || "var(--text-secondary)";
+      const mapping  = signalToStrategy(e.signal_level || 0);
+      const isActive = e.event_status === "active";
+      const canOverride = e.opt_type !== "optOut" && e.event_status !== "completed";
+
+      return `<div class="queue-item ${e.event_status}">
+        <div class="queue-info">
+          <div class="queue-name">
+            VTN Event: ${e.vtn_event_id}
+            <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:8px;background:var(--surface2);color:${sc};margin-left:6px;">${e.event_status}</span>
+            <span style="font-size:10px;padding:2px 8px;border-radius:8px;margin-left:4px;background:${e.opt_type==='optIn'?'var(--green-bg)':'var(--surface2)'};color:${e.opt_type==='optIn'?'var(--green-dark)':'var(--text-hint)'};">${e.opt_type}</span>
+          </div>
+          <div class="queue-detail">
+            Signal: ${e.signal_name || "SIMPLE"} @ ${e.signal_level ?? "—"} → ${mapping.desc} (Strategy ${mapping.strategy}, ${mapping.pct}% shed)
+          </div>
+          <div class="queue-detail">
+            📅 Start: ${dtstart} · End: ${end} · ${e.duration_mins || "—"} min
+          </div>
+        </div>
+        <div class="sched-actions">
+          ${canOverride ? `
+            <button class="sched-delete-btn" style="color:var(--red);"
+              onclick="overrideOpenADREvent('${e.vtn_event_id}', 'optOut')">Opt Out</button>
+            ${e.opt_type === "optOut" ? `<button class="sched-delete-btn" style="color:var(--green-dark);"
+              onclick="overrideOpenADREvent('${e.vtn_event_id}', 'optIn')">Re-Opt In</button>` : ""}
+          ` : ""}
+        </div>
+      </div>`;
+    }).join("");
+
+  } catch(e) {
+    console.error("loadOpenADREvents:", e);
+    if (list) list.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error loading events.</div>`;
+  }
+}
+
+async function overrideOpenADREvent(vtnEventId, optType) {
+  const reason = optType === "optOut"
+    ? prompt("Reason for opting out (optional):") || "Manual override by operator"
+    : null;
+  await supabasePatch(
+    `openadr_events?vtn_event_id=eq.${encodeURIComponent(vtnEventId)}`,
+    { opt_type: optType, override_opt: optType, override_reason: reason }
+  );
+  // Send oadrCreatedEvent to VTN with updated opt
+  await sendOptResponse(vtnEventId, optType);
+  await loadOpenADREvents();
+  setStatus("ready", `Event ${vtnEventId} — ${optType === "optOut" ? "Opted Out" : "Re-Opted In"}`);
+}
+
+async function checkAndFirePendingEvents() {
+  // Find events that should fire now
+  const now = new Date().toISOString();
+  const rows = await supabaseGet(
+    `openadr_events?event_status=in.(far,near)&dtstart=lte.${now}&opt_type=eq.optIn&order=dtstart.asc&limit=10`
+  );
+  if (!Array.isArray(rows) || !rows.length) return;
+
+  for (const evt of rows) {
+    try {
+      console.log(`Firing OpenADR event: ${evt.vtn_event_id} signal=${evt.signal_level}`);
+      const mapping  = signalToStrategy(evt.signal_level || 0);
+      const schedUnix = Math.floor(new Date(evt.dtstart).getTime() / 1000);
+      const reps     = evt.duration_mins ? Math.max(1, Math.round(evt.duration_mins / (mapping.strategy <= 3 ? 7.5 : 15))) : 1;
+      const lcHex    = buildLCHex("all_on", mapping.mode, mapping.strategy, reps, schedUnix);
+
+      // Send to all devices
+      const realDevices = DEVICES.filter(d => !d.uid.includes("PLACEHOLDER"));
+      for (const device of realDevices) {
+        await sendLCToDevice(device.uid, lcHex);
+      }
+
+      // Update event status
+      await supabasePatch(
+        `openadr_events?vtn_event_id=eq.${encodeURIComponent(evt.vtn_event_id)}`,
+        { event_status: "active" }
+      );
+
+      // Schedule end restore
+      setTimeout(async () => {
+        const restoreHex = buildRestoreHex("all_on");
+        for (const device of realDevices) await sendLCToDevice(device.uid, restoreHex);
+        await supabasePatch(
+          `openadr_events?vtn_event_id=eq.${encodeURIComponent(evt.vtn_event_id)}`,
+          { event_status: "completed" }
+        );
+        await sendCompletionReport(evt);
+      }, (evt.duration_mins || 30) * 60000);
+
+      // Send initial telemetry report
+      await sendUpdateReport(evt, "x-resourceStatus", "AVAILABLE");
+
+    } catch(e) { console.error("checkAndFirePendingEvents:", evt.vtn_event_id, e); }
+  }
+}
+
+// ── OpenADR Reporting ─────────────────────────────────────────────────────────
+async function sendOptResponse(vtnEventId, optType) {
+  if (!oadrVTNConfig?.vtn_url) return;
+  // Build oadrCreatedEvent payload
+  const payload = buildOADRPayload("oadrCreatedEvent", {
+    venId:      oadrVTNConfig.ven_id,
+    vtnEventId, optType,
+    created:    new Date().toISOString()
+  });
+  try {
+    await fetch(`${PROXY_URL}openadr/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vtn_url: oadrVTNConfig.vtn_url, transport: oadrVTNConfig.transport, payload })
+    });
+  } catch(e) { console.error("sendOptResponse:", e); }
+}
+
+async function sendUpdateReport(evt, readingType, value) {
+  if (!oadrVTNConfig?.vtn_url) return;
+  const payload = buildOADRPayload("oadrUpdateReport", {
+    venId:      oadrVTNConfig.ven_id,
+    vtnEventId: evt.vtn_event_id,
+    readingType, value,
+    dtstart:    new Date().toISOString(),
+    devices:    DEVICES.filter(d => !d.uid.includes("PLACEHOLDER")).map(d => d.uid)
+  });
+  // Store in openadr_reports
+  await fetch(`${SUPABASE_URL}/rest/v1/openadr_reports`, {
+    method: "POST",
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json", "Prefer": "return=minimal" },
+    body: JSON.stringify({
+      vtn_event_id: evt.vtn_event_id, report_name: "oadrUpdateReport",
+      created_dt: new Date().toISOString(), dtstart: evt.dtstart,
+      duration_mins: evt.duration_mins, reading_type: readingType,
+      value: typeof value === "number" ? value : null,
+      raw_payload: JSON.stringify(payload)
+    })
+  });
+  // Send to VTN
+  try {
+    await fetch(`${PROXY_URL}openadr/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vtn_url: oadrVTNConfig.vtn_url, transport: oadrVTNConfig.transport, payload })
+    });
+  } catch(e) { console.error("sendUpdateReport:", e); }
+}
+
+async function sendCompletionReport(evt) {
+  // Gather actual device readings during event
+  const startMs = new Date(evt.dtstart).getTime();
+  const endMs   = startMs + ((evt.duration_mins || 30) * 60000);
+  const since   = new Date(startMs).toISOString();
+  const until   = new Date(endMs).toISOString();
+
+  const readings = await supabaseGet(
+    `device_readings?recorded_at=gte.${since}&recorded_at=lte.${until}&order=recorded_at.desc&limit=500`
+  );
+
+  let totalWatts = 0, count = 0;
+  if (Array.isArray(readings)) {
+    readings.forEach(r => { if (r.watts_consumed) { totalWatts += r.watts_consumed; count++; } });
+  }
+  const avgWatts = count ? Math.round(totalWatts / count) : 0;
+
+  await sendUpdateReport(evt, "x-resourceStatus", avgWatts);
+}
+
+async function sendPendingReports() {
+  // Send 5-min telemetry reports for active events
+  const active = await supabaseGet("openadr_events?event_status=eq.active&opt_type=eq.optIn&limit=10");
+  if (!Array.isArray(active) || !active.length) return;
+  for (const evt of active) {
+    // Get latest device readings
+    const readings = await supabaseGet("device_readings?order=recorded_at.desc&limit=20");
+    if (!Array.isArray(readings) || !readings.length) continue;
+    const watts = readings.filter(r => r.watts_consumed).map(r => r.watts_consumed);
+    const avgW  = watts.length ? Math.round(watts.reduce((a,b)=>a+b,0)/watts.length) : 0;
+    await sendUpdateReport(evt, "x-resourceStatus", avgW);
+  }
+}
+
+// ── OpenADR XML/JSON Payload Builder ─────────────────────────────────────────
+function buildOADRPayload(type, data) {
+  const ts = new Date().toISOString();
+  // Returns both REST (JSON) and SOAP (XML) formats
+  const json = { oadrPayload: { type, ...data, requestID: `req-${Date.now()}`, createdDateTime: ts } };
+  const xml  = `<?xml version="1.0" encoding="UTF-8"?>
+<oadrPayload xmlns="http://openadr.org/oadr-2.0b/2012/07">
+  <eiResponse>
+    <responseCode>200</responseCode>
+    <requestID>req-${Date.now()}</requestID>
+  </eiResponse>
+  <${type}>
+    <venID>${data.venId || ""}</venID>
+    <vtnEventID>${data.vtnEventId || ""}</vtnEventID>
+    <optType>${data.optType || ""}</optType>
+    <createdDateTime>${ts}</createdDateTime>
+  </${type}>
+</oadrPayload>`;
+  return { json, xml };
+}
+
+// ── Simulate incoming OpenADR event (for testing) ─────────────────────────────
+async function simulateOpenADREvent() {
+  const signalLevel = parseFloat(document.getElementById("oadr-test-signal")?.value || "0.5");
+  const startMins   = parseInt(document.getElementById("oadr-test-start")?.value || "1");
+  const duration    = parseInt(document.getElementById("oadr-test-duration")?.value || "30");
+  const statusEl    = document.getElementById("oadr-test-status");
+
+  const dtstart = new Date(Date.now() + startMins * 60000).toISOString();
+  const mapping = signalToStrategy(signalLevel);
+  const vtnEventId = `TEST-${Date.now()}`;
+
+  if (statusEl) { statusEl.textContent = "Simulating incoming OpenADR event..."; statusEl.style.color = "var(--text-secondary)"; statusEl.style.display = "block"; }
+
+  try {
+    // Insert simulated event
+    await fetch(`${SUPABASE_URL}/rest/v1/openadr_events`, {
+      method: "POST",
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json", "Prefer": "return=minimal" },
+      body: JSON.stringify({
+        vtn_event_id:  vtnEventId,
+        event_status:  "near",
+        opt_type:      "optIn",
+        signal_name:   "SIMPLE",
+        signal_type:   "LOAD_DISPATCH",
+        signal_level:  signalLevel,
+        target_all:    true,
+        dtstart,
+        duration_mins: duration,
+        created_dt:    new Date().toISOString(),
+        lc_strategy:   mapping.strategy,
+        lc_mode:       mapping.mode,
+        raw_payload:   JSON.stringify({ simulated: true, signalLevel, mapping })
+      })
+    });
+
+    if (statusEl) { statusEl.textContent = `✅ Simulated event created — ${mapping.desc} (${mapping.pct}% shed) starting in ${startMins} min. Switch to OpenADR Events tab to monitor.`; statusEl.style.color = "var(--green-dark)"; }
+
+    // Load events immediately
+    await loadOpenADREvents();
+
+  } catch(e) {
+    console.error("simulateOpenADREvent:", e);
+    if (statusEl) { statusEl.textContent = `Error: ${e.message}`; statusEl.style.color = "var(--red)"; }
+  }
+}
+
+async function loadOpenADRReports() {
+  const list = document.getElementById("oadr-reports-list");
+  if (!list) return;
+  try {
+    const rows = await supabaseGet("openadr_reports?order=created_dt.desc&limit=20");
+    if (!Array.isArray(rows) || !rows.length) {
+      list.innerHTML = `<div class="sched-empty">No telemetry reports sent yet.</div>`;
+      return;
+    }
+    list.innerHTML = rows.map(r => `
+      <div class="queue-item sent" style="margin-bottom:6px;">
+        <div class="queue-info">
+          <div class="queue-name">${r.report_name} — Event: ${r.vtn_event_id}</div>
+          <div class="queue-detail">Type: ${r.reading_type} · Value: ${r.value ?? "—"} · ${new Date(r.created_dt).toLocaleString()}</div>
+        </div>
+        <span class="queue-status sent">Sent</span>
+      </div>`).join("");
+  } catch(e) { console.error("loadOpenADRReports:", e); }
 }
 
 function buildControls() {
