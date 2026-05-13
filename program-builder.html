@@ -1,0 +1,1348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnTek Load Control — Program Builder</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --surface2: #1a1a24;
+    --border: rgba(255,255,255,0.06);
+    --border-md: rgba(255,255,255,0.12);
+    --text-primary: #f0f0f5;
+    --text-secondary: #a0a0b0;
+    --text-hint: #606070;
+    --accent: #3b82f6;
+    --accent-dark: #2563eb;
+    --green: #22c55e;
+    --amber: #f59e0b;
+    --red: #ef4444;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: "DM Sans", -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    min-height: 100vh;
+  }
+
+  /* Header */
+  .header {
+    background: linear-gradient(135deg, #0f0f1a 0%, #1a1030 100%);
+    border-bottom: 0.5px solid var(--border-md);
+    padding: 1.5rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header-logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .header-icon {
+    width: 40px;
+    height: 40px;
+    background: var(--accent);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+  }
+  .header-title { font-size: 18px; font-weight: 700; }
+  .header-sub   { font-size: 11px; color: var(--text-hint); margin-top: 2px; }
+  .header-badge {
+    background: rgba(59,130,246,0.15);
+    border: 0.5px solid rgba(59,130,246,0.3);
+    color: #93c5fd;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 20px;
+  }
+
+  /* Layout */
+  .container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* Steps indicator */
+  .steps {
+    display: flex;
+    gap: 0;
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .step {
+    flex: 1;
+    padding: 12px 16px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-hint);
+    border-right: 0.5px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .step:last-child { border-right: none; }
+  .step.active { background: var(--accent); color: white; font-weight: 600; }
+  .step.done   { background: rgba(34,197,94,0.1); color: var(--green); }
+  .step-num    { font-size: 16px; font-weight: 700; display: block; }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+  }
+  .card-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-title span { font-size: 18px; }
+
+  /* Form fields */
+  .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field-full { grid-column: 1 / -1; }
+  .field label {
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-hint);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 5px;
+  }
+  .field input, .field select, .field textarea {
+    width: 100%;
+    padding: 9px 12px;
+    background: var(--surface2);
+    border: 0.5px solid var(--border-md);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: inherit;
+    transition: border-color 0.2s;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .field input::placeholder { color: var(--text-hint); }
+  .field select option { background: var(--surface2); }
+  .field textarea { resize: vertical; min-height: 80px; }
+
+  /* Feature checkboxes */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+  }
+  .feature-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
+    background: var(--surface2);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .feature-item:hover { border-color: var(--border-md); }
+  .feature-item.selected { border-color: var(--accent); background: rgba(59,130,246,0.08); }
+  .feature-item input[type="checkbox"] { margin-top: 1px; accent-color: var(--accent); }
+  .feature-label { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+  .feature-desc  { font-size: 10px; color: var(--text-hint); margin-top: 2px; }
+
+  /* Device list */
+  .device-list { display: flex; flex-direction: column; gap: 8px; }
+  .device-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .device-row input { flex: 1; }
+  .device-row .dev-name { width: 160px; flex-shrink: 0; }
+  .device-row .remove-btn {
+    padding: 6px 10px;
+    background: transparent;
+    border: 0.5px solid var(--border-md);
+    border-radius: var(--radius-sm);
+    color: var(--text-hint);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .device-row .remove-btn:hover { border-color: var(--red); color: var(--red); }
+
+  /* Buttons */
+  .btn {
+    padding: 10px 20px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+  }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: var(--accent-dark); }
+  .btn-secondary {
+    background: transparent;
+    border: 0.5px solid var(--border-md);
+    color: var(--text-secondary);
+  }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-green { background: var(--green); color: white; }
+  .btn-sm { padding: 7px 14px; font-size: 12px; }
+
+  /* Navigation */
+  .nav-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+  }
+
+  /* Output preview */
+  .output-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+  .output-tab {
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    cursor: pointer;
+    border: 0.5px solid var(--border);
+    background: transparent;
+    color: var(--text-hint);
+    transition: all 0.2s;
+  }
+  .output-tab.active {
+    background: var(--surface2);
+    color: var(--text-primary);
+    border-color: var(--border-md);
+  }
+  .code-block {
+    background: var(--surface2);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 1rem;
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+    font-size: 11px;
+    color: #93c5fd;
+    max-height: 400px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  /* Summary */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 1rem;
+  }
+  .summary-card {
+    background: var(--surface2);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    text-align: center;
+  }
+  .summary-val  { font-size: 22px; font-weight: 700; color: var(--accent); }
+  .summary-lbl  { font-size: 10px; color: var(--text-hint); margin-top: 2px; }
+
+  /* Status */
+  .status-msg {
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    display: none;
+  }
+  .status-ok    { background: rgba(34,197,94,0.1); border: 0.5px solid rgba(34,197,94,0.3); color: var(--green); }
+  .status-error { background: rgba(239,68,68,0.1);  border: 0.5px solid rgba(239,68,68,0.3);  color: var(--red); }
+
+  /* Step panels */
+  .step-panel { display: none; }
+  .step-panel.active { display: block; }
+
+  /* Download buttons */
+  .download-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+  }
+  .download-btn {
+    padding: 14px;
+    border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border-md);
+    background: var(--surface2);
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s;
+  }
+  .download-btn:hover { border-color: var(--accent); background: rgba(59,130,246,0.08); }
+  .download-btn .dl-icon { font-size: 24px; display: block; margin-bottom: 6px; }
+  .download-btn .dl-sub  { font-size: 10px; color: var(--text-hint); font-weight: 400; margin-top: 2px; }
+
+  .help-text { font-size: 11px; color: var(--text-hint); margin-top: 4px; }
+
+  @media (max-width: 640px) {
+    .field-grid { grid-template-columns: 1fr; }
+    .summary-grid { grid-template-columns: 1fr; }
+    .container { padding: 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">
+    <div class="header-icon">⚡</div>
+    <div>
+      <div class="header-title">Load Control Program Builder</div>
+      <div class="header-sub">Generate a complete DR dashboard package in minutes</div>
+    </div>
+  </div>
+  <div class="header-badge">EnTek Systems</div>
+</div>
+
+<div class="container">
+
+  <!-- Steps -->
+  <div class="steps">
+    <div class="step active" id="step-nav-1" onclick="goStep(1)"><span class="step-num">1</span>Program Info</div>
+    <div class="step" id="step-nav-2" onclick="goStep(2)"><span class="step-num">2</span>Infrastructure</div>
+    <div class="step" id="step-nav-3" onclick="goStep(3)"><span class="step-num">3</span>Devices</div>
+    <div class="step" id="step-nav-4" onclick="goStep(4)"><span class="step-num">4</span>Features</div>
+    <div class="step" id="step-nav-5" onclick="goStep(5)"><span class="step-num">5</span>Generate</div>
+  </div>
+
+  <div id="status-msg" class="status-msg"></div>
+
+  <!-- ── STEP 1: Program Info ── -->
+  <div class="step-panel active" id="panel-1">
+    <div class="card">
+      <div class="card-title"><span>🏢</span> Program Information</div>
+      <div class="field-grid">
+        <div class="field field-full">
+          <label>Program / Utility Name *</label>
+          <input type="text" id="p-name" placeholder="e.g. Pacific Gas & Electric DR Pilot" />
+        </div>
+        <div class="field">
+          <label>Program Abbreviation *</label>
+          <input type="text" id="p-abbr" placeholder="e.g. PGE" maxlength="10" />
+          <div class="help-text">Used for file names and identifiers</div>
+        </div>
+        <div class="field">
+          <label>Dashboard Title</label>
+          <input type="text" id="p-title" placeholder="e.g. PG&E Load Control Panel" />
+        </div>
+        <div class="field">
+          <label>Dashboard Subtitle</label>
+          <input type="text" id="p-subtitle" placeholder="e.g. DR Pilot Program" />
+        </div>
+        <div class="field">
+          <label>Admin Email *</label>
+          <input type="email" id="p-admin-email" placeholder="admin@utility.com" />
+        </div>
+        <div class="field">
+          <label>Default Weather Location</label>
+          <input type="text" id="p-weather-location" placeholder="e.g. San Francisco, CA" />
+        </div>
+        <div class="field">
+          <label>Program Color Theme</label>
+          <select id="p-theme">
+            <option value="blue">Blue (Default)</option>
+            <option value="green">Green</option>
+            <option value="orange">Orange</option>
+            <option value="purple">Purple</option>
+            <option value="teal">Teal</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Max Devices (Pilot Size)</label>
+          <select id="p-max-devices">
+            <option value="10">Up to 10 devices</option>
+            <option value="25" selected>Up to 25 devices</option>
+            <option value="50">Up to 50 devices</option>
+            <option value="100">Up to 100 devices</option>
+            <option value="unlimited">Unlimited</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="nav-row">
+      <div></div>
+      <button class="btn btn-primary" onclick="nextStep(1)">Next: Infrastructure →</button>
+    </div>
+  </div>
+
+  <!-- ── STEP 2: Infrastructure ── -->
+  <div class="step-panel" id="panel-2">
+    <div class="card">
+      <div class="card-title"><span>🔧</span> Infrastructure Configuration</div>
+      <div class="field-grid">
+        <div class="field field-full">
+          <label>Supabase Project URL *</label>
+          <input type="url" id="i-supabase-url" placeholder="https://xxxxxxxxxxxx.supabase.co" />
+          <div class="help-text">Create a new Supabase project at supabase.com → copy the Project URL</div>
+        </div>
+        <div class="field field-full">
+          <label>Supabase Anon Key *</label>
+          <input type="text" id="i-supabase-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." />
+          <div class="help-text">Supabase → Settings → API → anon/public key</div>
+        </div>
+        <div class="field field-full">
+          <label>Cloudflare Worker URL *</label>
+          <input type="url" id="i-worker-url" placeholder="https://your-worker.your-subdomain.workers.dev/" />
+          <div class="help-text">Deploy the generated worker.js to Cloudflare Workers and paste the URL here</div>
+        </div>
+        <div class="field field-full">
+          <label>Notehub Project UID *</label>
+          <input type="text" id="i-notehub-project" placeholder="app:xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+        </div>
+        <div class="field field-full">
+          <label>Notehub API Token *</label>
+          <input type="text" id="i-notehub-token" placeholder="api_key_..." />
+          <div class="help-text">Notehub → Account → API Tokens → Generate new token</div>
+        </div>
+        <div class="field">
+          <label>GitHub Pages URL (optional)</label>
+          <input type="url" id="i-github-url" placeholder="https://username.github.io/repo-name/" />
+          <div class="help-text">Used for Supabase Auth redirect URL</div>
+        </div>
+        <div class="field">
+          <label>Timezone</label>
+          <select id="i-timezone">
+            <option value="America/New_York">Eastern (ET)</option>
+            <option value="America/Chicago" selected>Central (CT)</option>
+            <option value="America/Denver">Mountain (MT)</option>
+            <option value="America/Los_Angeles">Pacific (PT)</option>
+            <option value="America/Phoenix">Arizona (AZ)</option>
+            <option value="America/Anchorage">Alaska (AKT)</option>
+            <option value="Pacific/Honolulu">Hawaii (HT)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="nav-row">
+      <button class="btn btn-secondary" onclick="goStep(1)">← Back</button>
+      <button class="btn btn-primary" onclick="nextStep(2)">Next: Devices →</button>
+    </div>
+  </div>
+
+  <!-- ── STEP 3: Devices ── -->
+  <div class="step-panel" id="panel-3">
+    <div class="card">
+      <div class="card-title"><span>📡</span> Enrolled Devices</div>
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:1rem;">
+        Add the device UIDs for this program. You can add placeholder devices now and update them later.
+      </p>
+      <div class="device-list" id="device-list"></div>
+      <button class="btn btn-secondary btn-sm" onclick="addDeviceRow()" style="margin-top:10px;">+ Add Device</button>
+      <div class="help-text" style="margin-top:8px;">Device UIDs start with "dev:" — find them in Notehub under your project's Devices tab</div>
+    </div>
+    <div class="nav-row">
+      <button class="btn btn-secondary" onclick="goStep(2)">← Back</button>
+      <button class="btn btn-primary" onclick="nextStep(3)">Next: Features →</button>
+    </div>
+  </div>
+
+  <!-- ── STEP 4: Features ── -->
+  <div class="step-panel" id="panel-4">
+    <div class="card">
+      <div class="card-title"><span>⚙️</span> Dashboard Features</div>
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:1rem;">
+        Select which features to include in the generated dashboard.
+      </p>
+      <div class="feature-grid" id="feature-grid">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+    <div class="nav-row">
+      <button class="btn btn-secondary" onclick="goStep(3)">← Back</button>
+      <button class="btn btn-primary" onclick="nextStep(4)">Next: Generate →</button>
+    </div>
+  </div>
+
+  <!-- ── STEP 5: Generate ── -->
+  <div class="step-panel" id="panel-5">
+
+    <!-- Summary -->
+    <div class="card">
+      <div class="card-title"><span>📋</span> Program Summary</div>
+      <div class="summary-grid">
+        <div class="summary-card">
+          <div class="summary-val" id="sum-devices">—</div>
+          <div class="summary-lbl">Enrolled Devices</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-val" id="sum-features">—</div>
+          <div class="summary-lbl">Features Enabled</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-val" id="sum-files">4</div>
+          <div class="summary-lbl">Files Generated</div>
+        </div>
+      </div>
+      <div id="sum-details" style="font-size:12px;color:var(--text-secondary);line-height:1.8;"></div>
+    </div>
+
+    <!-- Downloads -->
+    <div class="card">
+      <div class="card-title"><span>📦</span> Download Package</div>
+      <div class="download-grid">
+        <div class="download-btn" onclick="downloadAll()">
+          <span class="dl-icon">📦</span>
+          Download ZIP
+          <div class="dl-sub">All files + SQL + guide</div>
+        </div>
+        <div class="download-btn" onclick="downloadDashboard()">
+          <span class="dl-icon">🌐</span>
+          Dashboard HTML
+          <div class="dl-sub">index.html</div>
+        </div>
+        <div class="download-btn" onclick="downloadWorker()">
+          <span class="dl-icon">⚡</span>
+          Worker JS
+          <div class="dl-sub">worker.js for Cloudflare</div>
+        </div>
+        <div class="download-btn" onclick="downloadSQL()">
+          <span class="dl-icon">🗄️</span>
+          Setup SQL
+          <div class="dl-sub">Paste into Supabase</div>
+        </div>
+        <div class="download-btn" onclick="downloadGuide()">
+          <span class="dl-icon">📖</span>
+          Deployment Guide
+          <div class="dl-sub">Step-by-step checklist</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Preview -->
+    <div class="card">
+      <div class="card-title"><span>👁</span> Preview Generated Files</div>
+      <div class="output-tabs">
+        <button class="output-tab active" onclick="showPreview('sql')">Setup SQL</button>
+        <button class="output-tab" onclick="showPreview('worker')">worker.js</button>
+        <button class="output-tab" onclick="showPreview('guide')">Deploy Guide</button>
+      </div>
+      <div class="code-block" id="preview-content">Click Generate to preview...</div>
+    </div>
+
+    <div class="nav-row">
+      <button class="btn btn-secondary" onclick="goStep(4)">← Back</button>
+      <button class="btn btn-green" onclick="generatePackage()" id="gen-btn">⚡ Generate Package</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let currentStep = 1;
+let generatedFiles = {};
+const TOTAL_STEPS = 5;
+
+const FEATURES = [
+  { id: "summary",   label: "Program Summary",    desc: "Fleet overview, device status table, events bar", required: true },
+  { id: "scheduler", label: "Event Scheduler",     desc: "Schedule and manage DR load control events" },
+  { id: "eventstats",label: "Event Statistics",    desc: "Historical event performance and participation" },
+  { id: "controls",  label: "Device Controls",     desc: "Manual relay on/off controls per device" },
+  { id: "data",      label: "Device Status",       desc: "Real-time bubble-up data and health strips", required: true },
+  { id: "history",   label: "Device History",      desc: "Historical bubble-up data and charts" },
+  { id: "groups",    label: "Device Groups",       desc: "Group management for batch operations" },
+  { id: "map",       label: "Device Location",     desc: "Map view of device locations" },
+  { id: "weather",   label: "Weather Forecast",    desc: "14-day forecast with hourly drill-down" },
+  { id: "settings",  label: "Device Settings",     desc: "Bubble-up interval and schedule management" },
+  { id: "admin",     label: "Admin Panel",         desc: "User management and fleet health monitoring" },
+  { id: "energy",    label: "Energy Monitor",      desc: "Load research and energy trend analysis" },
+];
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+window.onload = () => {
+  buildFeatureGrid();
+  buildInitialDevices(3);
+  // Set today as default start date for devices
+  document.getElementById("p-name")?.focus();
+};
+
+function buildFeatureGrid() {
+  const grid = document.getElementById("feature-grid");
+  grid.innerHTML = FEATURES.map(f => `
+    <label class="feature-item ${f.required ? 'selected' : ''}" id="feat-${f.id}">
+      <input type="checkbox" id="check-${f.id}" ${f.required ? 'checked disabled' : ''} onchange="toggleFeature('${f.id}')">
+      <div>
+        <div class="feature-label">${f.label} ${f.required ? '<span style="color:var(--accent);font-size:9px;">REQUIRED</span>' : ''}</div>
+        <div class="feature-desc">${f.desc}</div>
+      </div>
+    </label>
+  `).join("");
+}
+
+function toggleFeature(id) {
+  const el = document.getElementById(`feat-${id}`);
+  const cb = document.getElementById(`check-${id}`);
+  if (el && cb) el.classList.toggle("selected", cb.checked);
+}
+
+function buildInitialDevices(count) {
+  for (let i = 0; i < count; i++) addDeviceRow();
+}
+
+function addDeviceRow() {
+  const list = document.getElementById("device-list");
+  const maxDevices = parseInt(document.getElementById("p-max-devices")?.value || "25");
+  if (list.children.length >= maxDevices) {
+    showStatus(`Maximum ${maxDevices} devices for this program tier.`, "error");
+    return;
+  }
+  const idx = list.children.length + 1;
+  const row = document.createElement("div");
+  row.className = "device-row";
+  row.innerHTML = `
+    <input class="dev-name" type="text" placeholder="Unit name" value="Unit ${idx.toString().padStart(4,'0')}" />
+    <input type="text" placeholder="dev:868032061XXXXXX" />
+    <button class="remove-btn" onclick="this.parentElement.remove()">✕</button>
+  `;
+  list.appendChild(row);
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+function goStep(n) {
+  document.querySelectorAll(".step-panel").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".step").forEach((s, i) => {
+    s.classList.remove("active");
+    if (i + 1 < n) s.classList.add("done");
+    else s.classList.remove("done");
+  });
+  document.getElementById(`panel-${n}`).classList.add("active");
+  document.getElementById(`step-nav-${n}`).classList.add("active");
+  currentStep = n;
+  if (n === 5) buildSummary();
+}
+
+function nextStep(n) {
+  if (!validateStep(n)) return;
+  goStep(n + 1);
+}
+
+function validateStep(n) {
+  clearStatus();
+  if (n === 1) {
+    if (!document.getElementById("p-name").value.trim()) { showStatus("Program name is required.", "error"); return false; }
+    if (!document.getElementById("p-abbr").value.trim()) { showStatus("Program abbreviation is required.", "error"); return false; }
+    if (!document.getElementById("p-admin-email").value.trim()) { showStatus("Admin email is required.", "error"); return false; }
+  }
+  if (n === 2) {
+    if (!document.getElementById("i-supabase-url").value.trim()) { showStatus("Supabase URL is required.", "error"); return false; }
+    if (!document.getElementById("i-supabase-key").value.trim()) { showStatus("Supabase anon key is required.", "error"); return false; }
+    if (!document.getElementById("i-worker-url").value.trim()) { showStatus("Cloudflare Worker URL is required.", "error"); return false; }
+    if (!document.getElementById("i-notehub-project").value.trim()) { showStatus("Notehub Project UID is required.", "error"); return false; }
+    if (!document.getElementById("i-notehub-token").value.trim()) { showStatus("Notehub API token is required.", "error"); return false; }
+  }
+  return true;
+}
+
+// ── Status ────────────────────────────────────────────────────────────────────
+function showStatus(msg, type) {
+  const el = document.getElementById("status-msg");
+  el.textContent = msg;
+  el.className = `status-msg status-${type}`;
+  el.style.display = "block";
+  setTimeout(() => el.style.display = "none", 4000);
+}
+function clearStatus() {
+  document.getElementById("status-msg").style.display = "none";
+}
+
+// ── Summary ───────────────────────────────────────────────────────────────────
+function buildSummary() {
+  const devices = getDevices();
+  const features = getSelectedFeatures();
+  document.getElementById("sum-devices").textContent  = devices.length;
+  document.getElementById("sum-features").textContent = features.length;
+  document.getElementById("sum-details").innerHTML = `
+    <strong>Program:</strong> ${document.getElementById("p-name").value}<br>
+    <strong>Abbreviation:</strong> ${document.getElementById("p-abbr").value}<br>
+    <strong>Admin:</strong> ${document.getElementById("p-admin-email").value}<br>
+    <strong>Worker:</strong> ${document.getElementById("i-worker-url").value}<br>
+    <strong>Supabase:</strong> ${document.getElementById("i-supabase-url").value}<br>
+    <strong>Features:</strong> ${features.map(f => FEATURES.find(x => x.id === f)?.label).join(", ")}
+  `;
+}
+
+function getDevices() {
+  return [...document.querySelectorAll("#device-list .device-row")].map(row => ({
+    name: row.querySelector(".dev-name")?.value?.trim() || "",
+    uid:  row.querySelectorAll("input")[1]?.value?.trim() || ""
+  })).filter(d => d.uid || d.name);
+}
+
+function getSelectedFeatures() {
+  return FEATURES.filter(f => {
+    const cb = document.getElementById(`check-${f.id}`);
+    return cb && cb.checked;
+  }).map(f => f.id);
+}
+
+function getConfig() {
+  return {
+    name:          document.getElementById("p-name").value.trim(),
+    abbr:          document.getElementById("p-abbr").value.trim().toUpperCase(),
+    title:         document.getElementById("p-title").value.trim() || document.getElementById("p-name").value.trim() + " — Load Control Panel",
+    subtitle:      document.getElementById("p-subtitle").value.trim() || "Load Control & Demand Response",
+    adminEmail:    document.getElementById("p-admin-email").value.trim(),
+    weatherCity:   document.getElementById("p-weather-location").value.trim(),
+    theme:         document.getElementById("p-theme").value,
+    maxDevices:    document.getElementById("p-max-devices").value,
+    supabaseUrl:   document.getElementById("i-supabase-url").value.trim(),
+    supabaseKey:   document.getElementById("i-supabase-key").value.trim(),
+    workerUrl:     document.getElementById("i-worker-url").value.trim(),
+    notehubProject:document.getElementById("i-notehub-project").value.trim(),
+    notehubToken:  document.getElementById("i-notehub-token").value.trim(),
+    githubUrl:     document.getElementById("i-github-url").value.trim(),
+    timezone:      document.getElementById("i-timezone").value,
+    devices:       getDevices(),
+    features:      getSelectedFeatures()
+  };
+}
+
+// ── Generate ──────────────────────────────────────────────────────────────────
+function generatePackage() {
+  const btn = document.getElementById("gen-btn");
+  btn.textContent = "Generating...";
+  btn.disabled = true;
+
+  setTimeout(() => {
+    const config = getConfig();
+    generatedFiles = {
+      sql:    generateSQL(config),
+      worker: generateWorker(config),
+      guide:  generateGuide(config)
+    };
+    showPreview("sql");
+    showStatus("✅ Package generated! Download files below.", "ok");
+    btn.textContent = "⚡ Regenerate";
+    btn.disabled = false;
+  }, 100);
+}
+
+function generateSQL(config) {
+  const abbr = config.abbr.toLowerCase();
+  return `-- ═══════════════════════════════════════════════════════════════
+-- ${config.name} — Database Setup
+-- Generated by EnTek Program Builder
+-- Run this entire script in your Supabase SQL Editor
+-- ═══════════════════════════════════════════════════════════════
+
+-- Device readings (bubble-up data)
+CREATE TABLE IF NOT EXISTS device_readings (
+    id BIGSERIAL PRIMARY KEY, recorded_at TIMESTAMPTZ DEFAULT NOW(),
+    device_uid TEXT NOT NULL, raw_lc TEXT,
+    header_byte INTEGER, message_length INTEGER, message_type INTEGER,
+    bubble_up_config INTEGER, bubble_up_config_main INTEGER,
+    relay_status_r1 INTEGER, relay_status_r2 INTEGER,
+    relay_status_r3 INTEGER, relay_status_r4 INTEGER,
+    power_up_flag INTEGER, customer_comfort INTEGER,
+    voltage INTEGER, current INTEGER, power_factor INTEGER,
+    watts_consumed INTEGER, touch_pad_command INTEGER,
+    sw_value INTEGER, sq_value INTEGER, override_timer_value INTEGER,
+    serial_number INTEGER, device_identifier INTEGER,
+    validation_code INTEGER, lat NUMERIC, lon NUMERIC,
+    location TEXT, country TEXT
+);
+
+-- LC Event responses
+CREATE TABLE IF NOT EXISTS device_events (
+    id BIGSERIAL PRIMARY KEY, received_at TIMESTAMPTZ DEFAULT NOW(),
+    device_uid TEXT NOT NULL, event_id INTEGER, lc_status INTEGER,
+    lc_status_label TEXT, timestamp_unix BIGINT,
+    event_time TIMESTAMPTZ, raw_hex TEXT, checksum_ok BOOLEAN
+);
+
+-- Event scheduling queue
+CREATE TABLE IF NOT EXISTS schedule_queue (
+    id BIGSERIAL PRIMARY KEY, schedule_id BIGINT,
+    queued_at TIMESTAMPTZ DEFAULT NOW(), fire_at TIMESTAMPTZ,
+    target_type TEXT, target_id TEXT, target_name TEXT, relay_action TEXT,
+    status TEXT DEFAULT 'sent' CHECK (status = ANY (ARRAY[
+      'pending','fired','sent','received','started','ended',
+      'cancelled','rejected','override','override_cancelled',
+      'comfort_override','comfort_exit'])),
+    fired_at TIMESTAMPTZ, lc_mode TEXT, lc_strategy INTEGER,
+    lc_reps INTEGER, duration_minutes INTEGER, one_time BOOLEAN DEFAULT TRUE,
+    name TEXT, timezone TEXT, action_time TIME,
+    lc_timeout NUMERIC, lc_cycle NUMERIC, lc_event_id INTEGER
+);
+
+-- Legacy schedules table
+CREATE TABLE IF NOT EXISTS schedules (
+    id BIGSERIAL PRIMARY KEY, name TEXT, enabled BOOLEAN DEFAULT TRUE,
+    target_type TEXT, target_id TEXT, target_name TEXT, frequency TEXT,
+    days_of_week INTEGER[], action_time TIME, event_date DATE,
+    timezone TEXT, relay_action TEXT, duration_minutes INTEGER,
+    one_time BOOLEAN DEFAULT TRUE, lc_mode TEXT, lc_strategy INTEGER,
+    lc_timeout NUMERIC, lc_cycle NUMERIC, lc_reps INTEGER,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Device groups
+CREATE TABLE IF NOT EXISTS device_groups (
+    id BIGSERIAL PRIMARY KEY, device_uid TEXT NOT NULL,
+    group_num INTEGER NOT NULL, group_number INTEGER,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS group_names (
+    group_num INTEGER PRIMARY KEY, name TEXT NOT NULL,
+    group_number INTEGER, group_name TEXT, updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Device health (from _session.qo and _health.qo)
+CREATE TABLE IF NOT EXISTS device_health (
+    id BIGSERIAL PRIMARY KEY, recorded_at TIMESTAMPTZ DEFAULT NOW(),
+    device_uid TEXT NOT NULL, voltage NUMERIC, temperature NUMERIC,
+    rsrp INTEGER, rsrq INTEGER, rssi INTEGER, sinr INTEGER,
+    bars INTEGER, rat TEXT, bearer TEXT, moved BIGINT,
+    orientation TEXT, session_reason TEXT, firmware_version TEXT,
+    lat NUMERIC, lon NUMERIC, location TEXT, raw JSONB
+);
+
+-- Fleet health daily aggregates
+CREATE TABLE IF NOT EXISTS device_health_daily (
+    id BIGSERIAL PRIMARY KEY, summary_date DATE NOT NULL,
+    device_uid TEXT NOT NULL, check_ins INTEGER DEFAULT 0,
+    uptime_pct NUMERIC, avg_voltage NUMERIC, min_voltage NUMERIC,
+    avg_rsrp NUMERIC, avg_bars NUMERIC, last_seen TIMESTAMPTZ,
+    last_location TEXT, firmware_version TEXT,
+    voltage_status TEXT, temp_status TEXT, comms_status TEXT,
+    moved_flag BOOLEAN DEFAULT FALSE, overall_status TEXT,
+    UNIQUE(summary_date, device_uid)
+);
+
+-- Program settings (thresholds etc)
+CREATE TABLE IF NOT EXISTS program_settings (
+    id BIGSERIAL PRIMARY KEY, setting_key TEXT NOT NULL UNIQUE,
+    setting_value TEXT NOT NULL, updated_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_by UUID
+);
+
+-- User profiles
+CREATE TABLE IF NOT EXISTS user_profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    email TEXT NOT NULL, full_name TEXT,
+    role TEXT NOT NULL DEFAULT 'readonly'
+         CHECK (role IN ('administrator','operator','readonly')),
+    two_fa_required BOOLEAN DEFAULT FALSE,
+    two_fa_method TEXT DEFAULT 'email',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by UUID REFERENCES auth.users(id),
+    last_login TIMESTAMPTZ, is_active BOOLEAN DEFAULT TRUE
+);
+
+-- Monitoring sessions
+CREATE TABLE IF NOT EXISTS monitoring_sessions (
+    id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL,
+    created_by UUID REFERENCES auth.users(id),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    started_at TIMESTAMPTZ, ended_at TIMESTAMPTZ,
+    status TEXT DEFAULT 'pending'
+           CHECK (status IN ('pending','active','completed','stopped')),
+    target_type TEXT, target_ids TEXT[],
+    bubble_interval INTEGER DEFAULT 5,
+    duration_minutes INTEGER, notes TEXT, original_intervals JSONB
+);
+CREATE TABLE IF NOT EXISTS monitoring_readings (
+    id BIGSERIAL PRIMARY KEY,
+    session_id BIGINT REFERENCES monitoring_sessions(id),
+    recorded_at TIMESTAMPTZ DEFAULT NOW(), device_uid TEXT NOT NULL,
+    relay_status_r1 INTEGER, relay_status_r2 INTEGER,
+    relay_status_r3 INTEGER, relay_status_r4 INTEGER,
+    voltage INTEGER, current INTEGER, power_factor INTEGER,
+    watts_consumed INTEGER, sw_value INTEGER, sq_value INTEGER,
+    customer_comfort INTEGER, override_timer INTEGER
+);
+
+-- Energy monitors
+CREATE TABLE IF NOT EXISTS energy_monitors (
+    id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL,
+    created_by UUID REFERENCES auth.users(id),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    status TEXT DEFAULT 'active'
+           CHECK (status IN ('active','paused','stopped')),
+    target_type TEXT, target_ids TEXT[], notes TEXT,
+    start_date DATE, stop_date DATE,
+    start_hour INTEGER DEFAULT 0, stop_hour INTEGER DEFAULT 23,
+    days_of_week INTEGER[] DEFAULT '{0,1,2,3,4,5,6}'
+);
+CREATE TABLE IF NOT EXISTS energy_readings (
+    id BIGSERIAL PRIMARY KEY,
+    monitor_id BIGINT REFERENCES energy_monitors(id),
+    recorded_at TIMESTAMPTZ DEFAULT NOW(), device_uid TEXT NOT NULL,
+    relay_status_r1 INTEGER, relay_status_r2 INTEGER,
+    relay_status_r3 INTEGER, relay_status_r4 INTEGER,
+    voltage INTEGER, current INTEGER, power_factor INTEGER,
+    watts_consumed INTEGER, sw_value INTEGER, sq_value INTEGER,
+    outside_temp NUMERIC
+);
+
+-- ── Enable RLS on all tables ──────────────────────────────────────────────────
+ALTER TABLE device_readings    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE device_events      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE schedule_queue     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE schedules          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE device_groups      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE group_names        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE device_health      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE device_health_daily ENABLE ROW LEVEL SECURITY;
+ALTER TABLE program_settings   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_profiles      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE monitoring_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE monitoring_readings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE energy_monitors    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE energy_readings    ENABLE ROW LEVEL SECURITY;
+
+-- ── RLS Policies (anon + authenticated) ──────────────────────────────────────
+DO $$ DECLARE t TEXT;
+BEGIN FOR t IN SELECT unnest(ARRAY[
+  'device_readings','device_events','schedule_queue','schedules',
+  'device_groups','group_names','device_health','device_health_daily',
+  'program_settings','monitoring_sessions','monitoring_readings',
+  'energy_monitors','energy_readings'
+]) LOOP
+  EXECUTE format('CREATE POLICY "Anon full access" ON %I FOR ALL TO anon USING (true)', t);
+  EXECUTE format('CREATE POLICY "Auth full access" ON %I FOR ALL TO authenticated USING (true)', t);
+END LOOP; END $$;
+
+-- User profiles special policies
+CREATE POLICY "Auth view profiles"   ON user_profiles FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Auth update own"      ON user_profiles FOR UPDATE TO authenticated USING (auth.uid()=id);
+CREATE POLICY "Auth insert profiles" ON user_profiles FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Service role all"     ON user_profiles FOR ALL TO service_role USING (true);
+
+-- ── Default program settings ──────────────────────────────────────────────────
+INSERT INTO program_settings (setting_key, setting_value) VALUES
+  ('voltage_warn',        '3.3'),
+  ('voltage_critical',    '3.0'),
+  ('temp_high_warn',      '60'),
+  ('temp_high_critical',  '75'),
+  ('temp_low_warn',       '0'),
+  ('no_comms_warn_hrs',   '48'),
+  ('no_comms_crit_hrs',   '72'),
+  ('health_check_enabled','true'),
+  ('health_check_start_hr','0'),
+  ('health_check_end_hr', '2')
+ON CONFLICT (setting_key) DO NOTHING;
+
+-- ── Create admin user profile ─────────────────────────────────────────────────
+-- IMPORTANT: First create the user in Supabase → Authentication → Users
+-- Then run this after creating the user:
+-- INSERT INTO user_profiles (id, email, full_name, role, is_active)
+-- SELECT id, email, 'Administrator', 'administrator', true
+-- FROM auth.users WHERE email = '${config.adminEmail}';
+
+-- ═══════════════════════════════════════════════════════════════
+-- Setup complete! Next: deploy worker.js to Cloudflare Workers
+-- ═══════════════════════════════════════════════════════════════`;
+}
+
+function generateWorker(config) {
+  return `// ═══════════════════════════════════════════════════════════════
+// ${config.name} — Cloudflare Worker
+// Generated by EnTek Program Builder
+// Deploy to: Cloudflare Workers → Create Worker → paste this code
+// ═══════════════════════════════════════════════════════════════
+
+const NOTEHUB_TOKEN = "${config.notehubToken}";
+const PROJECT_UID   = "${config.notehubProject}";
+const SUPABASE_URL  = "${config.supabaseUrl}";
+const SUPABASE_KEY  = "${config.supabaseKey}";
+const DEVICE_UID    = "${config.devices[0]?.uid || 'dev:PLACEHOLDER'}";
+
+const CORS = {
+  "Access-Control-Allow-Origin":  "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, X-Device-UID, Authorization",
+};
+
+async function supabasePost(table, data) {
+  return fetch(\`\${SUPABASE_URL}/rest/v1/\${table}\`, {
+    method: "POST",
+    headers: { "apikey": SUPABASE_KEY, "Authorization": \`Bearer \${SUPABASE_KEY}\`,
+      "Content-Type": "application/json", "Prefer": "return=minimal" },
+    body: JSON.stringify(data)
+  });
+}
+
+export default {
+  async fetch(request, env) {
+    if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
+    if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+
+    let body;
+    try { body = await request.json(); } catch(e) {
+      return new Response(JSON.stringify({ error: "Invalid JSON" }), { status: 400, headers: CORS });
+    }
+
+    const url = new URL(request.url);
+
+    // ── /session — _session.qo health data ───────────────────────────────────
+    if (url.pathname === "/session" || url.pathname === "/session/") {
+      const device_uid = body?.device ?? "unknown";
+      let firmware_version = null;
+      try {
+        const fw = typeof body?.firmware_notecard === "string"
+          ? JSON.parse(body.firmware_notecard) : body?.firmware_notecard;
+        firmware_version = fw?.version || null;
+      } catch(e) {}
+      const rat = body?.rat ?? (body?.transport ? body.transport.split(":")[1] : null);
+      const record = {
+        device_uid, recorded_at: new Date().toISOString(),
+        voltage: body?.voltage ?? body?.body?.voltage ?? null,
+        temperature: body?.temp ?? body?.body?.temp ?? null,
+        rsrp: body?.rsrp ?? null, rsrq: body?.rsrq ?? null,
+        rssi: body?.rssi ?? null, sinr: body?.sinr ?? null,
+        bars: body?.bars ?? null, rat, bearer: body?.bearer ?? null,
+        moved: body?.moved ?? null, orientation: body?.orientation ?? null,
+        session_reason: body?.body?.why ?? body?.body?.text ?? null,
+        firmware_version,
+        lat: body?.best_lat ?? body?.tower_lat ?? null,
+        lon: body?.best_lon ?? body?.tower_lon ?? null,
+        location: body?.best_location ?? body?.tower_location ?? null,
+        raw: body
+      };
+      const dbRes = await supabasePost("device_health", record);
+      return new Response(JSON.stringify({ success: dbRes.ok, device_uid }), {
+        status: dbRes.ok ? 200 : 500, headers: { ...CORS, "Content-Type": "application/json" }
+      });
+    }
+
+    // ── /env — set environment variables ─────────────────────────────────────
+    if (url.pathname === "/env" || url.pathname === "/env/") {
+      const { deviceUID, environment_variables } = body;
+      const uid = deviceUID || DEVICE_UID;
+      const envURL = \`https://api.notefile.net/v1/projects/\${PROJECT_UID}/devices/\${encodeURIComponent(uid)}/environment_variables\`;
+      const res = await fetch(envURL, {
+        method: "PUT",
+        headers: { "Authorization": \`Bearer \${NOTEHUB_TOKEN}\`, "Content-Type": "application/json" },
+        body: JSON.stringify({ environment_variables })
+      });
+      return new Response(await res.text(), { status: res.status, headers: { ...CORS, "Content-Type": "application/json" } });
+    }
+
+    // ── /ingest — Notehub webhook ─────────────────────────────────────────────
+    if (url.pathname === "/ingest" || url.pathname === "/ingest/") {
+      const device_uid = body?.device ?? body?.uid ?? "unknown";
+      const file = body?.file || "";
+
+      const isSessionBegin = file === "_session.qo" && body?.req === "session.begin";
+      const isHealthFile   = file === "_health.qo" || file === "_health_host.qo";
+
+      if (isSessionBegin || isHealthFile) {
+        let firmware_version = null;
+        try {
+          const fw = typeof body?.firmware_notecard === "string"
+            ? JSON.parse(body.firmware_notecard) : body?.firmware_notecard;
+          firmware_version = fw?.version || null;
+        } catch(e) {}
+        const rat = body?.rat ?? (body?.transport ? body.transport.split(":")[1] : null);
+        const healthRecord = {
+          device_uid, recorded_at: new Date().toISOString(),
+          voltage: body?.voltage ?? body?.body?.voltage ?? null,
+          temperature: body?.temp ?? null,
+          rsrp: body?.rsrp ?? null, rsrq: body?.rsrq ?? null,
+          rssi: body?.rssi ?? null, sinr: body?.sinr ?? null,
+          bars: body?.bars ?? null, rat, bearer: body?.bearer ?? null,
+          moved: body?.moved ?? null, orientation: body?.orientation ?? null,
+          session_reason: body?.body?.why ?? body?.body?.text ?? null,
+          firmware_version,
+          lat: body?.best_lat ?? body?.tower_lat ?? null,
+          lon: body?.best_lon ?? body?.tower_lon ?? null,
+          location: body?.best_location ?? body?.tower_location ?? null,
+          raw: body
+        };
+        const hRes = await supabasePost("device_health", healthRecord);
+        return new Response(JSON.stringify({ success: hRes.ok, device_uid, file }), {
+          status: hRes.ok ? 200 : 500, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+
+      if (file.startsWith("_")) {
+        return new Response(JSON.stringify({ success: true, skipped: true, file }), {
+          status: 200, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+
+      const lc    = body?.body?.LC;
+      const lcLen = lc ? lc.trim().length : 0;
+
+      if (lcLen === 20) {
+        // LC Response → device_events
+        const hex = lc.trim();
+        const bytes = [];
+        for (let i = 0; i < hex.length; i += 2) bytes.push(parseInt(hex.substr(i, 2), 16));
+        const eventId = bytes[3] ?? null;
+        const lcStatus = bytes[4] ?? null;
+        const statusLabels = ["Event Received","Event Started","Event Ended","Already In Queue",
+          "Rejected Queue Full","Rejected","Event Canceled","Override","Override Canceled",
+          "Customer Comfort Override","Customer Comfort Exit"];
+        const record = {
+          device_uid, received_at: new Date().toISOString(),
+          event_id: eventId, lc_status: lcStatus,
+          lc_status_label: statusLabels[lcStatus] ?? \`Status \${lcStatus}\`,
+          raw_hex: hex, checksum_ok: true
+        };
+        const dbRes = await supabasePost("device_events", record);
+        return new Response(JSON.stringify({ success: dbRes.ok, device_uid }), {
+          status: dbRes.ok ? 200 : 500, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+
+      if (lcLen === 62) {
+        // Bubble-up → device_readings
+        const hex = lc.trim();
+        const bytes = [];
+        for (let i = 0; i < hex.length; i += 2) bytes.push(parseInt(hex.substr(i, 2), 16));
+        const parsed = {
+          header_byte: bytes[0], message_length: bytes[1], message_type: bytes[2],
+          bubble_up_config: (bytes[3] << 8) | bytes[4],
+          relay_status_r1: bytes[5], relay_status_r2: bytes[6],
+          relay_status_r3: bytes[7], relay_status_r4: bytes[8],
+          power_up_flag: bytes[9], customer_comfort: bytes[10],
+          voltage: (bytes[11] << 8) | bytes[12],
+          current: (bytes[13] << 8) | bytes[14],
+          power_factor: (bytes[15] << 8) | bytes[16],
+          watts_consumed: (bytes[17] << 8) | bytes[18],
+          touch_pad_command: bytes[19],
+          sw_value: (bytes[20] << 8) | bytes[21],
+          sq_value: (bytes[22] << 8) | bytes[23],
+          override_timer_value: (bytes[24] << 8) | bytes[25],
+          serial_number: (bytes[26] << 16) | (bytes[27] << 8) | bytes[28],
+          device_identifier: bytes[29], validation_code: bytes[30]
+        };
+        const record = {
+          device_uid, recorded_at: new Date().toISOString(),
+          raw_lc: lc, ...parsed,
+          lat: body?.best_lat ?? body?.tower_lat ?? null,
+          lon: body?.best_lon ?? body?.tower_lon ?? null,
+          location: body?.best_location ?? body?.tower_location ?? null,
+          country: body?.best_country ?? body?.tower_country ?? null
+        };
+        const dbRes = await supabasePost("device_readings", record);
+        if (!dbRes.ok) {
+          return new Response(JSON.stringify({ success: false, device_uid }), {
+            status: 500, headers: { ...CORS, "Content-Type": "application/json" }
+          });
+        }
+        return new Response(JSON.stringify({ success: true, device_uid }), {
+          status: 200, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+
+      return new Response(JSON.stringify({ error: "Unexpected LC length", lcLen }), {
+        status: 400, headers: { ...CORS, "Content-Type": "application/json" }
+      });
+    }
+
+    // ── / (root) — relay command proxy → Notehub ──────────────────────────────
+    if (url.pathname !== "/" && url.pathname !== "") {
+      return new Response(JSON.stringify({ error: "Unknown path" }), {
+        status: 404, headers: { ...CORS, "Content-Type": "application/json" }
+      });
+    }
+    const deviceUID  = request.headers.get("X-Device-UID") || DEVICE_UID;
+    const notehubURL = \`https://api.notefile.net/v1/projects/\${PROJECT_UID}/devices/\${encodeURIComponent(deviceUID)}/notes/data.qi\`;
+    const res = await fetch(notehubURL, {
+      method: "POST",
+      headers: { "Authorization": \`Bearer \${NOTEHUB_TOKEN}\`, "Content-Type": "application/json" },
+      body: JSON.stringify({ body })
+    });
+    return new Response(await res.text(), { status: res.status, headers: { ...CORS, "Content-Type": "application/json" } });
+  }
+};`;
+}
+
+function generateGuide(config) {
+  const abbr = config.abbr;
+  const devices = config.devices;
+  const features = config.features;
+  return `${config.name}
+Load Control Dashboard — Deployment Guide
+Generated by EnTek Program Builder
+${'═'.repeat(60)}
+
+PROGRAM OVERVIEW
+  Name:        ${config.name}
+  Abbreviation: ${abbr}
+  Admin Email:  ${config.adminEmail}
+  Devices:      ${devices.length}
+  Features:     ${features.map(f => FEATURES.find(x=>x.id===f)?.label).join(', ')}
+
+${'─'.repeat(60)}
+STEP 1: SUPABASE SETUP
+${'─'.repeat(60)}
+
+1. Go to https://supabase.com and create a new project
+   - Project name: "${config.name}"
+   - Save your database password
+
+2. Go to SQL Editor → paste and run setup.sql
+
+3. Go to Authentication → Users → Add User
+   - Email: ${config.adminEmail}
+   - Set a temporary password
+
+4. After creating the user, run this SQL:
+   INSERT INTO user_profiles (id, email, full_name, role, is_active)
+   SELECT id, email, 'Administrator', 'administrator', true
+   FROM auth.users WHERE email = '${config.adminEmail}';
+
+5. Go to Authentication → Sign In / Providers → Email
+   - Turn OFF "Confirm email"
+
+${config.githubUrl ? `6. Go to Authentication → URL Configuration
+   - Site URL: ${config.githubUrl}
+   - Redirect URL: ${config.githubUrl}` : '6. Configure Authentication → URL Configuration with your hosting URL'}
+
+${'─'.repeat(60)}
+STEP 2: CLOUDFLARE WORKER
+${'─'.repeat(60)}
+
+1. Go to https://dash.cloudflare.com → Workers & Pages
+2. Create Application → Create Worker
+3. Replace the default code with worker.js
+4. Click Deploy
+5. Copy the worker URL (e.g. https://your-worker.workers.dev/)
+6. Make note: this is your PROXY_URL
+
+${'─'.repeat(60)}
+STEP 3: NOTEHUB ROUTES
+${'─'.repeat(60)}
+
+Create TWO routes in Notehub → Your Project → Routes:
+
+Route 1 — Data & Events:
+  Name:     ${abbr} Data Ingest
+  URL:      ${config.workerUrl}ingest
+  Notefiles: All Notefiles (remove filter)
+  Method:   POST
+  Enabled:  ✅
+
+Route 2 — Health Data (optional, same URL works):
+  The /ingest route handles _session.qo and _health.qo automatically
+
+${'─'.repeat(60)}
+STEP 4: GITHUB PAGES
+${'─'.repeat(60)}
+
+1. Create a new GitHub repository
+2. Upload index.html to the repository root
+3. Go to Settings → Pages → Source: main branch
+4. Your dashboard will be live at:
+   https://[username].github.io/[repo-name]/
+
+${'─'.repeat(60)}
+ENROLLED DEVICES
+${'─'.repeat(60)}
+
+${devices.map((d, i) => `  ${(i+1).toString().padStart(2,'0')}. ${d.name || 'Device '+i} — ${d.uid || 'UID not set'}`).join('
+')}
+
+${'─'.repeat(60)}
+FIRST LOGIN
+${'─'.repeat(60)}
+
+1. Open your dashboard URL
+2. Login with: ${config.adminEmail}
+3. Go to Admin → User Management to add more users
+4. Set weather location in the Weather tab
+5. Send a Health Check from Device Status tab
+
+${'─'.repeat(60)}
+SUPPORT
+${'─'.repeat(60)}
+
+EnTek Systems
+Generated: ${new Date().toLocaleString()}
+Program Builder v1.0`;
+}
+
+// ── Preview ───────────────────────────────────────────────────────────────────
+function showPreview(type) {
+  document.querySelectorAll(".output-tab").forEach(t => t.classList.remove("active"));
+  event?.target?.classList.add("active");
+  const content = document.getElementById("preview-content");
+  if (!generatedFiles[type]) { content.textContent = "Click Generate Package first."; return; }
+  content.textContent = generatedFiles[type];
+}
+
+// ── Downloads ─────────────────────────────────────────────────────────────────
+function downloadFile(content, filename, type = "text/plain") {
+  const blob = new Blob([content], { type });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+function downloadSQL()       { if (generatedFiles.sql)    downloadFile(generatedFiles.sql,    `${getConfig().abbr.toLowerCase()}-setup.sql`); else alert("Generate first!"); }
+function downloadWorker()    { if (generatedFiles.worker) downloadFile(generatedFiles.worker, `${getConfig().abbr.toLowerCase()}-worker.js`);  else alert("Generate first!"); }
+function downloadGuide()     { if (generatedFiles.guide)  downloadFile(generatedFiles.guide,  `${getConfig().abbr.toLowerCase()}-deploy-guide.txt`); else alert("Generate first!"); }
+function downloadDashboard() { alert("Dashboard HTML download coming soon — requires server-side template processing. Use the demo dashboard as your base and update the constants per the generated worker.js."); }
+
+async function downloadAll() {
+  if (!generatedFiles.sql) { alert("Generate the package first!"); return; }
+  const config = getConfig();
+  const abbr   = config.abbr.toLowerCase();
+  try {
+    const zip = new JSZip();
+    zip.file(`${abbr}-setup.sql`,      generatedFiles.sql);
+    zip.file(`${abbr}-worker.js`,      generatedFiles.worker);
+    zip.file(`${abbr}-deploy-guide.txt`, generatedFiles.guide);
+    zip.file("README.txt", `${config.name} — Dashboard Package\nGenerated: ${new Date().toLocaleString()}\n\nFiles included:\n- ${abbr}-setup.sql       → Run in Supabase SQL Editor\n- ${abbr}-worker.js       → Deploy to Cloudflare Workers\n- ${abbr}-deploy-guide.txt → Step-by-step deployment instructions\n\nSee the deploy guide for complete setup instructions.`);
+    const blob = await zip.generateAsync({ type: "blob" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = `${abbr}-dashboard-package.zip`;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+    showStatus("✅ ZIP downloaded!", "ok");
+  } catch(e) {
+    console.error(e);
+    showStatus("ZIP failed — downloading files individually.", "error");
+    downloadSQL(); downloadWorker(); downloadGuide();
+  }
+}
+</script>
+</body>
+</html>
