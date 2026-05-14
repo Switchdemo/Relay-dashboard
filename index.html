@@ -3394,6 +3394,11 @@ function buildRestoreHex(relayAction) {
 }
 
 async function sendLCToDevice(uid, lcHex) {
+  // Block commands to disabled/removed devices
+  if (!DEVICES.find(d => d.uid === uid)) {
+    console.warn(`sendLCToDevice: ${uid} not in active DEVICES — command blocked.`);
+    return;
+  }
   // Deliver to Notehub as data.qi note in exact required format:
   // {"body":{"LC":"..."},"req":"note.add","sync":true}
   const payload = {
@@ -8611,8 +8616,10 @@ async function toggleDeviceEnabled(id, enabled, name) {
       body: JSON.stringify({ enabled })
     });
     setStatus("ready", `${name} ${enabled ? "enabled" : "disabled"}.`);
-    await loadDevicesFromDB();
-    await loadDeviceManagement();
+    await loadDevicesFromDB();   // Updates DEVICES array immediately
+    buildControls();             // Rebuilds device cards
+    buildDataCards();            // Rebuilds data cards
+    await loadDeviceManagement(); // Refreshes the admin table
   } catch(e) { console.error("toggleDeviceEnabled:", e); }
 }
 
