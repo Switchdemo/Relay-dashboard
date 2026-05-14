@@ -441,6 +441,7 @@
   <!-- Sub-tabs (shown contextually) -->
   <div class="sub-tabs" id="sub-tabs-admin" style="display:none;">
     <button class="sub-tab-btn active" id="sub-admin-users" onclick="switchSub('admin','admin-users',this)">User Management</button>
+    <button class="sub-tab-btn" id="sub-admin-devices" onclick="switchSub('admin','admin-devices',this)">Devices</button>
     <button class="sub-tab-btn" id="sub-admin-health" onclick="switchSub('admin','admin-health',this)">Fleet Health</button>
     <button class="sub-tab-btn" id="sub-admin-monitor" onclick="switchSub('admin','admin-monitor',this)">Device Monitoring</button>
     <button class="sub-tab-btn" id="sub-admin-energy" onclick="switchSub('admin','admin-energy',this)">Energy Monitor</button>
@@ -1337,6 +1338,53 @@
   </div>
 </div>
 
+<!-- ── DEVICE MANAGEMENT TAB ── -->
+<div class="tab-pane" id="tab-admin-devices">
+  <div class="scroll-content">
+    <div style="max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <!-- Add Device -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">Add New Device</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;">
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Device UID</label>
+            <input type="text" id="new-device-uid" placeholder="dev:868032061XXXXXX"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Display Name</label>
+            <input type="text" id="new-device-name" placeholder="Unit XXXX"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <button onclick="addNewDevice()"
+            style="padding:7px 18px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">
+            + Add Device
+          </button>
+        </div>
+        <div id="add-device-status" style="font-size:11px;margin-top:8px;display:none;"></div>
+      </div>
+
+      <!-- Device List -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">Registered Devices</div>
+          <button class="queue-refresh" onclick="loadDeviceManagement()">Refresh</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">
+          Changes take effect immediately. Disabling a device hides it from all dashboards without deleting its data.
+        </div>
+        <div id="device-mgmt-list">
+          <div class="sched-empty">Loading devices...</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- ── FLEET HEALTH TAB ── -->
 <div class="tab-pane" id="tab-admin-health">
   <div class="scroll-content">
@@ -2082,12 +2130,33 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 function unitName(uid) { return "Unit " + uid.slice(-4); }
 
-const DEVICES = [
-  { id: "device1", uid: "dev:868032061596023" },
-  { id: "device2", uid: "dev:868050045717135" },
-  { id: "device3", uid: "dev:PLACEHOLDER0003" },
-  { id: "device4", uid: "dev:PLACEHOLDER0004" },
-].map(d => ({ ...d, name: unitName(d.uid) }));
+// DEVICES is populated dynamically from Supabase on startup
+let DEVICES = [];
+
+async function loadDevicesFromDB() {
+  try {
+    const rows = await supabaseGet("devices?enabled=eq.true&order=id.asc");
+    if (Array.isArray(rows) && rows.length > 0) {
+      DEVICES = rows.map(r => ({ id: r.device_id, uid: r.uid, name: r.name }));
+    } else {
+      // Fallback to hardcoded if table is empty
+      DEVICES = [
+        { id: "device1", uid: "dev:868032061596023", name: "Unit 6023" },
+        { id: "device2", uid: "dev:868050045717135", name: "Unit 7135" },
+      ];
+    }
+  } catch(e) {
+    console.warn("Could not load devices from Supabase, using defaults:", e);
+    DEVICES = [
+      { id: "device1", uid: "dev:868032061596023", name: "Unit 6023" },
+      { id: "device2", uid: "dev:868050045717135", name: "Unit 7135" },
+    ];
+  }
+  // Re-initialize relay state for loaded devices
+  DEVICES.forEach(d => {
+    if (!relayState[d.id]) relayState[d.id] = { 1:false, 2:false, 3:false, 4:false, all:false };
+  });
+}
 
 const COMMANDS = {
   "1_on":   {"body":{"LC":"A10B000001810001000000002B"},"req":"note.add","sync":true},
@@ -2102,8 +2171,7 @@ const COMMANDS = {
   "all_off":{"body":{"LC":"A10B00003D8F000F0000000017"},"req":"note.add","sync":true},
 };
 
-const relayState = {};
-DEVICES.forEach(d => { relayState[d.id] = { 1:false, 2:false, 3:false, 4:false, all:false }; });
+const relayState = {}; // Populated by loadDevicesFromDB() on startup
 let busy = false;
 let map, mapInitialized = false;
 const mapMarkers = {};
@@ -2220,6 +2288,7 @@ function runTabInit(name) {
   if (name === "settings")   initSettingsTab();
   if (name === "weather")    initWeatherTab();
   if (name === "admin-users") { updateAdminHeader(); loadUsersTable(); }
+  if (name === "admin-devices") { loadDeviceManagement(); }
   if (name === "admin-health") { initFleetHealth(); }
   if (name === "admin-monitor") { initMonitoring(); }
   if (name === "admin-energy")    { initEnergyMonitor(); }
@@ -8411,14 +8480,151 @@ async function loadHistory() {
   } catch(e) { tbody.innerHTML = `<tr><td colspan="11" class="no-data">Error loading history</td></tr>`; }
 }
 
-buildControls();
-buildDataCards();
-autoDetectTimezones();
-loadEventsBar();
-initHeaderWeather();
-initAuth();
-// Init summary tab since it's the default active tab
-setTimeout(() => initSummaryTab(), 100);
+// Load devices from Supabase first, then initialize everything else
+(async () => {
+  await loadDevicesFromDB();
+  buildControls();
+  buildDataCards();
+  autoDetectTimezones();
+  loadEventsBar();
+  initHeaderWeather();
+  initAuth();
+  // Init summary tab since it's the default active tab
+  setTimeout(() => initSummaryTab(), 100);
+})();
+
+// ── Device Management ─────────────────────────────────────────────────────────
+
+async function loadDeviceManagement() {
+  const list = document.getElementById("device-mgmt-list");
+  if (!list) return;
+  list.innerHTML = '<div class="sched-empty">Loading...</div>';
+  try {
+    const rows = await supabaseGet("devices?order=id.asc");
+    if (!Array.isArray(rows) || rows.length === 0) {
+      list.innerHTML = '<div class="sched-empty">No devices registered yet.</div>';
+      return;
+    }
+    list.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead><tr>
+          <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Name</th>
+          <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Device UID</th>
+          <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Device ID</th>
+          <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Status</th>
+          <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Added</th>
+          <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Actions</th>
+        </tr></thead>
+        <tbody>${rows.map(r => `
+          <tr>
+            <td style="padding:8px;border-bottom:0.5px solid var(--border);font-weight:600;">${r.name}</td>
+            <td style="padding:8px;border-bottom:0.5px solid var(--border);font-family:monospace;font-size:11px;">${r.uid}</td>
+            <td style="padding:8px;border-bottom:0.5px solid var(--border);font-family:monospace;font-size:11px;color:var(--text-hint);">${r.device_id}</td>
+            <td style="padding:8px;border-bottom:0.5px solid var(--border);">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="checkbox" ${r.enabled ? "checked" : ""}
+                  onchange="toggleDeviceEnabled(${r.id}, this.checked, '${r.name}')" />
+                <span style="font-size:11px;color:${r.enabled ? "var(--green-dark)" : "var(--text-hint)"};">
+                  ${r.enabled ? "Enabled" : "Disabled"}
+                </span>
+              </label>
+            </td>
+            <td style="padding:8px;border-bottom:0.5px solid var(--border);color:var(--text-hint);font-size:11px;">
+              ${r.created_at ? new Date(r.created_at).toLocaleDateString() : "—"}
+            </td>
+            <td style="padding:8px;border-bottom:0.5px solid var(--border);">
+              <button onclick="removeDevice(${r.id}, '${r.name}')"
+                style="padding:3px 10px;border-radius:4px;border:0.5px solid var(--red);background:transparent;color:var(--red);font-size:11px;cursor:pointer;">
+                Remove
+              </button>
+            </td>
+          </tr>`).join("")}
+        </tbody>
+      </table>`;
+  } catch(e) {
+    list.innerHTML = '<div class="sched-empty">Error loading devices.</div>';
+    console.error("loadDeviceManagement:", e);
+  }
+}
+
+async function addNewDevice() {
+  const uidEl    = document.getElementById("new-device-uid");
+  const nameEl   = document.getElementById("new-device-name");
+  const statusEl = document.getElementById("add-device-status");
+  const uid      = uidEl?.value.trim();
+  let   name     = nameEl?.value.trim();
+
+  const showStatus = (msg, ok) => {
+    statusEl.textContent = msg;
+    statusEl.style.color = ok ? "var(--green-dark)" : "var(--red)";
+    statusEl.style.display = "block";
+    if (ok) setTimeout(() => { statusEl.style.display = "none"; }, 3000);
+  };
+
+  if (!uid)  return showStatus("⚠️ Device UID is required.", false);
+  if (!uid.startsWith("dev:")) return showStatus("⚠️ UID must start with "dev:"", false);
+
+  // Auto-generate name if blank
+  if (!name) name = "Unit " + uid.slice(-4);
+
+  // Generate a device_id based on next available slot
+  let existingRows = [];
+  try { existingRows = await supabaseGet("devices?order=id.asc") || []; } catch(e) {}
+  const nextNum  = existingRows.length + 1;
+  const deviceId = "device" + nextNum;
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/devices`, {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json", "Prefer": "return=minimal"
+      },
+      body: JSON.stringify({ device_id: deviceId, uid, name, enabled: true })
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      return showStatus(`Error: ${err}`, false);
+    }
+    showStatus(`✅ ${name} added successfully. Reload the page to activate.`, true);
+    uidEl.value  = "";
+    nameEl.value = "";
+    await loadDeviceManagement();
+    await loadDevicesFromDB(); // Refresh in-memory DEVICES array
+  } catch(e) {
+    showStatus(`Error: ${e.message}`, false);
+  }
+}
+
+async function toggleDeviceEnabled(id, enabled, name) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/devices?id=eq.${id}`, {
+      method: "PATCH",
+      headers: {
+        "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json", "Prefer": "return=minimal"
+      },
+      body: JSON.stringify({ enabled })
+    });
+    setStatus("ready", `${name} ${enabled ? "enabled" : "disabled"}.`);
+    await loadDevicesFromDB();
+    await loadDeviceManagement();
+  } catch(e) { console.error("toggleDeviceEnabled:", e); }
+}
+
+async function removeDevice(id, name) {
+  if (!confirm(`Remove "${name}" from the dashboard? This does not delete any historical data.`)) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/devices?id=eq.${id}`, {
+      method: "DELETE",
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+    });
+    setStatus("ready", `${name} removed.`);
+    await loadDevicesFromDB();
+    await loadDeviceManagement();
+  } catch(e) { console.error("removeDevice:", e); }
+}
+
 </script>
 </body>
 </html>
