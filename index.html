@@ -243,6 +243,24 @@
   .modal-hex { font-family:monospace; font-size:12px; background:var(--surface2); border:0.5px solid var(--border-md); border-radius:var(--radius-sm); padding:10px; word-break:break-all; color:var(--text-primary); margin-top:4px; }
   .modal-status { display:inline-block; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:500; }
 
+  /* ── Schedule Confirmation Modal ── */
+  #sched-confirm-modal .modal-box { max-width: 560px; }
+  .confirm-badge { display:inline-flex; align-items:center; gap:6px; background:var(--amber-bg); border:0.5px solid var(--amber); border-radius:20px; padding:4px 12px; font-size:11px; font-weight:600; color:var(--amber); margin-bottom:1rem; }
+  .confirm-section { margin-bottom:1rem; }
+  .confirm-section-title { font-size:10px; font-weight:700; color:var(--text-hint); text-transform:uppercase; letter-spacing:0.07em; margin-bottom:6px; }
+  .confirm-row { display:flex; justify-content:space-between; align-items:baseline; font-size:12.5px; padding:6px 0; border-bottom:0.5px solid var(--border); }
+  .confirm-row:last-child { border-bottom:none; }
+  .confirm-row-label { color:var(--text-secondary); }
+  .confirm-row-value { font-weight:600; color:var(--text-primary); text-align:right; max-width:58%; word-break:break-word; }
+  .confirm-row-value.highlight { color:var(--green-dark); }
+  .confirm-hex-block { font-family:monospace; font-size:11px; background:var(--surface2); border:0.5px solid var(--border-md); border-radius:var(--radius-sm); padding:9px 12px; word-break:break-all; color:var(--text-primary); margin-top:4px; letter-spacing:0.04em; }
+  .confirm-actions { display:flex; gap:10px; margin-top:1.25rem; }
+  .confirm-btn-cancel { flex:1; padding:10px; border-radius:var(--radius-sm); border:0.5px solid var(--border-md); background:var(--surface2); color:var(--text-secondary); font-size:13px; font-weight:600; cursor:pointer; transition:opacity 0.2s; }
+  .confirm-btn-cancel:hover { opacity:0.75; }
+  .confirm-btn-proceed { flex:2; padding:10px; border-radius:var(--radius-sm); border:none; background:var(--green-dark); color:#fff; font-size:13px; font-weight:700; cursor:pointer; transition:opacity 0.2s; }
+  .confirm-btn-proceed:hover { opacity:0.88; }
+  .confirm-warning { font-size:11px; color:var(--amber); background:var(--amber-bg); border:0.5px solid var(--amber); border-radius:var(--radius-sm); padding:8px 12px; margin-top:0.75rem; }
+
   /* ── Persistent Events Bar ── */
   .events-bar { background: var(--surface); border-top: 0.5px solid var(--border); padding: 6px 1rem; max-width: 100%; overflow-x: auto; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
   .events-bar-label { font-size: 10px; font-weight: 600; color: var(--text-hint); text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0; }
@@ -760,7 +778,7 @@
 
 
           <div class="sched-field full">
-            <button class="sched-submit-btn" onclick="createSchedule()">Save Schedule</button>
+            <button class="sched-submit-btn" onclick="showSchedConfirm()">Save Schedule</button>
           </div>
         </div>
       </div>
@@ -1132,6 +1150,51 @@
       <button class="modal-close" onclick="closeEventModal()">✕</button>
     </div>
     <div id="modal-body"></div>
+  </div>
+</div>
+
+<!-- ── Schedule Confirmation Modal ── -->
+<div class="modal-overlay" id="sched-confirm-modal" onclick="closeSchedConfirm(event)">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">⚠️ Confirm Schedule</div>
+      <button class="modal-close" onclick="closeSchedConfirm()">✕</button>
+    </div>
+    <div class="confirm-badge">📋 Review before sending to device</div>
+
+    <div class="confirm-section">
+      <div class="confirm-section-title">Event Identity</div>
+      <div class="confirm-row"><span class="confirm-row-label">Event Name</span><span class="confirm-row-value highlight" id="sc-name">—</span></div>
+      <div class="confirm-row"><span class="confirm-row-label">Target</span><span class="confirm-row-value" id="sc-target">—</span></div>
+      <div class="confirm-row"><span class="confirm-row-label">Target Type</span><span class="confirm-row-value" id="sc-target-type">—</span></div>
+    </div>
+
+    <div class="confirm-section">
+      <div class="confirm-section-title">Timing</div>
+      <div class="confirm-row"><span class="confirm-row-label">Scheduled Date &amp; Time</span><span class="confirm-row-value highlight" id="sc-datetime">—</span></div>
+      <div class="confirm-row"><span class="confirm-row-label">Timezone</span><span class="confirm-row-value" id="sc-timezone">—</span></div>
+      <div class="confirm-row"><span class="confirm-row-label">Event Duration</span><span class="confirm-row-value" id="sc-duration">—</span></div>
+    </div>
+
+    <div class="confirm-section">
+      <div class="confirm-section-title">Control Parameters</div>
+      <div class="confirm-row"><span class="confirm-row-label">Relay Action</span><span class="confirm-row-value" id="sc-action">—</span></div>
+      <div class="confirm-row"><span class="confirm-row-label">Control Mode</span><span class="confirm-row-value" id="sc-mode">—</span></div>
+      <div class="confirm-row"><span class="confirm-row-label">Strategy</span><span class="confirm-row-value" id="sc-strategy">—</span></div>
+      <div class="confirm-row"><span class="confirm-row-label">Repetitions</span><span class="confirm-row-value" id="sc-reps">—</span></div>
+    </div>
+
+    <div class="confirm-section">
+      <div class="confirm-section-title">LC Hex Payload (sent to device)</div>
+      <div class="confirm-hex-block" id="sc-hex">—</div>
+    </div>
+
+    <div class="confirm-warning" id="sc-warning" style="display:none;"></div>
+
+    <div class="confirm-actions">
+      <button class="confirm-btn-cancel" onclick="closeSchedConfirm()">← Go Back</button>
+      <button class="confirm-btn-proceed" id="sc-confirm-btn" onclick="confirmAndSave()">✓ Confirm &amp; Send to Device</button>
+    </div>
   </div>
 </div>
 
@@ -2470,7 +2533,120 @@ function updateRepsDisplay() {
 
 
 
+// ── Schedule Confirmation Modal ──────────────────────────────────────────────
+
+function showSchedConfirm() {
+  const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ""; };
+  const name           = getVal("sf-name").trim();
+  const type           = getVal("sf-target-type");
+  const targetVal      = getVal("sf-target");
+  const action         = getVal("sf-action");
+  const mode           = getVal("sf-mode");
+  const stratVal       = getVal("sf-strategy");
+  const hour           = getVal("sf-hour");
+  const minute         = getVal("sf-minute");
+  const time           = (hour !== "" && minute !== "") ? `${hour}:${minute}` : "";
+  const tz             = getVal("sf-timezone");
+  const event_date     = getVal("sf-date") || null;
+  const duration_minutes = parseFloat(getVal("sf-duration")) || null;
+
+  // Run same validation as createSchedule so errors show before modal opens
+  if (!name)             { setStatus("error", "Please enter a schedule name."); return; }
+  if (!type)             { setStatus("error", "Please select a target type."); return; }
+  if (!targetVal)        { setStatus("error", "Please select a target."); return; }
+  if (!action)           { setStatus("error", "Please select a relay action."); return; }
+  if (!mode)             { setStatus("error", "Please select a control mode."); return; }
+  if (!stratVal)         { setStatus("error", "Please select a strategy."); return; }
+  if (!event_date)       { setStatus("error", "Please select a date."); return; }
+  if (!hour || !minute)  { setStatus("error", "Please select both hour and minute."); return; }
+  if (!duration_minutes) { setStatus("error", "Please select an event duration."); return; }
+
+  const [stratNum, stratTimeout, stratCycle] = stratVal.split("|").map(Number);
+  const reps = duration_minutes && stratCycle
+    ? Math.max(1, Math.round(duration_minutes / stratCycle))
+    : 1;
+
+  // Resolve human-readable target name
+  let targetName = targetVal;
+  if (type === "group") {
+    const gNum = parseInt(targetVal.replace("group_", ""));
+    targetName = groupNames[gNum] || "Group " + gNum;
+  } else {
+    targetName = unitName(targetVal);
+  }
+
+  // Resolve human-readable labels from select option text
+  const actionLabel   = document.querySelector(`#sf-action option[value="${action}"]`)?.text || action;
+  const modeLabel     = document.querySelector(`#sf-mode option[value="${mode}"]`)?.text || mode;
+  const stratLabel    = document.querySelector(`#sf-strategy option[value="${stratVal}"]`)?.text || stratVal;
+  const tzLabel       = document.querySelector(`#sf-timezone option[value="${tz}"]`)?.text || tz;
+
+  // Format scheduled date/time
+  const [yr, mo, dy] = (event_date || "").split("-").map(Number);
+  const h = parseInt(hour), m = parseInt(minute);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  const dateLabel = event_date
+    ? `${mo}/${dy}/${yr} at ${h12}:${String(minute).padStart(2,"0")} ${ampm}`
+    : "—";
+
+  // Duration label
+  const durH = Math.floor(duration_minutes / 60);
+  const durM = duration_minutes % 60;
+  const durLabel = durH > 0
+    ? (durM > 0 ? `${durH}h ${durM}m` : `${durH}h`)
+    : `${durM}m`;
+
+  // Build preview LC hex
+  const schedUnix = getScheduleUnixTime(event_date, time, tz);
+  const lcHex = buildLCHex(action, mode, stratNum, reps, schedUnix);
+
+  // Populate modal fields
+  document.getElementById("sc-name").textContent        = name;
+  document.getElementById("sc-target").textContent      = targetName;
+  document.getElementById("sc-target-type").textContent = type === "group" ? "Group" : "Individual Device";
+  document.getElementById("sc-datetime").textContent    = dateLabel;
+  document.getElementById("sc-timezone").textContent    = tzLabel;
+  document.getElementById("sc-duration").textContent    = durLabel;
+  document.getElementById("sc-action").textContent      = actionLabel;
+  document.getElementById("sc-mode").textContent        = modeLabel;
+  document.getElementById("sc-strategy").textContent    = stratLabel;
+  document.getElementById("sc-reps").textContent        = `${reps} repetition${reps !== 1 ? "s" : ""} (${duration_minutes} min ÷ ${stratCycle} min cycle)`;
+  document.getElementById("sc-hex").textContent         = lcHex || "—";
+
+  // Warning if event is in the past
+  const warnEl = document.getElementById("sc-warning");
+  if (schedUnix && schedUnix < Math.floor(Date.now() / 1000)) {
+    warnEl.textContent = "⚠️ The scheduled time appears to be in the past. The device may execute this event immediately upon receipt.";
+    warnEl.style.display = "block";
+  } else {
+    warnEl.style.display = "none";
+  }
+
+  document.getElementById("sched-confirm-modal").classList.add("active");
+}
+
+function closeSchedConfirm(e) {
+  if (e && e.target !== document.getElementById("sched-confirm-modal")) return;
+  document.getElementById("sched-confirm-modal").classList.remove("active");
+}
+
+async function confirmAndSave() {
+  const btn = document.getElementById("sc-confirm-btn");
+  btn.disabled = true;
+  btn.textContent = "Sending…";
+  document.getElementById("sched-confirm-modal").classList.remove("active");
+  await _executeCreateSchedule();
+  btn.disabled = false;
+  btn.textContent = "✓ Confirm & Send to Device";
+}
+
 async function createSchedule() {
+  // Legacy direct call kept for backward compatibility — routes through confirmation
+  await showSchedConfirm();
+}
+
+async function _executeCreateSchedule() {
   const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ""; };
   const name     = getVal("sf-name").trim();
   const type     = getVal("sf-target-type");
