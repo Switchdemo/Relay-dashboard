@@ -5461,6 +5461,8 @@ async function onSignedIn(session) {
   await loadDevicesFromDB();
   buildControls();
   buildDataCards();
+  // Start OpenADR background poller immediately after login
+  startOADRPoller();
   hideLoginOverlay();
   applyRolePermissions(currentUserRole);
   updateAdminHeader();
@@ -7725,18 +7727,28 @@ async function testVTNConnection() {
 }
 
 // ── Events Tab ────────────────────────────────────────────────────────────────
+function startOADRPoller() {
+  // Starts the background poller — called on login so it runs regardless of which tab is open
+  if (oadrReportTimer) clearInterval(oadrReportTimer);
+  oadrReportTimer = setInterval(async () => {
+    await checkAndFirePendingEvents();
+    await sendPendingReports();
+    // Refresh UI if the OpenADR Events tab is currently active
+    if (document.getElementById("tab-openadr")?.classList.contains("active")) {
+      await loadOpenADREvents();
+      await loadDispatchLog();
+    }
+  }, 30000);
+  console.log("OpenADR poller started.");
+}
+
 async function initOpenADREvents() {
   await loadOpenADRVTNStatus();
   await loadOpenADREvents();
   await loadOpenADRReports();
   await loadDispatchLog();
-  // Start polling for new events every 30 seconds
-  if (oadrReportTimer) clearInterval(oadrReportTimer);
-  oadrReportTimer = setInterval(async () => {
-    await loadOpenADREvents();
-    await checkAndFirePendingEvents();
-    await sendPendingReports();
-  }, 30000);
+  // Ensure poller is running (in case it wasn't started yet)
+  if (!oadrReportTimer) startOADRPoller();
 }
 
 async function loadOpenADRVTNStatus() {
