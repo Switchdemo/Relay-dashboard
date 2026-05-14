@@ -2130,8 +2130,11 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 function unitName(uid) { return "Unit " + uid.slice(-4); }
 
-// DEVICES is populated dynamically from Supabase on startup
-let DEVICES = [];
+// DEVICES seeded with defaults immediately; refreshed from Supabase after login
+let DEVICES = [
+  { id: "device1", uid: "dev:868032061596023", name: "Unit 6023" },
+  { id: "device2", uid: "dev:868050045717135", name: "Unit 7135" },
+];
 
 async function loadDevicesFromDB() {
   try {
@@ -2171,7 +2174,8 @@ const COMMANDS = {
   "all_off":{"body":{"LC":"A10B00003D8F000F0000000017"},"req":"note.add","sync":true},
 };
 
-const relayState = {}; // Populated by loadDevicesFromDB() on startup
+const relayState = {};
+DEVICES.forEach(d => { relayState[d.id] = { 1:false, 2:false, 3:false, 4:false, all:false }; });
 let busy = false;
 let map, mapInitialized = false;
 const mapMarkers = {};
@@ -2250,7 +2254,7 @@ function switchMain(main, btn) {
   document.getElementById("sub-tabs-admin").style.display   = main === "admin"   ? "flex" : "none";
   if (main === "summary") { activatePane("summary"); initSummaryTab(); }
   else if (main === "weather") { activatePane("weather"); initWeatherTab(); }
-  else if (main === "admin")   { activatePane("admin"); }
+  else if (main === "admin")   { const s = currentSub.admin||"admin-users"; activatePane(s); activateSubBtn("admin",s); }
   else if (main === "events")  { const s = currentSub.events||"scheduler";  activatePane(s); activateSubBtn("events",s); }
   else if (main === "devices") { const s = currentSub.devices||"data"; activatePane(s); activateSubBtn("devices",s); }
 }
@@ -5434,6 +5438,10 @@ async function onSignedIn(session) {
     .update({ last_login: new Date().toISOString() })
     .eq("id", currentUser.id);
 
+  // Refresh devices from Supabase then rebuild UI
+  await loadDevicesFromDB();
+  buildControls();
+  buildDataCards();
   hideLoginOverlay();
   applyRolePermissions(currentUserRole);
   updateAdminHeader();
