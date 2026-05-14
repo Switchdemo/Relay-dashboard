@@ -8558,7 +8558,7 @@ async function addNewDevice() {
   };
 
   if (!uid)  return showStatus("⚠️ Device UID is required.", false);
-  if (!uid.startsWith("dev:")) return showStatus("⚠️ UID must start with "dev:"", false);
+  if (!uid.startsWith("dev:")) return showStatus('⚠️ UID must start with "dev:"', false);
 
   // Auto-generate name if blank
   if (!name) name = "Unit " + uid.slice(-4);
