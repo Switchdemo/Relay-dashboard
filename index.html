@@ -5434,11 +5434,6 @@ async function onSignedIn(session) {
     .update({ last_login: new Date().toISOString() })
     .eq("id", currentUser.id);
 
-  // Load devices from Supabase now that auth is ready
-  await loadDevicesFromDB();
-  buildControls();
-  buildDataCards();
-
   hideLoginOverlay();
   applyRolePermissions(currentUserRole);
   updateAdminHeader();
