@@ -7884,8 +7884,35 @@ async function logOADRDispatch(evt, device, relayNum, relayAction, architecture,
 }
 
 async function checkAndFirePendingEvents() {
-  // Find events that should fire now
   const now = new Date().toISOString();
+
+  // ── Cleanup: mark expired active events as completed and send restore ──
+  try {
+    const active = await supabaseGet("openadr_events?event_status=eq.active&opt_type=eq.optIn&limit=20");
+    if (Array.isArray(active)) {
+      for (const evt of active) {
+        if (!evt.dtstart || !evt.duration_mins) continue;
+        const endTime = new Date(new Date(evt.dtstart).getTime() + evt.duration_mins * 60000);
+        if (new Date() >= endTime) {
+          console.log(`Cleaning up expired event: ${evt.vtn_event_id} (ended ${endTime.toLocaleString()})`);
+          // Send restore to all VEN devices
+          const realDevices = DEVICES.filter(d => !d.uid.includes("PLACEHOLDER"));
+          const venDevices  = realDevices.filter(d => drDeviceConfig[d.uid]?.ven_resource === true);
+          const targetDevices = venDevices.length > 0 ? venDevices : realDevices;
+          const restoreHex = buildRestoreHex("all_on");
+          for (const device of targetDevices) await sendLCToDevice(device.uid, restoreHex);
+          await supabasePatch(
+            `openadr_events?vtn_event_id=eq.${encodeURIComponent(evt.vtn_event_id)}`,
+            { event_status: "completed" }
+          );
+          await sendCompletionReport(evt);
+          console.log(`Event ${evt.vtn_event_id} marked completed.`);
+        }
+      }
+    }
+  } catch(e) { console.error("checkAndFirePendingEvents cleanup:", e); }
+
+  // ── Find and fire events that should start now ──
   const rows = await supabaseGet(
     `openadr_events?event_status=in.(far,near)&dtstart=lte.${now}&opt_type=eq.optIn&order=dtstart.asc&limit=10`
   );
