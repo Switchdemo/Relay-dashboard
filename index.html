@@ -5434,6 +5434,11 @@ async function onSignedIn(session) {
     .update({ last_login: new Date().toISOString() })
     .eq("id", currentUser.id);
 
+  // Load devices from Supabase now that auth is ready
+  await loadDevicesFromDB();
+  buildControls();
+  buildDataCards();
+
   hideLoginOverlay();
   applyRolePermissions(currentUserRole);
   updateAdminHeader();
@@ -8480,18 +8485,14 @@ async function loadHistory() {
   } catch(e) { tbody.innerHTML = `<tr><td colspan="11" class="no-data">Error loading history</td></tr>`; }
 }
 
-// Load devices from Supabase first, then initialize everything else
-(async () => {
-  await loadDevicesFromDB();
-  buildControls();
-  buildDataCards();
-  autoDetectTimezones();
-  loadEventsBar();
-  initHeaderWeather();
-  initAuth();
-  // Init summary tab since it's the default active tab
-  setTimeout(() => initSummaryTab(), 100);
-})();
+buildControls();
+buildDataCards();
+autoDetectTimezones();
+loadEventsBar();
+initHeaderWeather();
+initAuth();
+// Init summary tab since it's the default active tab
+setTimeout(() => initSummaryTab(), 100);
 
 // ── Device Management ─────────────────────────────────────────────────────────
 
