@@ -1965,7 +1965,7 @@
             <thead><tr>
               <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Signal Level</th>
               <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Description</th>
-              <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">LC Strategy</th>
+              <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Duty Cycle Strategy #</th>
               <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Mode</th>
               <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Control %</th>
             </tr></thead>
@@ -1975,6 +1975,33 @@
           </table>
         </div>
         <div id="oadr-mapping-status" style="font-size:11px;margin-top:8px;display:none;"></div>
+      </div>
+
+      <!-- DR Device Configuration -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">DR Device Configuration</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="queue-refresh" onclick="loadDRConfig()">Refresh</button>
+            <button class="queue-refresh" style="color:var(--green-dark);border-color:var(--green);" onclick="saveAllDRConfig()">Save All</button>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:12px;">
+          Designate which devices participate in OpenADR demand response and configure how each device and relay responds to shed signals.
+        </div>
+        <!-- Global bulk action bar -->
+        <div style="background:var(--surface2);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <span style="font-size:11px;font-weight:600;color:var(--text-secondary);">Set All Devices:</span>
+          <button class="queue-refresh" onclick="drSetAllMode('bas_di')" style="font-size:11px;">&#127970; All &#8594; BAS/DI Mode</button>
+          <button class="queue-refresh" onclick="drSetAllMode('direct_load')" style="font-size:11px;">&#128268; All &#8594; Direct Load Mode</button>
+          <div style="width:1px;height:18px;background:var(--border-md);"></div>
+          <button class="queue-refresh" onclick="drSetAllVEN(true)" style="font-size:11px;color:var(--green-dark);border-color:var(--green);">Enable All as VEN Resource</button>
+          <button class="queue-refresh" onclick="drSetAllVEN(false)" style="font-size:11px;color:var(--red);border-color:var(--red);">Disable All</button>
+        </div>
+        <!-- Per-device config rows -->
+        <div id="dr-device-config-list">
+          <div class="sched-empty">Loading device DR configuration...</div>
+        </div>
       </div>
 
       <!-- Test Event -->
@@ -7226,6 +7253,248 @@ let oadrMappings   = [
 ];
 let oadrReportTimer = null;
 
+// ── DR Device Configuration ───────────────────────────────────────────────────
+// In-memory store: { [device_uid]: { ven_resource, default_mode, relays: { [1-4]: { mode_override, shed_level, is_designated, enabled } } } }
+let drDeviceConfig = {};
+
+const DR_SHED_LEVELS = ["emergency", "high", "medium", "low"];
+const DR_SHED_LABELS = { emergency: "Emergency", high: "High", medium: "Medium", low: "Low" };
+const DR_MODES = { bas_di: "BAS/DI", direct_load: "Direct Load" };
+
+async function loadDRConfig() {
+  const list = document.getElementById("dr-device-config-list");
+  if (!list) return;
+
+  // Load device-level config
+  let devRows = [];
+  let relayRows = [];
+  try {
+    devRows   = await supabaseGet("device_dr_config?order=device_uid.asc") || [];
+    relayRows = await supabaseGet("device_relay_dr_config?order=device_uid.asc,relay_number.asc") || [];
+  } catch(e) { console.warn("DR config tables may not exist yet — using defaults.", e); }
+
+  // Build in-memory config, defaulting any missing entries
+  const realDevices = DEVICES.filter(d => !d.uid.includes("PLACEHOLDER"));
+  drDeviceConfig = {};
+
+  for (const dev of realDevices) {
+    const saved = devRows.find(r => r.device_uid === dev.uid) || {};
+    const relays = {};
+    for (let r = 1; r <= 4; r++) {
+      const savedRelay = relayRows.find(x => x.device_uid === dev.uid && x.relay_number === r) || {};
+      relays[r] = {
+        mode_override:  savedRelay.mode_override  ?? null,
+        shed_level:     savedRelay.shed_level      ?? null,
+        is_designated:  savedRelay.is_designated   ?? (r === 1),
+        enabled:        savedRelay.enabled         ?? true
+      };
+    }
+    drDeviceConfig[dev.uid] = {
+      ven_resource:  saved.ven_resource  ?? false,
+      default_mode:  saved.default_mode  ?? "direct_load",
+      relays
+    };
+  }
+  renderDRConfig();
+}
+
+function renderDRConfig() {
+  const list = document.getElementById("dr-device-config-list");
+  if (!list) return;
+  const realDevices = DEVICES.filter(d => !d.uid.includes("PLACEHOLDER"));
+  if (!realDevices.length) { list.innerHTML = '<div class="sched-empty">No devices configured.</div>'; return; }
+
+  list.innerHTML = realDevices.map(dev => {
+    const cfg = drDeviceConfig[dev.uid] || {};
+    const effMode = cfg.default_mode || "direct_load";
+    const isBAS   = effMode === "bas_di";
+    const isVEN   = cfg.ven_resource || false;
+
+    const relayRows = [1,2,3,4].map(r => {
+      const rc = cfg.relays?.[r] || {};
+      const effectiveMode = rc.mode_override ?? effMode;
+      const isBASRelay    = effectiveMode === "bas_di";
+
+      const modeOverrideOptions = [
+        `<option value="" ${!rc.mode_override ? "selected" : ""}>Inherit (${DR_MODES[effMode]})</option>`,
+        `<option value="bas_di" ${rc.mode_override === "bas_di" ? "selected" : ""}>BAS/DI</option>`,
+        `<option value="direct_load" ${rc.mode_override === "direct_load" ? "selected" : ""}>Direct Load</option>`
+      ].join("");
+
+      const shedOptions = DR_SHED_LEVELS.map(sl =>
+        `<option value="${sl}" ${rc.shed_level === sl ? "selected" : ""}>${DR_SHED_LABELS[sl]}</option>`
+      ).join("");
+
+      const shedCell = isBASRelay
+        ? `<select onchange="drUpdateRelay('${dev.uid}',${r},'shed_level',this.value)"
+              style="padding:3px 6px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
+              <option value="">— None —</option>${shedOptions}
+           </select>`
+        : `<span style="font-size:11px;color:var(--text-hint);">N/A</span>`;
+
+      const designatedCell = !isBASRelay
+        ? `<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;">
+              <input type="checkbox" ${rc.is_designated ? "checked" : ""}
+                onchange="drUpdateRelay('${dev.uid}',${r},'is_designated',this.checked)" />
+              Designated
+           </label>`
+        : `<span style="font-size:11px;color:var(--text-hint);">N/A</span>`;
+
+      return `<tr style="background:${rc.enabled ? "transparent" : "rgba(0,0,0,0.03)"};">
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-size:12px;font-weight:500;">R${r}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);">
+          <select onchange="drUpdateRelay('${dev.uid}',${r},'mode_override',this.value||null)"
+            style="padding:3px 6px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
+            ${modeOverrideOptions}
+          </select>
+        </td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);">${shedCell}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);">${designatedCell}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);">
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;">
+            <input type="checkbox" ${rc.enabled ? "checked" : ""}
+              onchange="drUpdateRelay('${dev.uid}',${r},'enabled',this.checked)" />
+            Enabled
+          </label>
+        </td>
+      </tr>`;
+    }).join("");
+
+    return `<div style="border:0.5px solid var(--border-md);border-radius:var(--radius-sm);margin-bottom:10px;overflow:hidden;">
+      <!-- Device header row -->
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--surface2);flex-wrap:wrap;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:600;color:var(--text-primary);">${dev.name}</div>
+          <div style="font-size:10px;color:var(--text-hint);font-family:monospace;margin-top:1px;">${dev.uid}</div>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="checkbox" ${isVEN ? "checked" : ""}
+            onchange="drUpdateDevice('${dev.uid}','ven_resource',this.checked)" />
+          <span style="font-size:11px;font-weight:600;color:${isVEN ? "var(--green-dark)" : "var(--text-secondary)"};">VEN Resource</span>
+        </label>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:11px;color:var(--text-hint);">Default Mode:</span>
+          <select onchange="drUpdateDevice('${dev.uid}','default_mode',this.value);renderDRConfig();"
+            style="padding:4px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface);font-size:11px;font-weight:600;">
+            <option value="bas_di"      ${effMode === "bas_di"      ? "selected" : ""}>🏢 BAS/DI</option>
+            <option value="direct_load" ${effMode === "direct_load" ? "selected" : ""}>🔌 Direct Load</option>
+          </select>
+        </div>
+      </div>
+      <!-- Relay sub-table -->
+      <div style="padding:0 0 2px 0;${!isVEN ? "opacity:0.5;pointer-events:none;" : ""}">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="background:var(--surface);">
+            <th style="text-align:left;padding:6px 10px;border-bottom:0.5px solid var(--border);font-size:10px;color:var(--text-hint);font-weight:600;">Relay</th>
+            <th style="text-align:left;padding:6px 10px;border-bottom:0.5px solid var(--border);font-size:10px;color:var(--text-hint);font-weight:600;">Mode Override</th>
+            <th style="text-align:left;padding:6px 10px;border-bottom:0.5px solid var(--border);font-size:10px;color:var(--text-hint);font-weight:600;">Shed Level (BAS/DI)</th>
+            <th style="text-align:left;padding:6px 10px;border-bottom:0.5px solid var(--border);font-size:10px;color:var(--text-hint);font-weight:600;">Designated Relay (Direct Load)</th>
+            <th style="text-align:left;padding:6px 10px;border-bottom:0.5px solid var(--border);font-size:10px;color:var(--text-hint);font-weight:600;">Participation</th>
+          </tr></thead>
+          <tbody>${relayRows}</tbody>
+        </table>
+        ${!isVEN ? '<div style="text-align:center;padding:6px;font-size:10px;color:var(--text-hint);">Enable as VEN Resource to configure relay DR behavior</div>' : ""}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function drUpdateDevice(uid, field, value) {
+  if (!drDeviceConfig[uid]) drDeviceConfig[uid] = { ven_resource: false, default_mode: "direct_load", relays: {} };
+  drDeviceConfig[uid][field] = value;
+}
+
+function drUpdateRelay(uid, relayNum, field, value) {
+  if (!drDeviceConfig[uid]) drDeviceConfig[uid] = { ven_resource: false, default_mode: "direct_load", relays: {} };
+  if (!drDeviceConfig[uid].relays[relayNum]) drDeviceConfig[uid].relays[relayNum] = {};
+  // If setting is_designated true, unset all other relays on same device (only one designated per device)
+  if (field === "is_designated" && value === true) {
+    for (let r = 1; r <= 4; r++) {
+      if (r !== relayNum && drDeviceConfig[uid].relays[r]) {
+        drDeviceConfig[uid].relays[r].is_designated = false;
+      }
+    }
+  }
+  drDeviceConfig[uid].relays[relayNum][field] = value === "" ? null : value;
+  renderDRConfig();
+}
+
+function drSetAllMode(mode) {
+  const realDevices = DEVICES.filter(d => !d.uid.includes("PLACEHOLDER"));
+  realDevices.forEach(dev => {
+    if (!drDeviceConfig[dev.uid]) drDeviceConfig[dev.uid] = { ven_resource: false, default_mode: mode, relays: {} };
+    drDeviceConfig[dev.uid].default_mode = mode;
+  });
+  renderDRConfig();
+}
+
+function drSetAllVEN(enabled) {
+  const realDevices = DEVICES.filter(d => !d.uid.includes("PLACEHOLDER"));
+  realDevices.forEach(dev => {
+    if (!drDeviceConfig[dev.uid]) drDeviceConfig[dev.uid] = { ven_resource: enabled, default_mode: "direct_load", relays: {} };
+    drDeviceConfig[dev.uid].ven_resource = enabled;
+  });
+  renderDRConfig();
+}
+
+async function saveAllDRConfig() {
+  const statusArea = document.getElementById("dr-device-config-list");
+  const realDevices = DEVICES.filter(d => !d.uid.includes("PLACEHOLDER"));
+  let errors = 0;
+
+  for (const dev of realDevices) {
+    const cfg = drDeviceConfig[dev.uid];
+    if (!cfg) continue;
+
+    // Upsert device-level record
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/device_dr_config`, {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json",
+          "Prefer": "resolution=merge-duplicates,return=minimal"
+        },
+        body: JSON.stringify({
+          device_uid:   dev.uid,
+          ven_resource: cfg.ven_resource,
+          default_mode: cfg.default_mode,
+          updated_at:   new Date().toISOString()
+        })
+      });
+    } catch(e) { console.error("Save device DR config failed:", dev.uid, e); errors++; }
+
+    // Upsert relay-level records
+    for (let r = 1; r <= 4; r++) {
+      const rc = cfg.relays?.[r];
+      if (!rc) continue;
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/device_relay_dr_config`, {
+          method: "POST",
+          headers: {
+            "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+            "Content-Type": "application/json",
+            "Prefer": "resolution=merge-duplicates,return=minimal"
+          },
+          body: JSON.stringify({
+            device_uid:    dev.uid,
+            relay_number:  r,
+            mode_override: rc.mode_override || null,
+            shed_level:    rc.shed_level    || null,
+            is_designated: rc.is_designated ?? false,
+            enabled:       rc.enabled       ?? true,
+            updated_at:    new Date().toISOString()
+          })
+        });
+      } catch(e) { console.error("Save relay DR config failed:", dev.uid, r, e); errors++; }
+    }
+  }
+
+  setStatus(errors ? "error" : "ready",
+    errors ? `DR config saved with ${errors} error(s) — check console.`
+           : "DR device configuration saved successfully.");
+}
+
 // ── Signal → Strategy mapping ─────────────────────────────────────────────────
 function signalToStrategy(level) {
   const numLevel = parseFloat(level);
@@ -7264,6 +7533,7 @@ async function initOpenADRConfig() {
   } catch(e) { console.error("initOpenADRConfig:", e); }
 
   renderMappingTable();
+  loadDRConfig();
 }
 
 function renderMappingTable() {
@@ -7490,15 +7760,55 @@ async function checkAndFirePendingEvents() {
   for (const evt of rows) {
     try {
       console.log(`Firing OpenADR event: ${evt.vtn_event_id} signal=${evt.signal_level}`);
-      const mapping  = signalToStrategy(evt.signal_level || 0);
+      const mapping   = signalToStrategy(evt.signal_level || 0);
       const schedUnix = Math.floor(new Date(evt.dtstart).getTime() / 1000);
-      const reps     = evt.duration_mins ? Math.max(1, Math.round(evt.duration_mins / (mapping.strategy <= 3 ? 7.5 : 15))) : 1;
-      const lcHex    = buildLCHex("all_on", mapping.mode, mapping.strategy, reps, schedUnix);
+      const cycleTime = mapping.strategy <= 3 ? 7.5 : 15;
+      const reps      = evt.duration_mins ? Math.max(1, Math.round(evt.duration_mins / cycleTime)) : 1;
 
-      // Send to all devices
+      // Config-aware dispatch: respect device DR configuration
       const realDevices = DEVICES.filter(d => !d.uid.includes("PLACEHOLDER"));
-      for (const device of realDevices) {
-        await sendLCToDevice(device.uid, lcHex);
+      const venDevices  = realDevices.filter(d => drDeviceConfig[d.uid]?.ven_resource === true);
+
+      // If no devices are configured as VEN resources yet, fall back to all real devices
+      const targetDevices = venDevices.length > 0 ? venDevices : realDevices;
+
+      for (const device of targetDevices) {
+        const devCfg     = drDeviceConfig[device.uid];
+        const devMode    = devCfg?.default_mode || "direct_load";
+        const shedLabel  = mapping.desc.toLowerCase().includes("emergency") ? "emergency"
+                         : mapping.desc.toLowerCase().includes("high")      ? "high"
+                         : mapping.desc.toLowerCase().includes("medium")    ? "medium"
+                         : mapping.desc.toLowerCase().includes("low")       ? "low"
+                         : null;
+
+        // Determine which relay(s) to fire and what hex to send
+        let sentAny = false;
+        for (let rNum = 1; rNum <= 4; rNum++) {
+          const rc           = devCfg?.relays?.[rNum] || {};
+          const effectiveMode = rc.mode_override ?? devMode;
+          if (rc.enabled === false) continue;
+
+          if (effectiveMode === "bas_di") {
+            // BAS/DI: fire the relay whose shed_level matches the incoming signal
+            if (!shedLabel || rc.shed_level !== shedLabel) continue;
+            const relayAction = `relay${rNum}_on`;
+            const hex = buildLCHex(relayAction, mapping.mode, mapping.strategy, reps, schedUnix);
+            await sendLCToDevice(device.uid, hex);
+            sentAny = true;
+          } else {
+            // Direct Load: fire only the designated relay, duty cycle carries the shed level
+            if (!rc.is_designated) continue;
+            const relayAction = `relay${rNum}_on`;
+            const hex = buildLCHex(relayAction, mapping.mode, mapping.strategy, reps, schedUnix);
+            await sendLCToDevice(device.uid, hex);
+            sentAny = true;
+          }
+        }
+        // Fallback: if device has no relay config at all, send all_on with mapping strategy
+        if (!sentAny) {
+          const hex = buildLCHex("all_on", mapping.mode, mapping.strategy, reps, schedUnix);
+          await sendLCToDevice(device.uid, hex);
+        }
       }
 
       // Update event status
@@ -7510,7 +7820,7 @@ async function checkAndFirePendingEvents() {
       // Schedule end restore
       setTimeout(async () => {
         const restoreHex = buildRestoreHex("all_on");
-        for (const device of realDevices) await sendLCToDevice(device.uid, restoreHex);
+        for (const device of targetDevices) await sendLCToDevice(device.uid, restoreHex);
         await supabasePatch(
           `openadr_events?vtn_event_id=eq.${encodeURIComponent(evt.vtn_event_id)}`,
           { event_status: "completed" }
