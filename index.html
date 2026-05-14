@@ -330,6 +330,34 @@
     .group-card:last-child { grid-column: auto; }
     #map { height: 320px; }
   }
+
+  /* ── Help System ── */
+  .help-icon { display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:50%; background:none; border:1px solid var(--text-hint); color:var(--text-hint); font-size:9px; font-weight:700; cursor:pointer; margin-left:6px; transition:all 0.15s; vertical-align:middle; flex-shrink:0; line-height:1; }
+  .help-icon:hover { background:var(--text-primary); border-color:var(--text-primary); color:#fff; }
+  .help-modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:500; align-items:center; justify-content:center; padding:1rem; }
+  .help-modal-overlay.active { display:flex; }
+  .help-modal-box { background:var(--surface); border-radius:var(--radius); width:100%; max-width:700px; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 16px 48px rgba(0,0,0,0.25); overflow:hidden; }
+  .help-modal-header { display:flex; align-items:center; justify-content:space-between; padding:1rem 1.25rem; border-bottom:0.5px solid var(--border-md); flex-shrink:0; background:var(--text-primary); }
+  .help-modal-title { font-size:14px; font-weight:600; color:#fff; }
+  .help-modal-close { font-size:16px; cursor:pointer; color:rgba(255,255,255,0.7); background:none; border:none; padding:0 4px; line-height:1; }
+  .help-modal-close:hover { color:#fff; }
+  .help-modal-body { overflow-y:auto; padding:1.25rem; flex:1; }
+  .help-section { margin-bottom:1.5rem; }
+  .help-section:last-child { margin-bottom:0; }
+  .help-section-title { font-size:12px; font-weight:700; color:var(--text-primary); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.75rem; padding-bottom:0.5rem; border-bottom:2px solid var(--green-bg); }
+  .help-para { font-size:12px; color:var(--text-secondary); line-height:1.7; margin-bottom:0.75rem; }
+  .help-table { width:100%; border-collapse:collapse; font-size:11px; margin-bottom:0.75rem; }
+  .help-table th { text-align:left; padding:6px 10px; background:var(--text-primary); color:#fff; font-size:10px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; }
+  .help-table td { padding:6px 10px; border-bottom:0.5px solid var(--border); vertical-align:top; color:var(--text-secondary); }
+  .help-table td:first-child { font-weight:600; color:var(--text-primary); white-space:nowrap; font-family:monospace; font-size:10px; }
+  .help-table tr:last-child td { border-bottom:none; }
+  .help-table tr:nth-child(even) td { background:var(--surface2); }
+  .help-note { background:var(--green-bg); border-left:3px solid var(--green); padding:8px 12px; border-radius:0 var(--radius-sm) var(--radius-sm) 0; font-size:11px; color:var(--green-dark); line-height:1.6; margin-bottom:0.75rem; }
+  .help-warn { background:var(--amber-bg); border-left:3px solid var(--amber); padding:8px 12px; border-radius:0 var(--radius-sm) var(--radius-sm) 0; font-size:11px; color:var(--amber); line-height:1.6; margin-bottom:0.75rem; }
+  .help-nav { display:flex; gap:6px; flex-wrap:wrap; padding:0.75rem 1.25rem; border-bottom:0.5px solid var(--border); background:var(--surface2); flex-shrink:0; }
+  .help-nav-btn { padding:4px 10px; border-radius:12px; border:0.5px solid var(--border-md); background:var(--surface); color:var(--text-secondary); font-size:11px; font-weight:500; cursor:pointer; transition:all 0.15s; }
+  .help-nav-btn:hover { background:var(--text-primary); color:#fff; border-color:var(--text-primary); }
+  .help-nav-btn.active { background:var(--text-primary); color:#fff; border-color:var(--text-primary); }
 </style>
 </head>
 <body>
@@ -446,6 +474,7 @@
     <button class="sub-tab-btn" id="sub-admin-monitor" onclick="switchSub('admin','admin-monitor',this)">Device Monitoring</button>
     <button class="sub-tab-btn" id="sub-admin-energy" onclick="switchSub('admin','admin-energy',this)">Energy Monitor</button>
     <button class="sub-tab-btn" id="sub-admin-openadr" onclick="switchSub('admin','admin-openadr',this)">OpenADR Config</button>
+    <button class="sub-tab-btn" id="sub-admin-help" onclick="switchSub('admin','admin-help',this)">Help & Reference</button>
   </div>
   <div class="sub-tabs" id="sub-tabs-events" style="display:none;">
     <button class="sub-tab-btn active" id="sub-scheduler" onclick="switchSub('events','scheduler',this)">Event Scheduler</button>
@@ -633,7 +662,7 @@
       <!-- Create Schedule Form -->
       <div class="sched-card">
         <div class="sched-card-header">
-          <div class="sched-card-title">Create New Event</div>
+          <div class="sched-card-title">Create New Event <button class="help-icon" onclick="openHelp('scheduling')" title="Help">?</button></div>
         </div>
         <div class="sched-form">
           <div class="sched-field full">
@@ -666,7 +695,7 @@
             </select>
           </div>
           <div class="sched-field">
-            <label class="sched-label">Control Mode</label>
+            <label class="sched-label">Control Mode <button class="help-icon" onclick="openHelp('strategies')" title="Help">?</button></label>
             <select class="sched-select" id="sf-mode">
               <option value="" disabled selected>— Choose Mode —</option>
               <option value="dlc">DLC — Direct Load Control</option>
@@ -674,7 +703,7 @@
             </select>
           </div>
           <div class="sched-field">
-            <label class="sched-label">Strategy (Timeout / Cycle / %)</label>
+            <label class="sched-label">Duty Cycle Strategy <button class="help-icon" onclick="openHelp('strategies')" title="Help">?</button></label>
             <select class="sched-select" id="sf-strategy" onchange="onStrategyChange()">
               <option value="" disabled selected>— Choose Cycle —</option>
               <option value="2|7.5|15">50% — On 7.5 min / Off 7.5 min (15 min cycle)</option>
@@ -1201,6 +1230,28 @@
   </div>
 </div>
 
+
+<!-- ── Help & Reference Modal ── -->
+<div class="help-modal-overlay" id="help-modal" onclick="closeHelpModal(event)">
+  <div class="help-modal-box">
+    <div class="help-modal-header">
+      <div class="help-modal-title" id="help-modal-title">Help & Reference</div>
+      <button class="help-modal-close" onclick="closeHelpModal()">✕</button>
+    </div>
+    <div class="help-nav" id="help-nav">
+      <button class="help-nav-btn active" onclick="showHelpSection('scheduling')">Scheduling</button>
+      <button class="help-nav-btn" onclick="showHelpSection('strategies')">Strategies</button>
+      <button class="help-nav-btn" onclick="showHelpSection('relay')">Relay Control</button>
+      <button class="help-nav-btn" onclick="showHelpSection('openadr')">OpenADR</button>
+      <button class="help-nav-btn" onclick="showHelpSection('dr-config')">DR Config</button>
+      <button class="help-nav-btn" onclick="showHelpSection('devices')">Devices</button>
+      <button class="help-nav-btn" onclick="showHelpSection('hex')">LC Hex</button>
+      <button class="help-nav-btn" onclick="showHelpSection('glossary')">Glossary</button>
+    </div>
+    <div class="help-modal-body" id="help-modal-body"></div>
+  </div>
+</div>
+
 <!-- ── Floating Hex Parser Button ── -->
 <button id="hex-parser-btn" onclick="toggleHexParser()"
   style="position:fixed;bottom:24px;right:24px;z-index:200;
@@ -1370,7 +1421,7 @@
       <!-- Device List -->
       <div class="sched-card">
         <div class="sched-card-header">
-          <div class="sched-card-title">Registered Devices</div>
+          <div class="sched-card-title">Registered Devices <button class="help-icon" onclick="openHelp('devices')" title="Help">?</button></div>
           <button class="queue-refresh" onclick="loadDeviceManagement()">Refresh</button>
         </div>
         <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">
@@ -1950,7 +2001,7 @@
       <!-- VTN Connection -->
       <div class="sched-card">
         <div class="sched-card-header">
-          <div class="sched-card-title">VTN Connection</div>
+          <div class="sched-card-title">VTN Connection <button class="help-icon" onclick="openHelp('openadr')" title="Help">?</button></div>
           <div style="display:flex;gap:8px;">
             <button class="queue-refresh" onclick="testVTNConnection()">Test Connection</button>
             <button class="queue-refresh" onclick="saveVTNConfig()" style="color:var(--green-dark);border-color:var(--green);">Save</button>
@@ -2016,7 +2067,7 @@
       <!-- Signal → Strategy Mapping -->
       <div class="sched-card">
         <div class="sched-card-header">
-          <div class="sched-card-title">Signal → Strategy Mapping</div>
+          <div class="sched-card-title">Signal → Strategy Mapping <button class="help-icon" onclick="openHelp('openadr')" title="Help">?</button></div>
           <button class="queue-refresh" onclick="saveMappings()">Save Mappings</button>
         </div>
         <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">
@@ -2042,7 +2093,7 @@
       <!-- DR Device Configuration -->
       <div class="sched-card">
         <div class="sched-card-header">
-          <div class="sched-card-title">DR Device Configuration</div>
+          <div class="sched-card-title">DR Device Configuration <button class="help-icon" onclick="openHelp('dr-config')" title="Help">?</button></div>
           <div style="display:flex;gap:8px;align-items:center;">
             <button class="queue-refresh" onclick="loadDRConfig()">Refresh</button>
             <button class="queue-refresh" style="color:var(--green-dark);border-color:var(--green);" onclick="saveAllDRConfig()">Save All</button>
@@ -2103,6 +2154,31 @@
         <div id="oadr-test-status" style="font-size:11px;margin-top:8px;display:none;"></div>
       </div>
 
+    </div>
+  </div>
+</div>
+
+
+<!-- ── HELP & REFERENCE TAB ── -->
+<div class="tab-pane" id="tab-admin-help">
+  <div class="scroll-content">
+    <div style="max-width:900px;margin:0 auto;padding:1rem;display:flex;flex-direction:column;gap:16px;">
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">Help & Reference Guide</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;" id="help-tab-nav">
+            <button class="queue-refresh" onclick="showHelpTab('scheduling')">Scheduling</button>
+            <button class="queue-refresh" onclick="showHelpTab('strategies')">Strategies</button>
+            <button class="queue-refresh" onclick="showHelpTab('relay')">Relay Control</button>
+            <button class="queue-refresh" onclick="showHelpTab('openadr')">OpenADR</button>
+            <button class="queue-refresh" onclick="showHelpTab('dr-config')">DR Config</button>
+            <button class="queue-refresh" onclick="showHelpTab('devices')">Devices</button>
+            <button class="queue-refresh" onclick="showHelpTab('hex')">LC Hex</button>
+            <button class="queue-refresh" onclick="showHelpTab('glossary')">Glossary</button>
+          </div>
+        </div>
+        <div id="help-tab-body" style="min-height:400px;"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -2312,6 +2388,7 @@ function runTabInit(name) {
   if (name === "admin-energy")    { initEnergyMonitor(); }
   if (name === "openadr")         { initOpenADREvents(); }
   if (name === "admin-openadr")   { initOpenADRConfig(); }
+  if (name === "admin-help")      { showHelpTab("scheduling"); }
 }
 
 function switchTab(name, btn) { switchMain(name, btn); }
@@ -8811,6 +8888,300 @@ async function removeDevice(id, name) {
     await loadDeviceManagement();
   } catch(e) { console.error("removeDevice:", e); }
 }
+
+
+// ── Help & Reference System ───────────────────────────────────────────────────
+
+const HELP_CONTENT = {
+
+  scheduling: {
+    title: "Event Scheduling",
+    html: `
+      <div class="help-section">
+        <div class="help-section-title">Overview</div>
+        <p class="help-para">Scheduled events send LC hex commands to devices at a specific date and time. The device stores the command and executes it autonomously at the scheduled time — no internet connection required at fire time.</p>
+        <div class="help-note">A confirmation modal shows the full event summary including the LC hex payload before anything is sent. Review carefully before confirming.</div>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Form Fields</div>
+        <table class="help-table">
+          <thead><tr><th>Field</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>Schedule Name</td><td>Auto-generated sequential name. Edit if needed for identification.</td></tr>
+            <tr><td>Target Type</td><td>Select before Target. Individual Device targets one unit; Group targets all members simultaneously.</td></tr>
+            <tr><td>Target</td><td>Must be explicitly selected — defaults to "Choose One" to prevent accidental sends.</td></tr>
+            <tr><td>Relay Action</td><td>Which relays to energize: All Relays ON or a specific relay (R1–R4).</td></tr>
+            <tr><td>Control Mode</td><td>DLC = platform controls timing directly. DI = device has more execution autonomy.</td></tr>
+            <tr><td>Duty Cycle Strategy</td><td>The on/off cycling pattern. See the Strategies section for full reference.</td></tr>
+            <tr><td>Time</td><td>Hour and minute for the event. 15-minute increments available.</td></tr>
+            <tr><td>Date</td><td>Specific date for the event. Unix timestamp is baked into the LC hex.</td></tr>
+            <tr><td>Duration</td><td>How long the event runs. Controls repetition count: Duration ÷ Cycle Time = Reps.</td></tr>
+            <tr><td>Timezone</td><td>Auto-detected from device or browser. Always verify before saving.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Confirmation Modal</div>
+        <p class="help-para">After clicking Save Schedule, a modal appears showing all parameters including the exact LC hex that will be sent. Click <strong>Confirm & Send to Device</strong> to proceed or <strong>Go Back</strong> to edit. A warning appears if the scheduled time is in the past.</p>
+      </div>`
+  },
+
+  strategies: {
+    title: "Duty Cycle Strategies",
+    html: `
+      <div class="help-section">
+        <div class="help-section-title">What is a Strategy?</div>
+        <p class="help-para">A strategy number defines the on/off cycling pattern during a load control event. It controls how aggressively load is shed by specifying how long the relay stays ON versus OFF within each cycle.</p>
+        <div class="help-note">Repetitions = Event Duration ÷ Cycle Time. A 60-minute event with a 30-minute cycle = 2 repetitions.</div>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Strategy Reference</div>
+        <table class="help-table">
+          <thead><tr><th>Strategy #</th><th>ON Time</th><th>Cycle</th><th>Shed %</th><th>Use Case</th></tr></thead>
+          <tbody>
+            <tr><td>2</td><td>7.5 min</td><td>15 min</td><td>50%</td><td>Moderate shed, fast cycle</td></tr>
+            <tr><td>5</td><td>7.5 min</td><td>30 min</td><td>25%</td><td>Low shed</td></tr>
+            <tr><td>9</td><td>15 min</td><td>30 min</td><td>50%</td><td>Medium shed — OpenADR default</td></tr>
+            <tr><td>11</td><td>18 min</td><td>30 min</td><td>60%</td><td>Medium-high shed</td></tr>
+            <tr><td>15</td><td>24 min</td><td>30 min</td><td>80%</td><td>High shed — OpenADR 0.75 default</td></tr>
+            <tr><td>19</td><td>30 min</td><td>30 min</td><td>100%</td><td>Full shed — OpenADR emergency</td></tr>
+            <tr><td>61</td><td>—</td><td>—</td><td>0%</td><td>Restore all relays to pre-event state</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Control Modes</div>
+        <table class="help-table">
+          <thead><tr><th>Mode</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>DLC</td><td>Direct Load Control. Platform directly manages relay on/off timing. Most common.</td></tr>
+            <tr><td>DI</td><td>Distributed Intelligence. Device has more autonomy in executing the cycling behavior.</td></tr>
+          </tbody>
+        </table>
+      </div>`
+  },
+
+  relay: {
+    title: "Relay Control",
+    html: `
+      <div class="help-section">
+        <div class="help-section-title">Manual Control</div>
+        <p class="help-para">Navigate to Devices → Device Controls to manually toggle relays. Each device card shows four individual relay toggles (R1–R4) plus an All Relays toggle. Tap any row to send the command immediately — there is no confirmation step for manual control.</p>
+        <div class="help-warn">Commands are sent immediately on tap. Use scheduled events if you need a delayed or timed command.</div>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Relay Command Reference</div>
+        <table class="help-table">
+          <thead><tr><th>Action</th><th>Relays Affected</th><th>LC Func Byte</th></tr></thead>
+          <tbody>
+            <tr><td>all_on</td><td>R1, R2, R3, R4</td><td>0x0F</td></tr>
+            <tr><td>relay1_on</td><td>R1 only</td><td>0x01</td></tr>
+            <tr><td>relay2_on</td><td>R2 only</td><td>0x02</td></tr>
+            <tr><td>relay3_on</td><td>R3 only</td><td>0x04</td></tr>
+            <tr><td>relay4_on</td><td>R4 only</td><td>0x08</td></tr>
+            <tr><td>restore</td><td>All OFF (Strategy 61)</td><td>0x0F</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Device Groups</div>
+        <p class="help-para">Groups allow you to send a single command to multiple devices simultaneously. Navigate to Devices → Groups to assign devices to groups, rename groups, and send group commands. Up to 3 groups are supported.</p>
+      </div>`
+  },
+
+  openadr: {
+    title: "OpenADR & Demand Response",
+    html: `
+      <div class="help-section">
+        <div class="help-section-title">Overview</div>
+        <p class="help-para">The platform operates as an OpenADR 2.0b VEN (Virtual End Node). It receives demand response signals from a utility VTN (Virtual Top Node) and automatically dispatches load control commands to enrolled devices.</p>
+        <div class="help-note">The OpenADR poller starts automatically when you log in. No manual tab navigation is required to begin monitoring for events.</div>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Signal Levels</div>
+        <table class="help-table">
+          <thead><tr><th>Signal</th><th>Label</th><th>Default Strategy</th><th>Default Shed</th></tr></thead>
+          <tbody>
+            <tr><td>1.0</td><td>Emergency Shed</td><td>Strategy 19</td><td>100%</td></tr>
+            <tr><td>0.75</td><td>High Shed</td><td>Strategy 15</td><td>80%</td></tr>
+            <tr><td>0.5</td><td>Medium Shed</td><td>Strategy 9</td><td>50%</td></tr>
+            <tr><td>0.25</td><td>Low Shed</td><td>Strategy 5</td><td>25%</td></tr>
+            <tr><td>0.0</td><td>Restore All</td><td>Strategy 61</td><td>0%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">VTN Configuration</div>
+        <p class="help-para">Enter your VTN ID, VEN ID, VTN URL, transport protocol, and registration ID in the VTN Connection card. Provide your VEN endpoint URLs to your utility program administrator so they can send events to your platform.</p>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Signal → Strategy Mapping</div>
+        <p class="help-para">The mapping table defines how each signal level translates to a duty cycle strategy number and control mode. These defaults can be overridden to match your program requirements. Changes take effect on the next incoming event.</p>
+      </div>`
+  },
+
+  "dr-config": {
+    title: "DR Device Configuration",
+    html: `
+      <div class="help-section">
+        <div class="help-section-title">Overview</div>
+        <p class="help-para">DR Device Configuration determines how each device and relay responds to OpenADR signals. Two architectures are supported and can be mixed within a single device.</p>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Architecture Modes</div>
+        <table class="help-table">
+          <thead><tr><th>Mode</th><th>How it Works</th><th>Best For</th></tr></thead>
+          <tbody>
+            <tr><td>BAS / DI</td><td>Each relay is assigned a shed level. When that signal arrives, only the matching relay fires. The BAS executes its preprogrammed sequence.</td><td>Facilities with building automation systems</td></tr>
+            <tr><td>Direct Load</td><td>A single designated relay fires for all signal levels. Load reduction intensity is controlled by the duty cycle strategy.</td><td>Direct-wired equipment, single thermostat wire</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Per-Relay Settings</div>
+        <table class="help-table">
+          <thead><tr><th>Setting</th><th>BAS/DI</th><th>Direct Load</th></tr></thead>
+          <tbody>
+            <tr><td>Mode Override</td><td>Override device default per relay</td><td>Override device default per relay</td></tr>
+            <tr><td>Shed Level</td><td>Assign Emergency / High / Medium / Low</td><td>N/A — not used</td></tr>
+            <tr><td>Designated Relay</td><td>N/A — not used</td><td>Check exactly one relay per device</td></tr>
+            <tr><td>Participation</td><td>Enable/disable relay from DR events</td><td>Enable/disable relay from DR events</td></tr>
+          </tbody>
+        </table>
+        <div class="help-note">Always click Save All after making changes. Configuration persists in Supabase and loads automatically on next login.</div>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Bulk Actions</div>
+        <p class="help-para">Use the bulk action bar at the top of the card to set all devices to BAS/DI or Direct Load mode in one click, or to enable/disable all devices as VEN resources simultaneously.</p>
+      </div>`
+  },
+
+  devices: {
+    title: "Device Management",
+    html: `
+      <div class="help-section">
+        <div class="help-section-title">Adding a Device</div>
+        <p class="help-para">Navigate to Admin → Devices → Add New Device. Enter the Device UID (format: dev:868032061XXXXXX) and a display name. If you leave the name blank it will be auto-generated from the last 4 digits of the UID. Click + Add Device to register.</p>
+        <div class="help-note">The Device UID is found on the device label or in the Notehub portal under your project's Devices tab.</div>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Enabling & Disabling</div>
+        <p class="help-para">The Enabled toggle in the Registered Devices table controls whether a device appears in the dashboard. Disabling a device:</p>
+        <table class="help-table">
+          <thead><tr><th>Effect</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>Immediate</td><td>Device card disappears from all tabs immediately — no page reload required</td></tr>
+            <tr><td>Commands blocked</td><td>sendLCToDevice rejects calls to disabled device UIDs</td></tr>
+            <tr><td>Data preserved</td><td>All historical readings, events, and schedules remain in Supabase</td></tr>
+            <tr><td>Re-enable anytime</td><td>Toggle back on to restore full functionality</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Removing a Device</div>
+        <p class="help-para">The Remove button permanently deletes the device record from the devices table. Historical data in device_readings, device_events, and device_health is not affected. Prefer disabling over removing for temporary issues.</p>
+        <div class="help-warn">Removal cannot be undone without re-adding the device manually.</div>
+      </div>`
+  },
+
+  hex: {
+    title: "LC Hex Format",
+    html: `
+      <div class="help-section">
+        <div class="help-section-title">Overview</div>
+        <p class="help-para">Every load control command is encoded as a 26-character hexadecimal string (13 bytes). This string is sent to devices via Notehub as a data.qi note. Use the Hex Parser tool (bottom-right button) to decode any hex string.</p>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Byte Map</div>
+        <table class="help-table">
+          <thead><tr><th>Byte</th><th>Hex Pos</th><th>Field</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>0</td><td>[0-1]</td><td>Header</td><td>Always A1</td></tr>
+            <tr><td>1</td><td>[2-3]</td><td>Length</td><td>Always 0B</td></tr>
+            <tr><td>2</td><td>[4-5]</td><td>Address Spec</td><td>Addressing mode</td></tr>
+            <tr><td>3</td><td>[6-7]</td><td>Message Type</td><td>Command type</td></tr>
+            <tr><td>4</td><td>[8-9]</td><td>Strategy Byte</td><td>Bits 7-6: mode (00=DLC, 01=DI) · Bits 5-0: strategy #</td></tr>
+            <tr><td>5</td><td>[10-11]</td><td>Function Byte</td><td>Bit 0=R1, Bit 1=R2, Bit 2=R3, Bit 3=R4. 0F=all relays</td></tr>
+            <tr><td>6</td><td>[12-13]</td><td>Data Byte</td><td>Repetitions minus 1</td></tr>
+            <tr><td>7</td><td>[14-15]</td><td>Event ID</td><td>Sequential 0-255, rolls over</td></tr>
+            <tr><td>8-11</td><td>[16-23]</td><td>Start Time</td><td>Unix timestamp big-endian. 00000000 = immediate</td></tr>
+            <tr><td>12</td><td>[24-25]</td><td>Checksum</td><td>XOR of bytes 0-11</td></tr>
+          </tbody>
+        </table>
+        <div class="help-note">Use the 🔍 Hex Parser button in the bottom-right corner to decode any LC hex string into human-readable fields.</div>
+      </div>`
+  },
+
+  glossary: {
+    title: "Glossary",
+    html: `
+      <div class="help-section">
+        <table class="help-table">
+          <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+          <tbody>
+            <tr><td>BAS</td><td>Building Automation System. Controls HVAC and other systems via preprogrammed sequences triggered by discrete inputs.</td></tr>
+            <tr><td>Bubble-Up</td><td>The interval at which a field device proactively reports status to Notehub. Configurable per device in Device Settings.</td></tr>
+            <tr><td>DI</td><td>Distributed Intelligence. Control mode where the device has more autonomy in executing cycling behavior.</td></tr>
+            <tr><td>DLC</td><td>Direct Load Control. Platform directly manages relay on/off timing.</td></tr>
+            <tr><td>Duty Cycle</td><td>The ratio of ON time to total cycle time. 50% duty cycle = relay energized half the time.</td></tr>
+            <tr><td>LC Hex</td><td>Load Control hexadecimal command string. 26 characters encoding mode, strategy, relays, reps, and scheduled time.</td></tr>
+            <tr><td>Notecard</td><td>Blues Wireless cellular module embedded in field switch devices.</td></tr>
+            <tr><td>Notehub</td><td>Blues Wireless cloud platform routing messages between Notecards and the Cloudflare Worker.</td></tr>
+            <tr><td>OpenADR</td><td>Open Automated Demand Response. Standard protocol for utility-to-customer load control communication.</td></tr>
+            <tr><td>Relay</td><td>An electrically operated switch. Each device has 4 independently controllable relays (R1–R4).</td></tr>
+            <tr><td>Restore</td><td>LC command using Strategy 61 that returns all relays to pre-event state.</td></tr>
+            <tr><td>RLS</td><td>Row Level Security. Supabase access control. Must be disabled on all LCP tables for the anon key to work.</td></tr>
+            <tr><td>Schedule Queue</td><td>Supabase table logging all scheduled and fired events with full status lifecycle tracking.</td></tr>
+            <tr><td>VEN</td><td>Virtual End Node. This platform's role in OpenADR — receives and executes utility signals.</td></tr>
+            <tr><td>VTN</td><td>Virtual Top Node. The utility system that sends demand response dispatch signals to VENs.</td></tr>
+          </tbody>
+        </table>
+      </div>`
+  }
+};
+
+function openHelp(section) {
+  section = section || 'scheduling';
+  showHelpSection(section);
+  document.getElementById('help-modal').classList.add('active');
+}
+
+function closeHelpModal(e) {
+  if (e && e.target !== document.getElementById('help-modal')) return;
+  document.getElementById('help-modal').classList.remove('active');
+}
+
+function showHelpSection(key) {
+  const data = HELP_CONTENT[key];
+  if (!data) return;
+
+  // Update modal title
+  const titleEl = document.getElementById('help-modal-title');
+  if (titleEl) titleEl.textContent = 'Help: ' + data.title;
+
+  // Update modal body
+  const bodyEl = document.getElementById('help-modal-body');
+  if (bodyEl) bodyEl.innerHTML = data.html;
+
+  // Update nav buttons in modal
+  document.querySelectorAll('#help-nav .help-nav-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('onclick').includes("'" + key + "'"));
+  });
+
+  // Also update tab body if help tab is open
+  showHelpTab(key);
+}
+
+function showHelpTab(key) {
+  const data = HELP_CONTENT[key];
+  if (!data) return;
+  const tabBody = document.getElementById('help-tab-body');
+  if (tabBody) {
+    tabBody.innerHTML = '<div class="help-modal-body" style="padding:0;">' + data.html + '</div>';
+  }
+}
+
+// Init help tab with scheduling content when navigated to
 
 </script>
 </body>
