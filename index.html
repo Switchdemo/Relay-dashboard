@@ -7530,7 +7530,7 @@ async function saveAllDRConfig() {
 
     // Upsert device-level record
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/device_dr_config`, {
+      await fetch(`${SUPABASE_URL}/rest/v1/device_dr_config?on_conflict=device_uid`, {
         method: "POST",
         headers: {
           "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
@@ -7551,7 +7551,7 @@ async function saveAllDRConfig() {
       const rc = cfg.relays?.[r];
       if (!rc) continue;
       try {
-        await fetch(`${SUPABASE_URL}/rest/v1/device_relay_dr_config`, {
+        await fetch(`${SUPABASE_URL}/rest/v1/device_relay_dr_config?on_conflict=device_uid,relay_number`, {
           method: "POST",
           headers: {
             "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
