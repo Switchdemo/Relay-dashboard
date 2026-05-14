@@ -649,7 +649,9 @@
           </div>
           <div class="sched-field">
             <label class="sched-label">Target</label>
-            <select class="sched-select" id="sf-target" onchange="updateSchedulerTimezone()"></select>
+            <select class="sched-select" id="sf-target" onchange="updateSchedulerTimezone()">
+              <option value="" disabled selected>— Choose One —</option>
+            </select>
           </div>
           <div class="sched-field">
             <label class="sched-label">Relay Action</label>
@@ -2455,11 +2457,13 @@ function populateTzSelector() {
 function populateTargetSelector() {
   const type = document.getElementById("sf-target-type").value;
   const sel = document.getElementById("sf-target");
+  const placeholder = `<option value="" disabled selected>— Choose One —</option>`;
   if (type === "group") {
-    sel.innerHTML = [1,2,3].map(n => `<option value="group_${n}">${groupNames[n] || "Group " + n}</option>`).join("");
+    sel.innerHTML = placeholder + [1,2,3].map(n => `<option value="group_${n}">${groupNames[n] || "Group " + n}</option>`).join("");
   } else {
-    sel.innerHTML = DEVICES.map(d => `<option value="${d.uid}">${d.name}</option>`).join("");
+    sel.innerHTML = placeholder + DEVICES.map(d => `<option value="${d.uid}">${d.name}</option>`).join("");
   }
+  sel.value = ""; // ensure placeholder is shown
 }
 
 function onTargetTypeChange() {
