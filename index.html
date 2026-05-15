@@ -388,6 +388,20 @@
   .prefs-close { font-size:16px; cursor:pointer; color:var(--text-hint); background:none; border:none; line-height:1; }
   .prefs-close:hover { color:var(--text-primary); }
   .prefs-section-label { font-size:10px; font-weight:600; color:var(--text-hint); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px; font-family:monospace; }
+
+  /* ── NWS Current Conditions ── */
+  .nws-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  @media(max-width:600px) { .nws-grid { grid-template-columns:repeat(2,1fr); } }
+  .nws-tile { background:var(--surface2); border:0.5px solid var(--border); border-radius:var(--radius-sm); padding:10px 12px; text-align:center; }
+  .nws-tile-icon { font-size:20px; margin-bottom:4px; }
+  .nws-tile-value { font-size:18px; font-weight:700; color:var(--text-primary); line-height:1; margin-bottom:2px; }
+  .nws-tile-label { font-size:10px; color:var(--text-hint); text-transform:uppercase; letter-spacing:0.05em; font-family:monospace; }
+  .nws-headline { display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--surface2); border-radius:var(--radius-sm); margin-bottom:12px; }
+  .nws-headline-temp { font-family:"Playfair Display",serif; font-size:42px; font-weight:600; color:var(--text-primary); line-height:1; }
+  .nws-headline-detail { flex:1; }
+  .nws-headline-desc { font-size:14px; font-weight:600; color:var(--text-primary); }
+  .nws-headline-station { font-size:11px; color:var(--text-hint); margin-top:2px; }
+  .nws-alert { background:var(--amber-bg); border:0.5px solid var(--amber); border-radius:var(--radius-sm); padding:8px 12px; font-size:12px; color:var(--amber); margin-bottom:10px; display:flex; gap:8px; align-items:flex-start; }
 </style>
 </head>
 <body>
@@ -491,7 +505,15 @@
   </div>
   <!-- 7-day weather strip -->
   <div id="header-wx-strip" style="display:none;">
-    <div class="header-wx-loc" id="header-wx-loc"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 1rem 0;flex-wrap:wrap;gap:4px;">
+      <div class="header-wx-loc" id="header-wx-loc" style="margin-bottom:0;"></div>
+      <div id="header-nws-current" style="display:none;font-size:11px;background:var(--surface2);border:0.5px solid var(--border-md);border-radius:12px;padding:3px 10px;display:none;align-items:center;gap:6px;">
+        <span style="font-size:10px;color:var(--text-hint);font-family:monospace;">NOW</span>
+        <span id="header-wx-current-temp" style="font-weight:700;color:var(--text-primary);"></span>
+        <span id="header-wx-current-desc" style="color:var(--text-secondary);"></span>
+        <span style="font-size:9px;color:var(--text-hint);font-family:monospace;">NWS</span>
+      </div>
+    </div>
     <div class="header-wx" id="header-wx-days"></div>
   </div>
   <!-- Hourly forecast panel (shown when a day is selected) -->
@@ -988,6 +1010,21 @@
 <div class="tab-pane" id="tab-weather">
   <div class="scroll-content">
     <div style="max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
+      <!-- NWS Current Conditions -->
+      <div class="sched-card" id="nws-current-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#127777;&#65039; Current Conditions <span style="font-family:'DM Mono',monospace;font-size:9px;font-weight:500;color:var(--text-hint);margin-left:6px;">NOAA / NWS</span></div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span id="nws-station-label" style="font-size:11px;color:var(--text-hint);font-family:monospace;"></span>
+            <button class="queue-refresh" onclick="fetchNWSObservations(true)">Refresh</button>
+          </div>
+        </div>
+        <div id="nws-current-container">
+          <div class="sched-empty">Set a location in the forecast card below to load current conditions.</div>
+        </div>
+        <div id="nws-last-updated" style="font-size:10px;color:var(--text-hint);margin-top:8px;text-align:right;display:none;"></div>
+      </div>
+
       <!-- Weather Forecast -->
       <div class="sched-card" id="weather-card">
         <div class="sched-card-header">
@@ -5337,6 +5374,10 @@ async function searchWeatherLocation() {
       lon:  result.longitude
     };
     localStorage.setItem(WEATHER_LOC_KEY, JSON.stringify(wxLocationData));
+    // Reset NWS station so it rediscovers for new location
+    nwsStationId = null;
+    nwsStationName = null;
+    startNWSPoller();
     showWeatherLocation();
     await fetchWeatherForecast();
   } catch(e) {
@@ -5442,6 +5483,14 @@ function renderHeaderHourly() {
 function clearWeatherLocation() {
   wxLocationData = null;
   wxForecastData = null;
+  nwsStationId   = null;
+  nwsStationName = null;
+  nwsObsData     = null;
+  stopNWSPoller();
+  const nwsContainer = document.getElementById("nws-current-container");
+  if (nwsContainer) nwsContainer.innerHTML = '<div class="sched-empty">Set a location in the forecast card below to load current conditions.</div>';
+  const nwsStation = document.getElementById("nws-station-label");
+  if (nwsStation) nwsStation.textContent = "";
   wxSelectedDay  = null;
   localStorage.removeItem(WEATHER_LOC_KEY);
   const display   = document.getElementById("weather-location-display");
@@ -5645,6 +5694,8 @@ async function onSignedIn(session) {
   buildDataCards();
   // Start OpenADR background poller immediately after login
   startOADRPoller();
+  // Start NWS weather poller if location is already saved
+  if (wxLocationData) startNWSPoller();
   // Apply saved theme and font size
   initTheme();
   initFontSize();
@@ -9003,6 +9054,213 @@ async function removeDevice(id, name) {
 }
 
 
+
+
+// ── NWS Current Conditions ────────────────────────────────────────────────────
+
+let nwsStationId   = null;   // e.g. "KOKC"
+let nwsStationName = null;   // e.g. "Oklahoma City / Will Rogers"
+let nwsObsData     = null;   // latest observation properties
+let nwsPollTimer   = null;   // 15-minute interval timer
+const NWS_USER_AGENT = "LCP-Dashboard/2.0 (contact@yourdomain.com)"; // NWS requires User-Agent
+
+// Step 1: Given lat/lon, find the nearest NWS observation station
+async function discoverNWSStation(lat, lon) {
+  try {
+    // Point lookup — returns forecast office and observation stations URL
+    const pointRes = await fetch(
+      `https://api.weather.gov/points/${parseFloat(lat).toFixed(4)},${parseFloat(lon).toFixed(4)}`,
+      { headers: { "User-Agent": NWS_USER_AGENT, "Accept": "application/json" } }
+    );
+    if (!pointRes.ok) throw new Error(`Points API: ${pointRes.status}`);
+    const pointData = await pointRes.json();
+    const stationsUrl = pointData?.properties?.observationStations;
+    if (!stationsUrl) throw new Error("No observation stations URL");
+
+    // Get nearby stations list
+    const stationsRes = await fetch(stationsUrl,
+      { headers: { "User-Agent": NWS_USER_AGENT, "Accept": "application/json" } }
+    );
+    if (!stationsRes.ok) throw new Error(`Stations API: ${stationsRes.status}`);
+    const stationsData = await stationsRes.json();
+    const firstStation = stationsData?.features?.[0];
+    if (!firstStation) throw new Error("No stations found");
+
+    nwsStationId   = firstStation.properties.stationIdentifier;
+    nwsStationName = firstStation.properties.name;
+
+    const labelEl = document.getElementById("nws-station-label");
+    if (labelEl) labelEl.textContent = nwsStationId;
+
+    console.log(`NWS station discovered: ${nwsStationId} — ${nwsStationName}`);
+    return true;
+  } catch(e) {
+    console.warn("NWS station discovery failed:", e.message);
+    return false;
+  }
+}
+
+// Step 2: Fetch latest observation from discovered station
+async function fetchNWSObservations(manual = false) {
+  if (!nwsStationId) {
+    if (!wxLocationData) return;
+    const ok = await discoverNWSStation(wxLocationData.lat, wxLocationData.lon);
+    if (!ok) return;
+  }
+
+  const container = document.getElementById("nws-current-container");
+  if (manual && container) container.innerHTML = '<div class="sched-empty">Loading current conditions...</div>';
+
+  try {
+    const res = await fetch(
+      `https://api.weather.gov/stations/${nwsStationId}/observations/latest`,
+      { headers: { "User-Agent": NWS_USER_AGENT, "Accept": "application/json" } }
+    );
+    if (!res.ok) throw new Error(`Observations API: ${res.status}`);
+    const data = await res.json();
+    nwsObsData = data?.properties;
+    if (!nwsObsData) throw new Error("No observation data");
+
+    renderNWSCurrentConditions();
+    await saveNWSObservationToSupabase();
+
+  } catch(e) {
+    console.warn("NWS fetch failed:", e.message);
+    if (container) container.innerHTML = `<div class="sched-empty" style="color:var(--red);">Could not load NWS conditions: ${e.message}</div>`;
+  }
+}
+
+// Convert Celsius to Fahrenheit
+function cToF(c) { return c == null ? null : Math.round(c * 9/5 + 32); }
+// Convert m/s to mph
+function msToMph(ms) { return ms == null ? null : Math.round(ms * 2.237); }
+// Convert Pa to inHg
+function paToInHg(pa) { return pa == null ? null : (pa * 0.0002953).toFixed(2); }
+// Compute heat index (°F) — NWS formula
+function heatIndex(tempF, rh) {
+  if (tempF == null || rh == null || tempF < 80) return tempF;
+  const hi = -42.379 + 2.04901523*tempF + 10.14333127*rh
+    - 0.22475541*tempF*rh - 0.00683783*tempF*tempF
+    - 0.05481717*rh*rh + 0.00122874*tempF*tempF*rh
+    + 0.00085282*tempF*rh*rh - 0.00000199*tempF*tempF*rh*rh;
+  return Math.round(hi);
+}
+
+function nwsWindDir(deg) {
+  if (deg == null) return "—";
+  const dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+  return dirs[Math.round(deg / 22.5) % 16];
+}
+
+function renderNWSCurrentConditions() {
+  const container = document.getElementById("nws-current-container");
+  if (!container || !nwsObsData) return;
+
+  const p        = nwsObsData;
+  const tempF    = cToF(p.temperature?.value);
+  const dewF     = cToF(p.dewpoint?.value);
+  const rh       = p.relativeHumidity?.value != null ? Math.round(p.relativeHumidity.value) : null;
+  const windMph  = msToMph(p.windSpeed?.value);
+  const windDir  = nwsWindDir(p.windDirection?.value);
+  const gustMph  = msToMph(p.windGust?.value);
+  const pressIn  = paToInHg(p.barometricPressure?.value);
+  const visM     = p.visibility?.value;
+  const visMi    = visM != null ? (visM / 1609.34).toFixed(1) : null;
+  const hiF      = heatIndex(tempF, rh);
+  const desc     = p.textDescription || "—";
+  const obsTime  = p.timestamp ? new Date(p.timestamp).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" }) : "—";
+
+  // Temperature color
+  const tempColor = tempF == null ? "var(--text-primary)"
+    : tempF >= 100 ? "#c0392b"
+    : tempF >= 90  ? "#e67e22"
+    : tempF >= 70  ? "#27ae60"
+    : tempF >= 50  ? "#2980b9"
+    : "#8e44ad";
+
+  // Weather alerts
+  let alertHtml = "";
+  if (p.presentWeather?.length > 0) {
+    const wx = p.presentWeather.map(w => w.rawString).filter(Boolean).join(", ");
+    if (wx) alertHtml = `<div class="nws-alert"><span>⚠️</span><span>${wx}</span></div>`;
+  }
+
+  container.innerHTML = `
+    ${alertHtml}
+    <div class="nws-headline">
+      <div class="nws-headline-temp" style="color:${tempColor};">${tempF != null ? tempF + "°" : "—"}</div>
+      <div class="nws-headline-detail">
+        <div class="nws-headline-desc">${desc}</div>
+        <div class="nws-headline-station">${nwsStationName || nwsStationId} &bull; Observed ${obsTime}</div>
+        ${hiF && hiF !== tempF ? `<div style="font-size:11px;color:var(--amber);margin-top:2px;">Feels like ${hiF}°F</div>` : ""}
+      </div>
+    </div>
+    <div class="nws-grid">
+      <div class="nws-tile"><div class="nws-tile-icon">💧</div><div class="nws-tile-value">${rh != null ? rh+"%" : "—"}</div><div class="nws-tile-label">Humidity</div></div>
+      <div class="nws-tile"><div class="nws-tile-icon">🌡️</div><div class="nws-tile-value">${dewF != null ? dewF+"°" : "—"}</div><div class="nws-tile-label">Dewpoint</div></div>
+      <div class="nws-tile"><div class="nws-tile-icon">💨</div><div class="nws-tile-value" style="font-size:14px;">${windMph != null ? windMph+" mph" : "—"}<br/><span style="font-size:11px;font-weight:400;">${windDir}${gustMph ? " G"+gustMph : ""}</span></div><div class="nws-tile-label">Wind</div></div>
+      <div class="nws-tile"><div class="nws-tile-icon">🔵</div><div class="nws-tile-value" style="font-size:14px;">${pressIn || "—"}"</div><div class="nws-tile-label">Pressure</div></div>
+      ${visMi != null ? `<div class="nws-tile"><div class="nws-tile-icon">👁️</div><div class="nws-tile-value" style="font-size:14px;">${visMi} mi</div><div class="nws-tile-label">Visibility</div></div>` : ""}
+    </div>`;
+
+  // Update last-updated label
+  const updEl = document.getElementById("nws-last-updated");
+  if (updEl) { updEl.textContent = `Last updated: ${new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})} &bull; Source: NOAA / NWS &bull; Station: ${nwsStationId}`; updEl.style.display = "block"; }
+
+  // Update header if weather tab not active
+  updateHeaderNWSTemp(tempF, desc);
+}
+
+function updateHeaderNWSTemp(tempF, desc) {
+  const pill = document.getElementById("header-nws-current");
+  const headerEl = document.getElementById("header-wx-current-temp");
+  const headerDescEl = document.getElementById("header-wx-current-desc");
+  if (headerEl && tempF != null) { headerEl.textContent = `${tempF}°F`; }
+  if (headerDescEl && desc) { headerDescEl.textContent = desc; }
+  if (pill && tempF != null) { pill.style.display = "inline-flex"; }
+}
+
+// Save 15-minute observation snapshot to Supabase
+async function saveNWSObservationToSupabase() {
+  if (!nwsObsData || !wxLocationData) return;
+  const p = nwsObsData;
+  const record = {
+    station_id:   nwsStationId,
+    station_name: nwsStationName,
+    location_name: wxLocationData.name,
+    lat:          wxLocationData.lat,
+    lon:          wxLocationData.lon,
+    observed_at:  p.timestamp || new Date().toISOString(),
+    recorded_at:  new Date().toISOString(),
+    temp_f:       cToF(p.temperature?.value),
+    dewpoint_f:   cToF(p.dewpoint?.value),
+    humidity_pct: p.relativeHumidity?.value != null ? Math.round(p.relativeHumidity.value) : null,
+    wind_mph:     msToMph(p.windSpeed?.value),
+    wind_dir_deg: p.windDirection?.value != null ? Math.round(p.windDirection.value) : null,
+    wind_gust_mph: msToMph(p.windGust?.value),
+    pressure_inhg: paToInHg(p.barometricPressure?.value) ? parseFloat(paToInHg(p.barometricPressure.value)) : null,
+    visibility_mi: p.visibility?.value != null ? parseFloat((p.visibility.value / 1609.34).toFixed(2)) : null,
+    heat_index_f: heatIndex(cToF(p.temperature?.value), p.relativeHumidity?.value != null ? Math.round(p.relativeHumidity.value) : null),
+    description:  p.textDescription || null,
+    raw_station_id: nwsStationId
+  };
+  try {
+    await supabasePost("weather_readings", record);
+  } catch(e) { console.warn("NWS Supabase save failed:", e.message); }
+}
+
+// Start 15-minute NWS polling (called after location is set and on login)
+function startNWSPoller() {
+  if (nwsPollTimer) clearInterval(nwsPollTimer);
+  // Fire immediately then every 15 minutes
+  fetchNWSObservations();
+  nwsPollTimer = setInterval(() => fetchNWSObservations(), 15 * 60 * 1000);
+  console.log("NWS weather poller started (15 min interval)");
+}
+
+function stopNWSPoller() {
+  if (nwsPollTimer) { clearInterval(nwsPollTimer); nwsPollTimer = null; }
+}
 
 // ── Background Theme System ───────────────────────────────────────────────────
 
