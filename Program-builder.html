@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>LCP Program Builder</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#1a1a1a;--ink-2:#444;--ink-3:#777;--ink-4:#aaa;
+  --rule:#e0ddd8;--rule-md:#c8c4bc;
+  --surface:#faf9f7;--surface-2:#f2f0ec;--surface-3:#e8e5df;
+  --accent:#1a5f4a;--accent-lt:#e8f2ee;--accent-md:#2d8c6e;
+  --blue:#1d5fa8;--blue-lt:#e8f0fb;
+  --amber:#b45309;--amber-lt:#fef3c7;
+  --red:#c0392b;--red-lt:#fdf0ee;
+  --white:#fff;--radius:6px;--radius-lg:10px;
+}
+body{font-family:"DM Sans",sans-serif;background:var(--surface);color:var(--ink);min-height:100vh}
+.page-header{background:var(--ink);color:var(--white);padding:2.5rem 2rem 2rem;position:relative;overflow:hidden}
+.page-header::after{content:"";position:absolute;bottom:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent-md),transparent)}
+.header-inner{max-width:1000px;margin:0 auto;display:flex;align-items:flex-start;justify-content:space-between;gap:2rem}
+.header-label{font-family:"DM Mono",monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--accent-md);margin-bottom:.5rem}
+.header-title{font-family:"Playfair Display",serif;font-size:clamp(22px,3vw,30px);font-weight:600;line-height:1.2;letter-spacing:-.01em}
+.header-desc{font-size:13px;color:rgba(255,255,255,.55);margin-top:.5rem;max-width:480px;line-height:1.6}
+.load-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:var(--radius);border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.1);color:var(--white);font-family:"DM Sans",sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0;margin-top:1.5rem}
+.load-btn:hover{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.5)}
+.main{max-width:1000px;margin:0 auto;padding:2rem}
+.section{background:var(--white);border:1px solid var(--rule);border-radius:var(--radius-lg);padding:1.75rem;margin-bottom:1.5rem}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;padding-bottom:.875rem;border-bottom:1px solid var(--rule)}
+.section-title{font-family:"Playfair Display",serif;font-size:17px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:10px}
+.section-badge{font-family:"DM Mono",monospace;font-size:9px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:10px;background:var(--accent-lt);color:var(--accent)}
+.section-badge.loaded{background:var(--accent-lt);color:var(--accent)}
+.section-badge.pending{background:var(--amber-lt);color:var(--amber)}
+.form-grid{display:grid;gap:1rem}
+.form-grid.cols-2{grid-template-columns:1fr 1fr}
+.form-grid.cols-3{grid-template-columns:1fr 1fr 1fr}
+@media(max-width:640px){.form-grid.cols-2,.form-grid.cols-3{grid-template-columns:1fr}}
+.form-field{display:flex;flex-direction:column;gap:4px}
+.form-field.full{grid-column:1/-1}
+label{font-size:11px;font-weight:600;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;font-family:"DM Mono",monospace}
+input[type=text],input[type=url],input[type=password],select,textarea{width:100%;padding:8px 12px;border:1px solid var(--rule-md);border-radius:var(--radius);background:var(--surface);font-family:"DM Sans",sans-serif;font-size:13px;color:var(--ink);outline:none;transition:border-color .15s,box-shadow .15s;appearance:none}
+input:focus,select:focus,textarea:focus{border-color:var(--accent-md);box-shadow:0 0 0 3px rgba(45,140,110,.1);background:var(--white)}
+input::placeholder,textarea::placeholder{color:var(--ink-4)}
+input[readonly]{background:var(--surface-2);color:var(--ink-3);cursor:default}
+textarea{resize:vertical;min-height:60px;font-size:12px;line-height:1.5}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23777' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px;cursor:pointer}
+.help-text{font-size:11px;color:var(--ink-4);line-height:1.4}
+/* Client summary card */
+.client-summary{background:var(--surface-2);border:1px solid var(--rule);border-radius:var(--radius);padding:1rem 1.25rem;display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem}
+.cs-item{}
+.cs-label{font-size:10px;font-weight:600;color:var(--ink-4);text-transform:uppercase;letter-spacing:.06em;font-family:"DM Mono",monospace;margin-bottom:2px}
+.cs-value{font-size:13px;color:var(--ink);font-weight:500}
+/* Device rows */
+.device-row{display:grid;grid-template-columns:auto 1fr 1fr 1fr 1fr auto;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--rule);border-radius:var(--radius);margin-bottom:6px;background:var(--surface)}
+.device-row-num{font-family:"DM Mono",monospace;font-size:10px;font-weight:600;color:var(--accent-md);background:var(--accent-lt);padding:3px 8px;border-radius:10px;white-space:nowrap}
+.device-row input,.device-row select{font-size:12px;padding:6px 8px}
+.device-remove{padding:4px 8px;border-radius:4px;border:1px solid var(--red);background:none;color:var(--red);font-size:11px;cursor:pointer;font-family:"DM Sans",sans-serif;white-space:nowrap}
+.device-remove:hover{background:var(--red-lt)}
+.add-row-btn{display:flex;align-items:center;gap:6px;padding:9px 16px;border:1.5px dashed var(--rule-md);border-radius:var(--radius);background:none;color:var(--ink-3);font-size:12px;font-family:"DM Sans",sans-serif;cursor:pointer;transition:all .15s;font-weight:500}
+.add-row-btn:hover{border-color:var(--accent-md);color:var(--accent);background:var(--accent-lt)}
+/* Module grid */
+.module-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+@media(max-width:640px){.module-grid{grid-template-columns:1fr 1fr}}
+.module-item{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border:1px solid var(--rule);border-radius:var(--radius);cursor:pointer;transition:all .15s;background:var(--surface)}
+.module-item:hover{border-color:var(--accent-md);background:var(--accent-lt)}
+.module-item.selected{border-color:var(--accent);background:var(--accent-lt)}
+.module-item input{width:15px;height:15px;flex-shrink:0;margin-top:1px;accent-color:var(--accent);cursor:pointer}
+.module-label{font-size:12px;font-weight:500;color:var(--ink);display:block}
+.module-desc{font-size:10px;color:var(--ink-3);line-height:1.4;margin-top:1px}
+/* Credentials */
+.cred-warning{background:var(--amber-lt);border:1px solid rgba(180,83,9,.25);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--amber);line-height:1.6;margin-bottom:1rem;display:flex;gap:8px;align-items:flex-start}
+/* Generate section */
+.generate-btn{width:100%;padding:14px;border-radius:var(--radius);border:none;background:var(--accent);color:var(--white);font-family:"DM Sans",sans-serif;font-size:15px;font-weight:700;cursor:pointer;transition:all .15s;letter-spacing:.01em}
+.generate-btn:hover{background:var(--accent-md)}
+.generate-btn:disabled{opacity:.4;cursor:not-allowed}
+.output-files{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:1rem}
+.output-file{background:var(--surface-2);border:1px solid var(--rule);border-radius:var(--radius);padding:1rem;text-align:center}
+.output-file-icon{font-size:24px;margin-bottom:6px}
+.output-file-name{font-family:"DM Mono",monospace;font-size:11px;font-weight:600;color:var(--ink);margin-bottom:4px}
+.output-file-desc{font-size:11px;color:var(--ink-3);margin-bottom:10px;line-height:1.4}
+.download-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:var(--radius);border:1px solid var(--rule-md);background:var(--white);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;font-family:"DM Sans",sans-serif;transition:all .15s}
+.download-btn:hover{background:var(--accent-lt);border-color:var(--accent-md);color:var(--accent)}
+.download-btn:disabled{opacity:.3;cursor:not-allowed}
+.build-status{font-size:12px;text-align:center;margin-top:.75rem;padding:10px;border-radius:var(--radius);display:none}
+.build-status.success{background:var(--accent-lt);color:var(--accent);display:block}
+.build-status.error{background:var(--red-lt);color:var(--red);display:block}
+/* Version badge */
+.version-field{display:flex;gap:8px;align-items:flex-end}
+.version-field input{flex:1}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div class="header-inner">
+    <div>
+      <div class="header-label">Load Control Platform</div>
+      <div class="header-title">Program Builder</div>
+      <div class="header-desc">Load a completed client intake questionnaire to pre-populate the configuration, add credentials, select modules, and generate a ready-to-deploy dashboard.</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
+      <label class="load-btn" for="intake-file">
+        &#128196; Load Questionnaire JSON
+        <input type="file" id="intake-file" accept=".json,application/json" style="display:none" onchange="loadIntake(event)" />
+      </label>
+      <label class="load-btn" id="template-load-btn" for="template-file" style="background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.2);">
+        &#128196; Load Dashboard Template (index.html)
+        <input type="file" id="template-file" accept=".html,text/html" style="display:none" onchange="loadTemplate(event)" />
+      </label>
+      <div id="template-status" style="font-size:11px;color:rgba(255,255,255,0.4);font-family:'DM Mono',monospace;text-align:right;"></div>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- ── 1. Client Summary ── -->
+  <div class="section" id="section-client">
+    <div class="section-header">
+      <div class="section-title">&#128101; Client & Site <span class="section-badge pending" id="badge-client">Awaiting Intake</span></div>
+    </div>
+    <div class="client-summary" id="client-summary">
+      <div class="cs-item"><div class="cs-label">Organization</div><div class="cs-value" id="cs-org">—</div></div>
+      <div class="cs-item"><div class="cs-label">Service Territory</div><div class="cs-value" id="cs-site">—</div></div>
+      <div class="cs-item"><div class="cs-label">Timezone</div><div class="cs-value" id="cs-tz">—</div></div>
+      <div class="cs-item"><div class="cs-label">Contact</div><div class="cs-value" id="cs-contact">—</div></div>
+      <div class="cs-item"><div class="cs-label">Email</div><div class="cs-value" id="cs-email">—</div></div>
+      <div class="cs-item"><div class="cs-label">Architecture</div><div class="cs-value" id="cs-arch">—</div></div>
+      <div class="cs-item"><div class="cs-label">Address</div><div class="cs-value" id="cs-address">—</div></div>
+      <div class="cs-item"><div class="cs-label">State</div><div class="cs-value" id="cs-state">—</div></div>
+      <div class="cs-item"><div class="cs-label">Exported</div><div class="cs-value" id="cs-exported">—</div></div>
+    </div>
+  </div>
+
+  <!-- ── 2. Devices ── -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">&#128225; Devices <span class="section-badge pending" id="badge-devices">0 Configured</span></div>
+    </div>
+    <div style="font-size:12px;color:var(--ink-3);margin-bottom:1rem;line-height:1.6">
+      Add each load control device for this site. Device UIDs are assigned here — the client does not provide them.
+      The first device will be the primary device in the generated worker.
+    </div>
+    <div style="display:grid;grid-template-columns:auto 1fr 1fr 1fr 1fr auto;gap:8px;padding:6px 10px;margin-bottom:4px">
+      <div style="font-size:10px;font-weight:600;color:var(--ink-4);text-transform:uppercase;font-family:'DM Mono',monospace">#</div>
+      <div style="font-size:10px;font-weight:600;color:var(--ink-4);text-transform:uppercase;font-family:'DM Mono',monospace">Device UID</div>
+      <div style="font-size:10px;font-weight:600;color:var(--ink-4);text-transform:uppercase;font-family:'DM Mono',monospace">Display Name</div>
+      <div style="font-size:10px;font-weight:600;color:var(--ink-4);text-transform:uppercase;font-family:'DM Mono',monospace">Location</div>
+      <div style="font-size:10px;font-weight:600;color:var(--ink-4);text-transform:uppercase;font-family:'DM Mono',monospace">Architecture</div>
+      <div></div>
+    </div>
+    <div id="device-rows"></div>
+    <button class="add-row-btn" onclick="addDeviceRow()">+ Add Device</button>
+  </div>
+
+  <!-- ── 3. Technical Credentials ── -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">&#128273; Technical Credentials <span class="section-badge pending">Required</span></div>
+    </div>
+    <div class="cred-warning">
+      <span style="font-size:14px;flex-shrink:0">&#9888;&#65039;</span>
+      <span>These credentials are sensitive. The generated files will contain them in plaintext. Do not share generated files publicly.</span>
+    </div>
+    <div class="form-grid cols-2">
+      <div class="form-field full">
+        <label>Cloudflare Worker URL</label>
+        <input type="url" id="cred-worker" placeholder="https://your-worker.your-subdomain.workers.dev/" />
+        <span class="help-text">Deploy worker.js to Cloudflare Workers first, then paste the URL here</span>
+      </div>
+      <div class="form-field">
+        <label>Notehub Project UID</label>
+        <input type="text" id="cred-notehub-project" placeholder="app:xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="font-family:'DM Mono',monospace;font-size:12px" />
+      </div>
+      <div class="form-field">
+        <label>Notehub API Token</label>
+        <input type="password" id="cred-notehub-token" placeholder="api_key_..." style="font-family:'DM Mono',monospace;font-size:12px" />
+      </div>
+      <div class="form-field">
+        <label>Supabase Project URL</label>
+        <input type="url" id="cred-supabase-url" placeholder="https://xxxxxxxxxxxx.supabase.co" style="font-family:'DM Mono',monospace;font-size:12px" />
+      </div>
+      <div class="form-field">
+        <label>Supabase Anon Key</label>
+        <input type="password" id="cred-supabase-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." style="font-family:'DM Mono',monospace;font-size:12px" />
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 4. Module Selection ── -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">&#9881;&#65039; Feature Modules <span class="section-badge loaded" id="badge-modules">Select Modules</span></div>
+      <div style="display:flex;gap:8px">
+        <button class="add-row-btn" style="padding:5px 12px;font-size:11px" onclick="selectAllModules()">Select All</button>
+        <button class="add-row-btn" style="padding:5px 12px;font-size:11px" onclick="clearAllModules()">Clear All</button>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--ink-3);margin-bottom:1rem">Pre-selected from questionnaire. Override as needed — only selected modules will appear in the generated dashboard.</div>
+    <div class="module-grid">
+      <label class="module-item" id="mod-scheduler"><input type="checkbox" value="scheduler" onchange="onModuleChange()"/><div><span class="module-label">&#128197; Event Scheduler</span><span class="module-desc">Schedule load control events with date, time, duration and strategy</span></div></label>
+      <label class="module-item" id="mod-groups"><input type="checkbox" value="groups" onchange="onModuleChange()"/><div><span class="module-label">&#128101; Device Groups</span><span class="module-desc">Organize devices into named groups for bulk commands</span></div></label>
+      <label class="module-item" id="mod-data"><input type="checkbox" value="data" onchange="onModuleChange()"/><div><span class="module-label">&#128202; Data & History</span><span class="module-desc">Device readings, charts, and historical data logs</span></div></label>
+      <label class="module-item" id="mod-health"><input type="checkbox" value="health" onchange="onModuleChange()"/><div><span class="module-label">&#127973; Fleet Health</span><span class="module-desc">Signal strength, battery, firmware, connectivity scores</span></div></label>
+      <label class="module-item" id="mod-energy"><input type="checkbox" value="energy" onchange="onModuleChange()"/><div><span class="module-label">&#9889; Energy Monitor</span><span class="module-desc">Power consumption, demand, and energy usage tracking</span></div></label>
+      <label class="module-item" id="mod-monitor"><input type="checkbox" value="monitor" onchange="onModuleChange()"/><div><span class="module-label">&#128225; Device Monitoring</span><span class="module-desc">Active monitoring sessions and real-time check-ins</span></div></label>
+      <label class="module-item" id="mod-map"><input type="checkbox" value="map" onchange="onModuleChange()"/><div><span class="module-label">&#128506;&#65039; Site Map</span><span class="module-desc">Interactive device location map with status indicators</span></div></label>
+      <label class="module-item" id="mod-weather"><input type="checkbox" value="weather" onchange="onModuleChange()"/><div><span class="module-label">&#127780;&#65039; Weather Display</span><span class="module-desc">Current conditions and forecast in dashboard header</span></div></label>
+      <label class="module-item" id="mod-eventstats"><input type="checkbox" value="eventstats" onchange="onModuleChange()"/><div><span class="module-label">&#128200; Event Statistics</span><span class="module-desc">Event history charts, participation rates, energy impact</span></div></label>
+      <label class="module-item" id="mod-openadr"><input type="checkbox" value="openadr" onchange="onModuleChange()"/><div><span class="module-label">&#128276; OpenADR / Demand Response</span><span class="module-desc">Full VEN implementation with DR device config and dispatch logging</span></div></label>
+    </div>
+  </div>
+
+  <!-- ── 5. Version & Branding ── -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">&#127987;&#65039; Version & Branding</div>
+    </div>
+    <div class="form-grid cols-2">
+      <div class="form-field">
+        <label>Dashboard Title</label>
+        <input type="text" id="brand-title" placeholder="Relay Control Panel" />
+        <span class="help-text">Appears in the browser tab and page header</span>
+      </div>
+      <div class="form-field">
+        <label>Version Number</label>
+        <input type="text" id="brand-version" placeholder="e.g. 2.0.0" />
+        <span class="help-text">Displayed in the Admin tab for reference</span>
+      </div>
+      <div class="form-field full">
+        <label>Page Subtitle</label>
+        <input type="text" id="brand-subtitle" placeholder="e.g. Acme Operations — Edmond Territory" />
+        <span class="help-text">Shown below the title in the sticky header</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 6. Generate ── -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">&#9889; Generate & Download</div>
+    </div>
+    <div style="font-size:12px;color:var(--ink-3);margin-bottom:1.25rem;line-height:1.6">
+      Generates three files ready for deployment. Deploy <code style="font-family:'DM Mono',monospace;background:var(--surface-2);padding:1px 5px;border-radius:3px">worker.js</code> to Cloudflare Workers first,
+      then run the SQL script in Supabase, then deploy <code style="font-family:'DM Mono',monospace;background:var(--surface-2);padding:1px 5px;border-radius:3px">index.html</code> to Cloudflare Pages.
+    </div>
+    <button class="generate-btn" id="generate-btn" onclick="generateAll()">&#9889; Generate Dashboard Files</button>
+    <div class="build-status" id="build-status"></div>
+    <div class="output-files" id="output-files" style="display:none">
+      <div class="output-file">
+        <div class="output-file-icon">&#128196;</div>
+        <div class="output-file-name">index.html</div>
+        <div class="output-file-desc">Complete dashboard — deploy to Cloudflare Pages</div>
+        <button class="download-btn" id="dl-index" onclick="downloadFile('index')">&#11015;&#65039; Download</button>
+      </div>
+      <div class="output-file">
+        <div class="output-file-icon">&#9881;&#65039;</div>
+        <div class="output-file-name">worker.js</div>
+        <div class="output-file-desc">Cloudflare Worker — deploy to Workers first</div>
+        <button class="download-btn" id="dl-worker" onclick="downloadFile('worker')">&#11015;&#65039; Download</button>
+      </div>
+      <div class="output-file">
+        <div class="output-file-icon">&#128200;</div>
+        <div class="output-file-name">setup.sql</div>
+        <div class="output-file-desc">Supabase schema — run in SQL editor</div>
+        <button class="download-btn" id="dl-sql" onclick="downloadFile('sql')">&#11015;&#65039; Download</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let intakeData    = null;
+let templateHTML  = null;
+let deviceCount   = 0;
+let generatedFiles = { index: null, worker: null, sql: null };
+
+const ARCH_LABELS = { bas_di:"BAS / Discrete Input", direct_load:"Direct Load Control", mixed:"Mixed", "":"—" };
+const MODULE_KEYS = ["scheduler","groups","data","health","energy","monitor","map","weather","eventstats","openadr"];
+
+// ── Load Intake JSON ──────────────────────────────────────────────────────────
+function loadIntake(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      intakeData = JSON.parse(e.target.result);
+      populateFromIntake(intakeData);
+    } catch(err) {
+      alert("Could not parse JSON file: " + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function loadTemplate(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    templateHTML = e.target.result;
+    const statusEl = document.getElementById("template-status");
+    const btnEl    = document.getElementById("template-load-btn");
+    if (statusEl) statusEl.textContent = `✓ ${file.name} loaded (${Math.round(file.size/1024)}KB)`;
+    if (btnEl)    btnEl.style.borderColor = "rgba(45,140,110,0.6)";
+    // Extract version from template if present
+    const vMatch = templateHTML.match(/const LCP_VERSION\s*=\s*"([^"]+)"/);
+    if (vMatch && !document.getElementById("brand-version").value) {
+      document.getElementById("brand-version").value = vMatch[1];
+    }
+    // Extract title from template
+    const titleMatch = templateHTML.match(/class="page-title">([^<]+)</);
+    if (titleMatch && !document.getElementById("brand-title").value) {
+      document.getElementById("brand-title").value = titleMatch[1].trim();
+    }
+  };
+  reader.readAsText(file);
+}
+
+function populateFromIntake(d) {
+  // Client summary
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val || "—"; };
+  set("cs-org",      d.site?.organization);
+  set("cs-site",     d.site?.name);
+  set("cs-tz",       d.site?.timezone);
+  set("cs-contact",  d.contact?.name + (d.contact?.title ? " — " + d.contact.title : ""));
+  set("cs-email",    d.contact?.email);
+  set("cs-arch",     ARCH_LABELS[d.operations?.architecture || ""] || "—");
+  set("cs-address",  d.site?.address);
+  set("cs-state",    d.site?.state);
+  set("cs-exported", d._meta?.exported ? new Date(d._meta.exported).toLocaleDateString() : "—");
+
+  // Badge
+  const badge = document.getElementById("badge-client");
+  if (badge) { badge.textContent = "Loaded"; badge.className = "section-badge loaded"; }
+
+  // Pre-select modules from features
+  MODULE_KEYS.forEach(key => {
+    const el = document.querySelector(`#mod-${key} input`);
+    if (el) {
+      el.checked = Array.isArray(d.features) && d.features.includes(key);
+      document.getElementById("mod-"+key)?.classList.toggle("selected", el.checked);
+    }
+  });
+  updateModuleBadge();
+
+  // Auto-fill branding
+  const titleEl = document.getElementById("brand-title");
+  const subtitleEl = document.getElementById("brand-subtitle");
+  if (titleEl && !titleEl.value) titleEl.value = "Relay Control Panel";
+  if (subtitleEl && !subtitleEl.value) {
+    subtitleEl.value = [d.site?.organization, d.site?.name].filter(Boolean).join(" — ");
+  }
+}
+
+// ── Device Rows ───────────────────────────────────────────────────────────────
+function addDeviceRow(uid="", name="", location="", arch="") {
+  deviceCount++;
+  const n = deviceCount;
+  const container = document.getElementById("device-rows");
+  const row = document.createElement("div");
+  row.className = "device-row";
+  row.id = "dev-row-" + n;
+  row.innerHTML = `
+    <span class="device-row-num">D${n}</span>
+    <input type="text" id="dev-uid-${n}" value="${uid}" placeholder="dev:868032061XXXXXX" style="font-family:'DM Mono',monospace;font-size:11px" oninput="updateDeviceBadge()" />
+    <input type="text" id="dev-name-${n}" value="${name}" placeholder="Unit XXXX" oninput="updateDeviceBadge()" />
+    <input type="text" id="dev-loc-${n}" value="${location}" placeholder="Location (optional)" />
+    <select id="dev-arch-${n}">
+      <option value="" ${!arch?"selected":""}>Site default</option>
+      <option value="bas_di" ${arch==="bas_di"?"selected":""}>BAS / DI</option>
+      <option value="direct_load" ${arch==="direct_load"?"selected":""}>Direct Load</option>
+    </select>
+    ${n>1?`<button class="device-remove" onclick="removeDeviceRow(${n})">Remove</button>`:"<div></div>"}`;
+  container.appendChild(row);
+  updateDeviceBadge();
+}
+
+function removeDeviceRow(n) {
+  document.getElementById("dev-row-"+n)?.remove();
+  updateDeviceBadge();
+}
+
+function updateDeviceBadge() {
+  const rows = document.querySelectorAll(".device-row");
+  const badge = document.getElementById("badge-devices");
+  if (badge) badge.textContent = rows.length + " Configured";
+}
+
+function getDevices() {
+  const devices = [];
+  for (let n = 1; n <= deviceCount; n++) {
+    const uid  = document.getElementById("dev-uid-"+n)?.value?.trim();
+    const name = document.getElementById("dev-name-"+n)?.value?.trim();
+    if (!document.getElementById("dev-row-"+n)) continue;
+    devices.push({
+      id:   "device" + (devices.length + 1),
+      uid:  uid  || "dev:PLACEHOLDER" + String(devices.length+1).padStart(4,"0"),
+      name: name || "Unit " + (uid ? uid.slice(-4) : String(devices.length+1).padStart(4,"0")),
+      location: document.getElementById("dev-loc-"+n)?.value?.trim() || "",
+      arch: document.getElementById("dev-arch-"+n)?.value || ""
+    });
+  }
+  return devices;
+}
+
+// ── Module Management ─────────────────────────────────────────────────────────
+function onModuleChange() {
+  document.querySelectorAll(".module-item").forEach(item => {
+    item.classList.toggle("selected", item.querySelector("input")?.checked || false);
+  });
+  updateModuleBadge();
+}
+
+function updateModuleBadge() {
+  const count = document.querySelectorAll(".module-item input:checked").length;
+  const badge = document.getElementById("badge-modules");
+  if (badge) badge.textContent = count + " Selected";
+}
+
+function selectAllModules() {
+  document.querySelectorAll(".module-item input").forEach(i => { i.checked = true; });
+  onModuleChange();
+}
+
+function clearAllModules() {
+  document.querySelectorAll(".module-item input").forEach(i => { i.checked = false; });
+  onModuleChange();
+}
+
+function getModules() {
+  return MODULE_KEYS.filter(k => document.querySelector("#mod-"+k+" input")?.checked);
+}
+
+// ── Generate ──────────────────────────────────────────────────────────────────
+async function generateAll() {
+  const btn = document.getElementById("generate-btn");
+  const status = document.getElementById("build-status");
+  btn.disabled = true;
+  btn.textContent = "Building...";
+  status.className = "build-status";
+  status.style.display = "none";
+
+  try {
+    const devices  = getDevices();
+    const modules  = getModules();
+    const workerUrl  = document.getElementById("cred-worker")?.value?.trim();
+    const nhProject  = document.getElementById("cred-notehub-project")?.value?.trim();
+    const nhToken    = document.getElementById("cred-notehub-token")?.value?.trim();
+    const sbUrl      = document.getElementById("cred-supabase-url")?.value?.trim();
+    const sbKey      = document.getElementById("cred-supabase-key")?.value?.trim();
+    const title      = document.getElementById("brand-title")?.value?.trim() || "Relay Control Panel";
+    const subtitle   = document.getElementById("brand-subtitle")?.value?.trim() || "";
+    const version    = document.getElementById("brand-version")?.value?.trim() || "1.0.0";
+
+    if (!templateHTML) {
+      const proceed = confirm("No dashboard template loaded.\n\nA configuration wrapper will be generated instead of a full dashboard.\n\nLoad index.html first for a complete build. Continue anyway?");
+      if (!proceed) { btn.disabled = false; btn.textContent = "⚡ Generate Dashboard Files"; return; }
+    }
+    if (!workerUrl) { throw new Error("Cloudflare Worker URL is required."); }
+    if (!nhProject)  { throw new Error("Notehub Project UID is required."); }
+    if (!nhToken)    { throw new Error("Notehub API Token is required."); }
+    if (!sbUrl)      { throw new Error("Supabase URL is required."); }
+    if (!sbKey)      { throw new Error("Supabase Anon Key is required."); }
+    if (!devices.length) { throw new Error("At least one device is required."); }
+
+    generatedFiles.worker = generateWorker({ workerUrl, nhProject, nhToken, sbUrl, sbKey, devices });
+    generatedFiles.sql    = generateSQL(modules);
+    generatedFiles.index  = generateDashboard({ workerUrl, sbUrl, sbKey, devices, modules, title, subtitle, version, intake: intakeData });
+
+    document.getElementById("output-files").style.display = "grid";
+    status.textContent = `✅ Build complete — ${modules.length} modules, ${devices.length} device${devices.length!==1?"s":""}. Download each file below.`;
+    status.className = "build-status success";
+
+  } catch(err) {
+    status.textContent = "❌ " + err.message;
+    status.className = "build-status error";
+  }
+
+  btn.disabled = false;
+  btn.textContent = "⚡ Generate Dashboard Files";
+}
+
+function downloadFile(type) {
+  const content = generatedFiles[type];
+  if (!content) return;
+  const names = { index:"index.html", worker:"worker.js", sql:"setup.sql" };
+  const types = { index:"text/html", worker:"application/javascript", sql:"text/plain" };
+  const blob = new Blob([content], { type: types[type] });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  const site = (intakeData?.site?.name || "site").replace(/[^a-z0-9]/gi,"_").toLowerCase();
+  a.href     = url;
+  a.download = site + "_" + names[type];
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Worker Generator ──────────────────────────────────────────────────────────
+function generateWorker({ nhProject, nhToken, sbUrl, sbKey, devices }) {
+  const primaryUID = devices[0]?.uid || "dev:PLACEHOLDER";
+  return `// Generated by LCP Program Builder
+// Site: ${intakeData?.site?.name || "Unknown"}
+// Generated: ${new Date().toISOString()}
+
+const NOTEHUB_TOKEN = "${nhToken}";
+const PROJECT_UID   = "${nhProject}";
+const SUPABASE_URL  = "${sbUrl}";
+const SUPABASE_KEY  = "${sbKey}";
+const DEVICE_UID    = "${primaryUID}";
+
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type,X-Device-UID"
+};
+
+function supabasePost(table, data) {
+  return fetch(\`\${SUPABASE_URL}/rest/v1/\${table}\`, {
+    method: "POST",
+    headers: { "apikey": SUPABASE_KEY, "Authorization": \`Bearer \${SUPABASE_KEY}\`,
+      "Content-Type": "application/json", "Prefer": "return=minimal" },
+    body: JSON.stringify(data)
+  });
+}
+
+export default {
+  async fetch(request, env) {
+    if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
+
+    const url  = new URL(request.url);
+    const path = url.pathname;
+
+    // ── Relay command relay to Notehub ──
+    if (request.method === "POST" && path === "/") {
+      try {
+        const body      = await request.json();
+        const deviceUID = request.headers.get("X-Device-UID") || DEVICE_UID;
+        const notehubURL = \`https://api.notefile.net/v1/projects/\${PROJECT_UID}/devices/\${encodeURIComponent(deviceUID)}/notes/data.qi\`;
+        const nhRes = await fetch(notehubURL, {
+          method: "POST",
+          headers: { "Authorization": \`Bearer \${NOTEHUB_TOKEN}\`, "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        const data = await nhRes.json();
+        return new Response(JSON.stringify(data), { headers: { ...CORS, "Content-Type": "application/json" } });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: CORS });
+      }
+    }
+
+    // ── Webhook ingest from Notehub ──
+    if (request.method === "POST" && path === "/webhook") {
+      try {
+        const body       = await request.json();
+        const device_uid = body?.device ?? "unknown";
+        const file       = body?.file ?? "";
+
+        if (file === "_health.qo" || file === "data.qo") {
+          const fw = typeof body?.firmware_notecard === "string"
+            ? JSON.parse(body.firmware_notecard) : body?.firmware_notecard;
+          const record = {
+            device_uid, recorded_at: new Date().toISOString(),
+            voltage: body?.body?.voltage ?? null,
+            temperature: body?.body?.temperature ?? null,
+            firmware_version: fw?.version ?? null,
+            rsrp: body?.body?.rsrp ?? null,
+            rsrq: body?.body?.rsrq ?? null,
+            bars: body?.body?.bars ?? null,
+            rat:  body?.body?.rat  ?? null,
+            orientation: body?.body?.orientation ?? null,
+            moved: body?.body?.moved ?? null,
+            location: body?.tower_location ?? null
+          };
+          await supabasePost("device_health", record);
+        }
+
+        if (file === "data.qo") {
+          const b = body?.body || {};
+          const reading = {
+            device_uid, recorded_at: new Date().toISOString(),
+            relay_status_r1: b.R1 ?? null, relay_status_r2: b.R2 ?? null,
+            relay_status_r3: b.R3 ?? null, relay_status_r4: b.R4 ?? null,
+            voltage: b.voltage ?? null, current: b.current ?? null,
+            watts_consumed: b.watts ?? null, power_factor: b.pf ?? null,
+            customer_comfort: b.comfort ?? 0,
+            sw_value: b.sw ?? null, sq_value: b.sq ?? null,
+            lat: body?.gps_location?.lat ?? null, lon: body?.gps_location?.lon ?? null
+          };
+          await supabasePost("device_readings", reading);
+        }
+
+        if (file === "lc.qo") {
+          const b = body?.body || {};
+          const event = {
+            device_uid, received_at: new Date().toISOString(),
+            raw_lc: b.LC ?? null, event_id: b.event_id ?? null,
+            lc_status: b.status ?? null
+          };
+          await supabasePost("device_events", event);
+        }
+
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...CORS, "Content-Type": "application/json" } });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: CORS });
+      }
+    }
+
+    // ── Environment variable proxy ──
+    if (request.method === "POST" && path === "/env") {
+      try {
+        const { deviceUID, environment_variables } = await request.json();
+        const uid = deviceUID || DEVICE_UID;
+        const envURL = \`https://api.notefile.net/v1/projects/\${PROJECT_UID}/devices/\${encodeURIComponent(uid)}/environment_variables\`;
+        const res = await fetch(envURL, {
+          method: "PUT",
+          headers: { "Authorization": \`Bearer \${NOTEHUB_TOKEN}\`, "Content-Type": "application/json" },
+          body: JSON.stringify({ environment_variables })
+        });
+        const data = await res.json();
+        return new Response(JSON.stringify(data), { headers: { ...CORS, "Content-Type": "application/json" } });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: CORS });
+      }
+    }
+
+    return new Response("LCP Worker v1", { headers: CORS });
+  }
+};
+`;
+}
+
+// ── SQL Generator ─────────────────────────────────────────────────────────────
+function generateSQL(modules) {
+  const site = intakeData?.site?.name || "site";
+  let sql = `-- LCP Setup Script
+-- Site: ${site}
+-- Generated: ${new Date().toISOString()}
+-- Run this in your Supabase SQL Editor
+
+-- ── Core Tables (always required) ────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS devices (
+  id          bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  device_id   text        NOT NULL UNIQUE,
+  uid         text        NOT NULL UNIQUE,
+  name        text        NOT NULL,
+  enabled     boolean     NOT NULL DEFAULT true,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS device_readings (
+  id              bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  device_uid      text        NOT NULL,
+  recorded_at     timestamptz DEFAULT now(),
+  relay_status_r1 boolean, relay_status_r2 boolean,
+  relay_status_r3 boolean, relay_status_r4 boolean,
+  voltage         numeric, current numeric,
+  watts_consumed  numeric, power_factor numeric,
+  customer_comfort integer DEFAULT 0,
+  sw_value        text, sq_value text,
+  lat             numeric, lon numeric
+);
+
+CREATE TABLE IF NOT EXISTS device_events (
+  id          bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  device_uid  text        NOT NULL,
+  received_at timestamptz DEFAULT now(),
+  raw_lc      text, event_id integer, lc_status integer
+);
+
+CREATE TABLE IF NOT EXISTS device_health (
+  id               bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  device_uid       text        NOT NULL,
+  recorded_at      timestamptz DEFAULT now(),
+  voltage          numeric, temperature numeric,
+  firmware_version text, rsrp integer, rsrq integer,
+  bars integer, rat text, orientation text,
+  moved bigint, location text
+);
+
+CREATE TABLE IF NOT EXISTS user_profiles (
+  id          uuid        PRIMARY KEY REFERENCES auth.users(id),
+  email       text,
+  full_name   text,
+  role        text        DEFAULT 'readonly',
+  two_fa_required boolean DEFAULT false,
+  is_active   boolean     DEFAULT true,
+  last_login  timestamptz,
+  created_at  timestamptz DEFAULT now()
+);
+
+ALTER TABLE devices          DISABLE ROW LEVEL SECURITY;
+ALTER TABLE device_readings  DISABLE ROW LEVEL SECURITY;
+ALTER TABLE device_events    DISABLE ROW LEVEL SECURITY;
+ALTER TABLE device_health    DISABLE ROW LEVEL SECURITY;
+`;
+
+  if (modules.includes("scheduler")) {
+    sql += `
+-- ── Scheduler Tables ─────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS schedules (
+  id              bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name            text, enabled boolean DEFAULT true,
+  target_type     text, target_id text, target_name text,
+  frequency       text, days_of_week text[], action_time text,
+  event_date      date, timezone text, relay_action text,
+  duration_minutes integer, one_time boolean DEFAULT false,
+  lc_mode text, lc_strategy integer, lc_timeout numeric,
+  lc_cycle numeric, lc_reps integer,
+  created_at      timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS schedule_queue (
+  id              bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  schedule_id     bigint,
+  name            text,
+  fire_at         timestamptz,
+  target_type     text, target_id text, target_name text,
+  relay_action    text, duration_minutes integer,
+  timezone        text, action_time text,
+  lc_mode text, lc_strategy integer, lc_timeout numeric,
+  lc_cycle numeric, lc_reps integer, lc_event_id integer,
+  one_time        boolean DEFAULT false,
+  status          text    DEFAULT 'pending',
+  fired_at        timestamptz,
+  created_at      timestamptz DEFAULT now()
+);
+
+ALTER TABLE schedules       DISABLE ROW LEVEL SECURITY;
+ALTER TABLE schedule_queue  DISABLE ROW LEVEL SECURITY;
+`;
+  }
+
+  if (modules.includes("groups")) {
+    sql += `
+-- ── Groups Tables ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS group_names (
+  id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  group_number integer NOT NULL UNIQUE,
+  group_name   text    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS device_groups (
+  id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  device_uid   text   NOT NULL,
+  group_number integer NOT NULL,
+  UNIQUE(device_uid, group_number)
+);
+
+ALTER TABLE group_names   DISABLE ROW LEVEL SECURITY;
+ALTER TABLE device_groups DISABLE ROW LEVEL SECURITY;
+`;
+  }
+
+  if (modules.includes("energy")) {
+    sql += `
+-- ── Energy Monitor Tables ─────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS energy_monitors (
+  id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name         text, target_type text, target_ids text[],
+  interval_minutes integer DEFAULT 15,
+  created_at   timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS monitoring_sessions (
+  id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  monitor_id   bigint,
+  started_at   timestamptz DEFAULT now(),
+  ended_at     timestamptz,
+  status       text DEFAULT 'active'
+);
+
+ALTER TABLE energy_monitors     DISABLE ROW LEVEL SECURITY;
+ALTER TABLE monitoring_sessions DISABLE ROW LEVEL SECURITY;
+`;
+  }
+
+  if (modules.includes("openadr")) {
+    sql += `
+-- ── OpenADR Tables ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS openadr_vtn_config (
+  id              bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  vtn_id text, ven_id text, vtn_url text,
+  transport text DEFAULT 'rest', registration_id text,
+  status text DEFAULT 'unregistered',
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS openadr_events (
+  id              bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  vtn_event_id    text        NOT NULL UNIQUE,
+  event_status    text        DEFAULT 'far',
+  opt_type        text        DEFAULT 'optIn',
+  signal_name     text, signal_type text, signal_level numeric,
+  target_all      boolean     DEFAULT true,
+  dtstart         timestamptz,
+  duration_mins   integer,
+  created_dt      timestamptz DEFAULT now(),
+  lc_strategy     integer, lc_mode text,
+  raw_payload     text
+);
+
+CREATE TABLE IF NOT EXISTS openadr_reports (
+  id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  vtn_event_id text, report_type text,
+  payload      text, created_dt timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS openadr_dispatch_log (
+  id              bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  vtn_event_id    text,
+  fired_at        timestamptz DEFAULT now(),
+  device_uid      text, device_name text,
+  relay_number    integer, relay_action text,
+  architecture    text, shed_level text,
+  signal_level    numeric, lc_mode text,
+  lc_strategy     integer, lc_reps integer,
+  lc_hex          text, oadr_payload text,
+  sched_unix      bigint
+);
+
+CREATE TABLE IF NOT EXISTS device_dr_config (
+  device_uid    text        PRIMARY KEY,
+  ven_resource  boolean     NOT NULL DEFAULT false,
+  default_mode  text        NOT NULL DEFAULT 'direct_load'
+                            CHECK (default_mode IN ('bas_di','direct_load')),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS device_relay_dr_config (
+  id             bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  device_uid     text        NOT NULL,
+  relay_number   int         NOT NULL CHECK (relay_number BETWEEN 1 AND 4),
+  mode_override  text        CHECK (mode_override IN ('bas_di','direct_load')),
+  shed_level     text        CHECK (shed_level IN ('emergency','high','medium','low')),
+  is_designated  boolean     NOT NULL DEFAULT false,
+  enabled        boolean     NOT NULL DEFAULT true,
+  updated_at     timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (device_uid, relay_number)
+);
+
+ALTER TABLE openadr_vtn_config      DISABLE ROW LEVEL SECURITY;
+ALTER TABLE openadr_events          DISABLE ROW LEVEL SECURITY;
+ALTER TABLE openadr_reports         DISABLE ROW LEVEL SECURITY;
+ALTER TABLE openadr_dispatch_log    DISABLE ROW LEVEL SECURITY;
+ALTER TABLE device_dr_config        DISABLE ROW LEVEL SECURITY;
+ALTER TABLE device_relay_dr_config  DISABLE ROW LEVEL SECURITY;
+`;
+  }
+
+  // Seed devices
+  const deviceInserts = getDevices().map((d, i) =>
+    `  ('${d.id}', '${d.uid}', '${d.name.replace(/'/g,"''")}', true)`
+  ).join(",\n");
+
+  if (deviceInserts) {
+    sql += `
+-- ── Seed Devices ─────────────────────────────────────────────────────────────
+INSERT INTO devices (device_id, uid, name, enabled) VALUES
+${deviceInserts}
+ON CONFLICT (uid) DO NOTHING;
+`;
+  }
+
+  sql += `
+-- ── Setup Complete ────────────────────────────────────────────────────────────
+-- Next steps:
+-- 1. Deploy worker.js to Cloudflare Workers
+-- 2. Deploy index.html to Cloudflare Pages
+-- 3. Create your admin user in Supabase Auth
+-- 4. Insert a row in user_profiles with role = 'administrator'
+`;
+
+  return sql;
+}
+
+// ── Dashboard Generator ───────────────────────────────────────────────────────
+function generateDashboard({ workerUrl, sbUrl, sbKey, devices, modules, title, subtitle, version, intake }) {
+  if (templateHTML) {
+    return injectIntoTemplate({ workerUrl, sbUrl, sbKey, devices, modules, title, subtitle, version, intake });
+  }
+  return generateConfigWrapper({ workerUrl, sbUrl, sbKey, devices, modules, title, subtitle, version, intake });
+}
+
+function injectIntoTemplate({ workerUrl, sbUrl, sbKey, devices, modules, title, subtitle, version, intake }) {
+  let html = templateHTML;
+
+  // Inject credentials
+  html = html.replace(/const LCP_VERSION\s*=\s*"[^"]*";/, `const LCP_VERSION  = "${version}";`);
+  html = html.replace(/const PROXY_URL\s*=\s*"[^"]*";/,   `const PROXY_URL    = "${workerUrl}";`);
+  html = html.replace(/const SUPABASE_URL\s*=\s*"[^"]*";/, `const SUPABASE_URL = "${sbUrl}";`);
+  html = html.replace(/const SUPABASE_KEY\s*=\s*"[^"]*";/, `const SUPABASE_KEY = "${sbKey}";`);
+
+  // Inject devices
+  const devicesJS = devices.map(d =>
+    `  { id: "${d.id}", uid: "${d.uid}", name: "${d.name}" }`
+  ).join(",\n");
+  html = html.replace(
+    /\/\/ DEVICES seeded[\s\S]*?^\];/m,
+    `// DEVICES seeded with defaults immediately; refreshed from Supabase after login\nlet DEVICES = [\n${devicesJS}\n];`
+  );
+
+  // Inject title
+  if (title) {
+    html = html.replace(/(<div class="page-title">)[^<]*/, `$1${title}`);
+    html = html.replace(/<title>[^<]*<\/title>/, `<title>${title} v${version}<\/title>`);
+  }
+  if (subtitle) {
+    html = html.replace(
+      /(<div class="page-sub">)[^<]*/,
+      `$1${subtitle} `
+    );
+  }
+
+  // Strip unselected module UI elements
+  const STRIP = {
+    scheduler:  { tabs:["tab-scheduler"],       btns:["sub-scheduler"] },
+    eventstats: { tabs:["tab-eventstats"],       btns:["sub-eventstats"] },
+    map:        { tabs:["tab-map"],              btns:["sub-map"] },
+    groups:     { tabs:["tab-groups"],           btns:["sub-groups"] },
+    data:       { tabs:["tab-data","tab-history"], btns:["sub-data","sub-history"] },
+    health:     { tabs:["tab-admin-health"],     btns:["sub-admin-health"] },
+    monitor:    { tabs:["tab-admin-monitor"],    btns:["sub-admin-monitor"] },
+    energy:     { tabs:["tab-admin-energy"],     btns:["sub-admin-energy"] },
+    weather:    { tabs:["tab-weather"],          btns:["main-weather"] },
+    openadr:    { tabs:["tab-openadr","tab-admin-openadr"], btns:["sub-openadr","sub-admin-openadr"] },
+  };
+
+  Object.entries(STRIP).forEach(([mod, cfg]) => {
+    if (modules.includes(mod)) return; // keep it
+    cfg.tabs.forEach(id => {
+      // Add display:none to the tab-pane div
+      html = html.replace(
+        new RegExp(`<div class="tab-pane(?: active)?" id="${id}">`),
+        `<div class="tab-pane" id="${id}" style="display:none!important">`
+      );
+    });
+    cfg.btns.forEach(id => {
+      html = html.replace(
+        new RegExp(`(<button [^>]*id="${id}"[^>]*)(>)`),
+        `$1 style="display:none!important"$2`
+      );
+    });
+  });
+
+  // Add generation header comment
+  const site = intake?.site?.name || "Unknown";
+  html = "<!-- LCP Dashboard\n     Site: " + site + "\n     Version: " + version + "\n     Generated: " + new Date().toISOString() + "\n     Modules: " + modules.join(", ") + "\n-->\n" + html;
+
+  return html;
+}
+
+function generateConfigWrapper({ workerUrl, sbUrl, sbKey, devices, modules, title, subtitle, version, intake }) {
+  // Build DEVICES array
+  const devicesJS = devices.map(d =>
+    `  { id: "${d.id}", uid: "${d.uid}", name: "${d.name}" }`
+  ).join(",\n");
+
+  // Build tab buttons based on modules
+  const hasSched    = modules.includes("scheduler");
+  const hasStats    = modules.includes("eventstats");
+  const hasOpenADR  = modules.includes("openadr");
+  const hasData     = modules.includes("data");
+  const hasGroups   = modules.includes("groups");
+  const hasMap      = modules.includes("map");
+  const hasHealth   = modules.includes("health");
+  const hasMonitor  = modules.includes("monitor");
+  const hasEnergy   = modules.includes("energy");
+  const hasWeather  = modules.includes("weather");
+
+  const moduleConfig = JSON.stringify({
+    scheduler:hasSched,eventstats:hasStats,openadr:hasOpenADR,
+    data:hasData,groups:hasGroups,map:hasMap,health:hasHealth,
+    monitor:hasMonitor,energy:hasEnergy,weather:hasWeather
+  });
+
+  return `<!-- LCP Dashboard\n  Site: ${intake?.site?.name||"Unknown"}\n  Version: ${version}\n  Generated: ${new Date().toISOString()}\n  Modules: ${modules.join(", ")}\n-->\n<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8"/>\n<title>${title} v${version}</title>\n<script>\nwindow.LCP_CONFIG={version:"${version}",title:"${title}",subtitle:"${subtitle}",modules:${moduleConfig},site:${JSON.stringify(intake?.site||{})},contact:${JSON.stringify(intake?.contact||{})}};\nwindow.LCP_DEVICES=[\n${devicesJS}\n];\nwindow.LCP_PROXY_URL="${workerUrl}";\nwindow.LCP_SUPABASE_URL="${sbUrl}";\nwindow.LCP_SUPABASE_KEY="${sbKey}";\n<\/script>\n</head>\n<body>\n<div style="font-family:system-ui;max-width:600px;margin:4rem auto;padding:2rem;background:#f5f5f3;border-radius:12px;border:1px solid #ddd">\n<h2>&#9989; Configuration Generated</h2>\n<p style="font-size:13px;color:#555;margin-top:1rem;line-height:1.7">Load a dashboard template (index.html) in the Program Builder to generate the full deployable dashboard. This file contains your credentials and device configuration only.</p>\n<p style="font-size:13px;color:#555;margin-top:1rem"><strong>Site:</strong> ${intake?.site?.name||"—"}<br/><strong>Devices:</strong> ${devices.map(d=>d.name).join(", ")}<br/><strong>Modules:</strong> ${modules.join(", ")}<br/><strong>Version:</strong> ${version}</p>\n</div>\n</body>\n</html>`;
+}>
