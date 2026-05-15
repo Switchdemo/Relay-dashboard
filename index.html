@@ -626,10 +626,10 @@
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:1rem;">
-          <div><div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Voltage (V)</div><canvas id="chart-voltage" height="120"></canvas></div>
-          <div><div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Current (A)</div><canvas id="chart-current" height="120"></canvas></div>
-          <div><div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Watts (W)</div><canvas id="chart-watts" height="120"></canvas></div>
-          <div><div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Power Factor</div><canvas id="chart-pf" height="120"></canvas></div>
+          <div><div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Voltage (V)</div><div style="position:relative;height:120px;width:100%;"><canvas id="chart-voltage"></canvas></div></div>
+          <div><div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Current (A)</div><div style="position:relative;height:120px;width:100%;"><canvas id="chart-current"></canvas></div></div>
+          <div><div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Watts (W)</div><div style="position:relative;height:120px;width:100%;"><canvas id="chart-watts"></canvas></div></div>
+          <div><div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Power Factor</div><div style="position:relative;height:120px;width:100%;"><canvas id="chart-pf"></canvas></div></div>
         </div>
         <div id="charts-empty" style="text-align:center;padding:1rem;color:var(--text-hint);font-size:13px;display:none;">No data available for selected range.</div>
       </div>
@@ -1014,9 +1014,24 @@
       <div class="sched-card" id="nws-current-card">
         <div class="sched-card-header">
           <div class="sched-card-title">&#127777;&#65039; Current Conditions <span style="font-family:'DM Mono',monospace;font-size:9px;font-weight:500;color:var(--text-hint);margin-left:6px;">NOAA / NWS</span></div>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <span id="nws-station-label" style="font-size:11px;color:var(--text-hint);font-family:monospace;"></span>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <span id="nws-station-label" style="font-size:11px;color:var(--text-hint);font-family:monospace;cursor:pointer;text-decoration:underline;" onclick="toggleStationConfig()" title="Click to change station">&#128205; <span id="nws-station-name-short"></span></span>
+            <button class="queue-refresh" onclick="toggleStationConfig()">&#9881;&#65039; Station</button>
             <button class="queue-refresh" onclick="fetchNWSObservations(true)">Refresh</button>
+          </div>
+        </div>
+        <!-- Station configurator (collapsed by default) -->
+        <div id="nws-station-config" style="display:none;margin-bottom:1rem;padding:12px 14px;background:var(--surface2);border-radius:var(--radius-sm);border:0.5px solid var(--border-md);">
+          <div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Configure Observation Station</div>
+          <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;margin-bottom:8px;">
+            <input type="text" id="nws-station-search" placeholder="Station ID (e.g. KOKC) or search by name..."
+              style="padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;font-family:monospace;"
+              onkeydown="if(event.key==='Enter') searchNWSStations()" />
+            <button class="queue-refresh" onclick="searchNWSStations()">Search</button>
+            <button class="queue-refresh" onclick="rediscoverNWSStation()" title="Auto-detect nearest station">&#128205; Auto</button>
+          </div>
+          <div id="nws-station-results" style="font-size:12px;color:var(--text-hint);">
+            Enter a 4-letter ICAO station ID (e.g. KOKC, KDFW, KBOS) or search by location name.
           </div>
         </div>
         <div id="nws-current-container">
@@ -1044,6 +1059,32 @@
           <div class="sched-empty">Enter a location to see the forecast.</div>
         </div>
       </div>
+
+      <!-- Weather Data Export -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128202; Weather Data Export</div>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:1rem;">
+          Export recorded NWS observations from the database. Data is recorded every 15 minutes.
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:10px;align-items:end;flex-wrap:wrap;">
+          <div>
+            <label style="font-size:10px;font-weight:600;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;font-family:monospace;">Start Date</label>
+            <input type="date" id="wx-export-start"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:600;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;font-family:monospace;">End Date</label>
+            <input type="date" id="wx-export-end"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <button class="queue-refresh" onclick="previewWxExport()" style="height:32px;">Preview</button>
+          <button onclick="exportWeatherCSV()" style="height:32px;padding:0 16px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">&#11015;&#65039; Export CSV</button>
+        </div>
+        <div id="wx-export-preview" style="margin-top:1rem;font-size:12px;color:var(--text-hint);"></div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -1619,19 +1660,19 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
           <div class="sched-card" style="padding:1rem;">
             <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">Communications Status</div>
-            <canvas id="fh-chart-comms" height="180"></canvas>
+            <div style="position:relative;height:180px;width:100%;"><canvas id="fh-chart-comms"></canvas></div>
           </div>
           <div class="sched-card" style="padding:1rem;">
             <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">Voltage Distribution</div>
-            <canvas id="fh-chart-voltage" height="180"></canvas>
+            <div style="position:relative;height:180px;width:100%;"><canvas id="fh-chart-voltage"></canvas></div>
           </div>
           <div class="sched-card" style="padding:1rem;">
             <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">Signal Quality (RSRP)</div>
-            <canvas id="fh-chart-signal" height="180"></canvas>
+            <div style="position:relative;height:180px;width:100%;"><canvas id="fh-chart-signal"></canvas></div>
           </div>
           <div class="sched-card" style="padding:1rem;">
             <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">Temperature Status</div>
-            <canvas id="fh-chart-temp" height="180"></canvas>
+            <div style="position:relative;height:180px;width:100%;"><canvas id="fh-chart-temp"></canvas></div>
           </div>
         </div>
       </div>
@@ -1842,7 +1883,7 @@
               <button class="queue-refresh" onclick="refreshMonitoringData()">Refresh</button>
             </div>
           </div>
-          <canvas id="mon-voltage-chart" height="200"></canvas>
+          <div style="position:relative;height:200px;width:100%;"><canvas id="mon-voltage-chart"></canvas></div>
         </div>
 
         <!-- Live readings table -->
@@ -2026,7 +2067,7 @@
           </div>
         </div>
 
-        <canvas id="em-energy-chart" height="280"></canvas>
+        <div style="position:relative;height:280px;width:100%;"><canvas id="em-energy-chart"></canvas></div>
       </div>
 
       <!-- Active & Past Monitors -->
@@ -4139,6 +4180,7 @@ function buildChart(canvasId, label, labels, data, color) {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
         x: {
@@ -5341,6 +5383,8 @@ async function initWeather() {
 }
 
 async function initHeaderWeather() {
+  loadSavedNWSStation();
+  initWxExportDates();
   // Called on page load — fetch weather if location is saved
   try {
     const saved = localStorage.getItem(WEATHER_LOC_KEY);
@@ -6882,6 +6926,7 @@ function renderMonitoringChart() {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
         y: { title: { display: true, text: "Voltage (V)" }, beginAtZero: false },
@@ -7508,6 +7553,7 @@ function renderEnergyChart(rows) {
     data: { labels, datasets },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
       plugins: {
         legend: { position: "top", labels: { font: { size: 11 } } },
@@ -9066,6 +9112,11 @@ const NWS_USER_AGENT = "LCP-Dashboard/2.0 (contact@yourdomain.com)"; // NWS requ
 
 // Step 1: Given lat/lon, find the nearest NWS observation station
 async function discoverNWSStation(lat, lon) {
+  // If a station is already configured, skip auto-discovery
+  if (nwsStationId) {
+    console.log(`Using configured NWS station: ${nwsStationId}`);
+    return true;
+  }
   try {
     // Point lookup — returns forecast office and observation stations URL
     const pointRes = await fetch(
@@ -9090,7 +9141,11 @@ async function discoverNWSStation(lat, lon) {
     nwsStationName = firstStation.properties.name;
 
     const labelEl = document.getElementById("nws-station-label");
-    if (labelEl) labelEl.textContent = nwsStationId;
+    const shortEl = document.getElementById("nws-station-name-short");
+    if (labelEl) { labelEl.title = nwsStationName; }
+    if (shortEl) shortEl.textContent = nwsStationId;
+    // Save discovered station
+    try { localStorage.setItem(NWS_STATION_KEY, JSON.stringify({ id: nwsStationId, name: nwsStationName })); } catch(e) {}
 
     console.log(`NWS station discovered: ${nwsStationId} — ${nwsStationName}`);
     return true;
@@ -9261,6 +9316,304 @@ function startNWSPoller() {
 function stopNWSPoller() {
   if (nwsPollTimer) { clearInterval(nwsPollTimer); nwsPollTimer = null; }
 }
+
+
+// ── NWS Station Configuration ─────────────────────────────────────────────────
+
+const NWS_STATION_KEY = "lcp_nws_station_v1";
+
+function toggleStationConfig() {
+  const el = document.getElementById("nws-station-config");
+  if (!el) return;
+  const isOpen = el.style.display !== "none";
+  el.style.display = isOpen ? "none" : "block";
+  if (!isOpen) {
+    // Pre-fill with current station
+    const inp = document.getElementById("nws-station-search");
+    if (inp && nwsStationId) inp.value = nwsStationId;
+  }
+}
+
+async function searchNWSStations() {
+  const inp     = document.getElementById("nws-station-search");
+  const results = document.getElementById("nws-station-results");
+  const query   = inp?.value?.trim().toUpperCase();
+  if (!query || !results) return;
+
+  results.innerHTML = '<span style="color:var(--text-hint)">Searching...</span>';
+
+  // If it looks like a direct station ID (4 chars, starts with K or P)
+  if (/^[KP][A-Z0-9]{3}$/.test(query)) {
+    await setNWSStationById(query);
+    return;
+  }
+
+  // Otherwise search by text using NWS stations API with location from current lat/lon
+  if (!wxLocationData) {
+    results.innerHTML = '<span style="color:var(--red)">Set a location first using the forecast card below.</span>';
+    return;
+  }
+
+  try {
+    const pointRes = await fetch(
+      `https://api.weather.gov/points/${wxLocationData.lat},${wxLocationData.lon}`,
+      { headers: { "User-Agent": NWS_USER_AGENT, "Accept": "application/json" } }
+    );
+    const pointData = await pointRes.json();
+    const stationsUrl = pointData?.properties?.observationStations;
+    if (!stationsUrl) throw new Error("Cannot find stations for this location");
+
+    const stationsRes = await fetch(stationsUrl,
+      { headers: { "User-Agent": NWS_USER_AGENT, "Accept": "application/json" } }
+    );
+    const stationsData = await stationsRes.json();
+    const features = stationsData?.features || [];
+
+    // Filter by query text
+    const filtered = features.filter(f => {
+      const id   = f.properties.stationIdentifier?.toUpperCase() || "";
+      const name = f.properties.name?.toUpperCase() || "";
+      return id.includes(query) || name.includes(query) || features.indexOf(f) < 8;
+    }).slice(0, 8);
+
+    if (!filtered.length) {
+      results.innerHTML = '<span style="color:var(--red)">No matching stations found near your location.</span>';
+      return;
+    }
+
+    results.innerHTML = filtered.map(f => {
+      const id   = f.properties.stationIdentifier;
+      const name = f.properties.name;
+      const elev = f.properties.elevation?.value != null
+        ? `${Math.round(f.properties.elevation.value * 3.281)} ft`
+        : "";
+      const isActive = id === nwsStationId;
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;
+        border-radius:var(--radius-sm);margin-bottom:4px;
+        background:${isActive ? "var(--green-bg)" : "var(--surface)"};
+        border:0.5px solid ${isActive ? "var(--green)" : "var(--border)"};">
+        <div>
+          <span style="font-family:monospace;font-weight:600;font-size:12px;color:${isActive ? "var(--green-dark)" : "var(--text-primary)"};">${id}</span>
+          <span style="font-size:11px;color:var(--text-secondary);margin-left:8px;">${name}</span>
+          ${elev ? `<span style="font-size:10px;color:var(--text-hint);margin-left:6px;">${elev}</span>` : ""}
+          ${isActive ? ' <span style="font-size:10px;color:var(--green-dark);margin-left:6px;">&#10003; Active</span>' : ""}
+        </div>
+        <button onclick="selectNWSStation('${id}','${name.replace(/'/g,"\'")}')"
+          style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--border-md);background:${isActive ? "var(--green-dark)" : "var(--surface2)"};color:${isActive ? "#fff" : "var(--text-secondary)"};font-size:11px;cursor:pointer;">
+          ${isActive ? "Selected" : "Use This"}
+        </button>
+      </div>`;
+    }).join("");
+
+  } catch(e) {
+    results.innerHTML = `<span style="color:var(--red)">${e.message}</span>`;
+  }
+}
+
+async function setNWSStationById(stationId) {
+  const results = document.getElementById("nws-station-results");
+  results.innerHTML = `<span style="color:var(--text-hint)">Verifying ${stationId}...</span>`;
+  try {
+    const res = await fetch(
+      `https://api.weather.gov/stations/${stationId}`,
+      { headers: { "User-Agent": NWS_USER_AGENT, "Accept": "application/json" } }
+    );
+    if (!res.ok) throw new Error(`Station ${stationId} not found (${res.status})`);
+    const data = await res.json();
+    const name = data?.properties?.name || stationId;
+    selectNWSStation(stationId, name);
+  } catch(e) {
+    results.innerHTML = `<span style="color:var(--red)">${e.message}</span>`;
+  }
+}
+
+function selectNWSStation(stationId, stationName) {
+  nwsStationId   = stationId;
+  nwsStationName = stationName;
+
+  // Persist
+  try {
+    localStorage.setItem(NWS_STATION_KEY, JSON.stringify({ id: stationId, name: stationName }));
+  } catch(e) {}
+
+  // Update UI
+  const labelEl = document.getElementById("nws-station-label");
+  const shortEl = document.getElementById("nws-station-name-short");
+  if (labelEl) labelEl.title = stationName;
+  if (shortEl) shortEl.textContent = stationId;
+
+  // Close config panel
+  const configEl = document.getElementById("nws-station-config");
+  if (configEl) configEl.style.display = "none";
+
+  // Refresh observations with new station
+  fetchNWSObservations(true);
+  setStatus("ready", `NWS station set to ${stationId} — ${stationName}`);
+}
+
+async function rediscoverNWSStation() {
+  if (!wxLocationData) {
+    setStatus("error", "Set a location first.");
+    return;
+  }
+  // Clear saved station and rediscover
+  try { localStorage.removeItem(NWS_STATION_KEY); } catch(e) {}
+  nwsStationId   = null;
+  nwsStationName = null;
+  const results = document.getElementById("nws-station-results");
+  if (results) results.innerHTML = '<span style="color:var(--text-hint)">Auto-detecting nearest station...</span>';
+  const ok = await discoverNWSStation(wxLocationData.lat, wxLocationData.lon);
+  if (ok) {
+    // Save the discovered station
+    try { localStorage.setItem(NWS_STATION_KEY, JSON.stringify({ id: nwsStationId, name: nwsStationName })); } catch(e) {}
+    selectNWSStation(nwsStationId, nwsStationName);
+  } else {
+    if (results) results.innerHTML = '<span style="color:var(--red)">Auto-detection failed. Try entering a station ID manually.</span>';
+  }
+}
+
+// Load saved station on startup (called from initHeaderWeather)
+function loadSavedNWSStation() {
+  try {
+    const saved = localStorage.getItem(NWS_STATION_KEY);
+    if (saved) {
+      const { id, name } = JSON.parse(saved);
+      nwsStationId   = id;
+      nwsStationName = name;
+      const labelEl = document.getElementById("nws-station-label");
+      const shortEl = document.getElementById("nws-station-name-short");
+      if (labelEl) labelEl.title = name;
+      if (shortEl) shortEl.textContent = id;
+      console.log(`Loaded saved NWS station: ${id}`);
+      return true;
+    }
+  } catch(e) {}
+  return false;
+}
+
+// ── Weather CSV Export ────────────────────────────────────────────────────────
+
+async function previewWxExport() {
+  const startEl = document.getElementById("wx-export-start");
+  const endEl   = document.getElementById("wx-export-end");
+  const preview = document.getElementById("wx-export-preview");
+  if (!startEl?.value || !endEl?.value) {
+    if (preview) preview.innerHTML = '<span style="color:var(--red)">Please select both start and end dates.</span>';
+    return;
+  }
+  if (preview) preview.innerHTML = '<span style="color:var(--text-hint)">Counting records...</span>';
+  try {
+    const start = startEl.value + "T00:00:00";
+    const end   = endEl.value   + "T23:59:59";
+    const rows = await supabaseGet(
+      `weather_readings?recorded_at=gte.${encodeURIComponent(start)}&recorded_at=lte.${encodeURIComponent(end)}&select=id&order=recorded_at.asc`
+    );
+    const count = Array.isArray(rows) ? rows.length : 0;
+    const days  = Math.round((new Date(endEl.value) - new Date(startEl.value)) / 86400000) + 1;
+    if (preview) {
+      preview.innerHTML = count > 0
+        ? `<span style="color:var(--green-dark)">&#10003; ${count.toLocaleString()} records found over ${days} day${days!==1?"s":""} &bull; Approx ${(count * 0.15).toFixed(1)} hours of data</span>`
+        : `<span style="color:var(--amber)">No records found for this date range. Data is recorded every 15 minutes when a location is set.</span>`;
+    }
+  } catch(e) {
+    if (preview) preview.innerHTML = `<span style="color:var(--red)">Error: ${e.message}</span>`;
+  }
+}
+
+async function exportWeatherCSV() {
+  const startEl = document.getElementById("wx-export-start");
+  const endEl   = document.getElementById("wx-export-end");
+  const preview = document.getElementById("wx-export-preview");
+
+  if (!startEl?.value || !endEl?.value) {
+    if (preview) preview.innerHTML = '<span style="color:var(--red)">Please select both start and end dates.</span>';
+    return;
+  }
+
+  if (preview) preview.innerHTML = '<span style="color:var(--text-hint)">Fetching data...</span>';
+
+  try {
+    const start = startEl.value + "T00:00:00";
+    const end   = endEl.value   + "T23:59:59";
+
+    // Fetch all records — Supabase default limit is 1000, use range header for more
+    const rows = await supabaseGet(
+      `weather_readings?recorded_at=gte.${encodeURIComponent(start)}&recorded_at=lte.${encodeURIComponent(end)}&order=recorded_at.asc&limit=10000`
+    );
+
+    if (!Array.isArray(rows) || !rows.length) {
+      if (preview) preview.innerHTML = '<span style="color:var(--amber)">No data found for this date range.</span>';
+      return;
+    }
+
+    // Build CSV
+    const headers = [
+      "recorded_at","observed_at","station_id","station_name","location_name",
+      "lat","lon","temp_f","dewpoint_f","humidity_pct","heat_index_f",
+      "wind_mph","wind_dir_deg","wind_gust_mph","pressure_inhg","visibility_mi","description"
+    ];
+
+    const escape = (v) => {
+      if (v == null) return "";
+      const s = String(v);
+      return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g,'""')}"` : s;
+    };
+
+    const csvRows = [
+      headers.join(","),
+      ...rows.map(r => headers.map(h => escape(r[h])).join(","))
+    ];
+
+    const csv  = csvRows.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    const station = (nwsStationId || "weather").toLowerCase();
+    a.href     = url;
+    a.download = `weather_${station}_${startEl.value}_to_${endEl.value}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    if (preview) preview.innerHTML = `<span style="color:var(--green-dark)">&#10003; Exported ${rows.length.toLocaleString()} records to CSV.</span>`;
+
+  } catch(e) {
+    if (preview) preview.innerHTML = `<span style="color:var(--red)">Export failed: ${e.message}</span>`;
+  }
+}
+
+// Set default export date range to last 7 days
+function initWxExportDates() {
+  const endEl   = document.getElementById("wx-export-end");
+  const startEl = document.getElementById("wx-export-start");
+  if (!endEl || !startEl) return;
+  const today = new Date();
+  const week  = new Date(today);
+  week.setDate(today.getDate() - 7);
+  endEl.value   = today.toISOString().slice(0, 10);
+  startEl.value = week.toISOString().slice(0, 10);
+}
+
+
+// ── Chart Resize Handler ───────────────────────────────────────────────────────
+// Handles browser zoom changes which don't always fire window resize
+(function() {
+  let resizeTimer;
+  function resizeAllCharts() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      Object.values(chartInstances).forEach(chart => {
+        try { chart.resize(); } catch(e) {}
+      });
+    }, 150);
+  }
+  window.addEventListener("resize", resizeAllCharts);
+  // Also observe the main content area for size changes (zoom)
+  if (typeof ResizeObserver !== "undefined") {
+    const ro = new ResizeObserver(resizeAllCharts);
+    const target = document.querySelector(".scroll-content") || document.body;
+    ro.observe(target);
+  }
+})();
 
 // ── Background Theme System ───────────────────────────────────────────────────
 
