@@ -573,15 +573,21 @@
     <button class="tab-btn" id="main-events" onclick="switchMain('events', this)">Events</button>
     <button class="tab-btn" id="main-devices" onclick="switchMain('devices', this)">Devices</button>
     <button class="tab-btn" id="main-weather" onclick="switchMain('weather', this)">Weather</button>
+    <button class="tab-btn" id="main-monitor" onclick="switchMain('monitor', this)">Monitor</button>
     <button class="tab-btn" id="main-admin" onclick="switchMain('admin', this)" style="display:none;">Admin</button>
   </div>
   <!-- Sub-tabs (shown contextually) -->
+  <div class="sub-tabs" id="sub-tabs-monitor" style="display:none;">
+    <button class="sub-tab-btn active" id="sub-monitor-triggers" onclick="switchSub('monitor','monitor-triggers',this)">Triggers</button>
+    <button class="sub-tab-btn" id="sub-monitor-device" onclick="switchSub('monitor','monitor-device',this)">Device Monitoring</button>
+    <button class="sub-tab-btn" id="sub-monitor-energy" onclick="switchSub('monitor','monitor-energy',this)">Energy Monitor</button>
+    <button class="sub-tab-btn" id="sub-monitor-feeds" onclick="switchSub('monitor','monitor-feeds',this)">Data Feeds</button>
+  </div>
   <div class="sub-tabs" id="sub-tabs-admin" style="display:none;">
     <button class="sub-tab-btn active" id="sub-admin-users" onclick="switchSub('admin','admin-users',this)">User Management</button>
     <button class="sub-tab-btn" id="sub-admin-devices" onclick="switchSub('admin','admin-devices',this)">Devices</button>
     <button class="sub-tab-btn" id="sub-admin-health" onclick="switchSub('admin','admin-health',this)">Fleet Health</button>
-    <button class="sub-tab-btn" id="sub-admin-monitor" onclick="switchSub('admin','admin-monitor',this)">Device Monitoring</button>
-    <button class="sub-tab-btn" id="sub-admin-energy" onclick="switchSub('admin','admin-energy',this)">Energy Monitor</button>
+
     <button class="sub-tab-btn" id="sub-admin-openadr" onclick="switchSub('admin','admin-openadr',this)">OpenADR Config</button>
     <button class="sub-tab-btn" id="sub-admin-help" onclick="switchSub('admin','admin-help',this)">Help & Reference</button>
     <button class="sub-tab-btn" id="sub-admin-monitor-triggers" onclick="switchSub('admin','admin-monitor-triggers',this)">Monitor & Triggers</button>
@@ -2714,6 +2720,236 @@
   </div>
 </div>
 
+
+<!-- ── MONITOR TRIGGERS TAB (main tab alias) ── -->
+<div class="tab-pane" id="tab-monitor-triggers">
+  <div class="scroll-content">
+    <div style="max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <!-- Feed Discovery -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128225; Feed Discovery</div>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:12px;line-height:1.6;">
+          Enter your state and utility to discover available grid and weather data feeds. Each feed is tested live before being shown.
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end;margin-bottom:1rem;">
+          <div>
+            <label style="font-size:10px;font-weight:600;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;font-family:monospace;">State</label>
+            <select id="fd-state-m" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="">-- Select State --</option>
+              <option value="TX">Texas</option><option value="OK">Oklahoma</option><option value="KS">Kansas</option>
+              <option value="NE">Nebraska</option><option value="MN">Minnesota</option><option value="IA">Iowa</option>
+              <option value="MO">Missouri</option><option value="AR">Arkansas</option><option value="LA">Louisiana</option>
+              <option value="IL">Illinois</option><option value="MI">Michigan</option><option value="IN">Indiana</option>
+              <option value="OH">Ohio</option><option value="WI">Wisconsin</option><option value="MT">Montana</option>
+              <option value="WY">Wyoming</option><option value="CO">Colorado</option><option value="NM">New Mexico</option>
+              <option value="ME">Maine</option><option value="NH">New Hampshire</option><option value="VT">Vermont</option>
+              <option value="MA">Massachusetts</option><option value="CT">Connecticut</option><option value="RI">Rhode Island</option>
+              <option value="NY">New York</option><option value="CA">California</option>
+              <option value="PA">Pennsylvania</option><option value="NJ">New Jersey</option><option value="MD">Maryland</option>
+              <option value="VA">Virginia</option><option value="WV">West Virginia</option><option value="NC">North Carolina</option>
+              <option value="TN">Tennessee</option><option value="MS">Mississippi</option><option value="AL">Alabama</option>
+              <option value="GA">Georgia</option><option value="FL">Florida</option><option value="SC">South Carolina</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:600;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;font-family:monospace;">Utility (optional)</label>
+            <input type="text" id="fd-utility-m" placeholder="e.g. OG&E, PSO, Entergy..." style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:600;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;font-family:monospace;">Coordinates</label>
+            <input type="text" id="fd-coords-m" placeholder="lat,lon" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;" />
+          </div>
+          <button onclick="runFeedDiscoveryM()" style="padding:7px 18px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;height:34px;">Discover</button>
+        </div>
+        <div id="fd-results-m"></div>
+      </div>
+
+      <!-- Active Feeds -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128225; Active Data Feeds</div>
+          <button class="queue-refresh" onclick="loadActiveFeedsM()">Refresh</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:10px;">Feeds added from discovery. Each is polled and values stored for trending.</div>
+        <div id="active-feeds-list-m"><div class="sched-empty">No feeds configured.</div></div>
+      </div>
+
+      <!-- Rules Engine -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#9881;&#65039; Trigger Rules</div>
+          <button class="queue-refresh" onclick="showAddRuleModal()">+ Add Rule</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:10px;">Rules watch active feeds and trigger actions when conditions are met.</div>
+        <div id="rules-list-m"><div class="sched-empty">No rules configured.</div></div>
+      </div>
+
+      <!-- Trigger Log -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128203; Trigger Log</div>
+          <button class="queue-refresh" onclick="loadTriggerLogM()">Refresh</button>
+        </div>
+        <div id="trigger-log-list-m"><div class="sched-empty">No trigger events yet.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── MONITOR DEVICE TAB (alias) ── -->
+<div class="tab-pane" id="tab-monitor-device">
+  <div id="monitor-device-proxy"></div>
+</div>
+
+<!-- ── MONITOR ENERGY TAB (alias) ── -->
+<div class="tab-pane" id="tab-monitor-energy">
+  <div id="monitor-energy-proxy"></div>
+</div>
+
+<!-- ── MONITOR DATA FEEDS TAB ── -->
+<div class="tab-pane" id="tab-monitor-feeds">
+  <div class="scroll-content">
+    <div style="max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128202; Feed Data Charts</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select id="feed-chart-key" onchange="loadFeedChart()" style="padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="">-- Select Feed --</option>
+            </select>
+            <select id="feed-chart-range" onchange="loadFeedChart()" style="padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="3">Last 3 hours</option>
+              <option value="12">Last 12 hours</option>
+              <option value="24" selected>Last 24 hours</option>
+              <option value="72">Last 3 days</option>
+              <option value="168">Last 7 days</option>
+            </select>
+            <button class="queue-refresh" onclick="loadFeedChart()">Refresh</button>
+          </div>
+        </div>
+        <div id="feed-chart-meta" style="font-size:11px;color:var(--text-hint);margin-bottom:10px;"></div>
+        <div style="position:relative;height:280px;width:100%;"><canvas id="feed-data-chart"></canvas></div>
+      </div>
+
+      <!-- Rules for this feed -->
+      <div class="sched-card" id="feed-rules-card" style="display:none;">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#9881;&#65039; Rules for this Feed</div>
+          <button class="queue-refresh" onclick="showInlineRuleForm()">+ Quick Add Rule</button>
+        </div>
+
+        <!-- Inline quick-add rule form (collapsed by default) -->
+        <div id="inline-rule-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px;border:0.5px solid var(--border-md);">
+          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;font-family:monospace;">Quick Add Rule</div>
+
+          <!-- Tier pills -->
+          <div style="display:flex;gap:8px;margin-bottom:12px;" id="inline-tier-row">
+            <button class="inline-tier-btn" data-tier="alert" onclick="selectInlineTier('alert',this)"
+              style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border-md);background:var(--surface);font-size:12px;font-weight:600;cursor:pointer;color:var(--blue-dark);">&#128276; Alert</button>
+            <button class="inline-tier-btn" data-tier="suggest" onclick="selectInlineTier('suggest',this)"
+              style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border-md);background:var(--surface);font-size:12px;font-weight:600;cursor:pointer;color:var(--amber);">&#128161; Suggest</button>
+            <button class="inline-tier-btn" data-tier="autopilot" onclick="selectInlineTier('autopilot',this)"
+              style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border-md);background:var(--surface);font-size:12px;font-weight:600;cursor:pointer;color:var(--red);">&#9889; Autopilot</button>
+          </div>
+          <div id="inline-autopilot-warning" style="display:none;background:var(--red-lt);border:0.5px solid var(--red);border-radius:var(--radius-sm);padding:8px 12px;font-size:11px;color:var(--red);margin-bottom:10px;line-height:1.6;">
+            &#9888;&#65039; <strong>Autopilot</strong> fires events automatically. Administrator role required. Configure guards carefully.
+          </div>
+
+          <!-- Rule name + threshold row -->
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin-bottom:10px;">
+            <input type="text" id="inline-rule-name" placeholder="Rule name (optional)" style="padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;" />
+            <div style="display:flex;gap:6px;align-items:center;">
+              <span id="inline-feed-label" style="font-size:12px;font-weight:600;color:var(--text-primary);white-space:nowrap;"></span>
+              <select id="inline-operator" style="padding:7px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="gt">&gt;</option>
+                <option value="gte">&#8805;</option>
+                <option value="lt">&lt;</option>
+                <option value="lte">&#8804;</option>
+              </select>
+            </div>
+            <div style="position:relative;">
+              <input type="number" id="inline-threshold" placeholder="Threshold" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:13px;font-family:monospace;" />
+              <span id="inline-threshold-unit" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-hint);pointer-events:none;"></span>
+            </div>
+          </div>
+          <div id="inline-threshold-hint" style="font-size:11px;color:var(--text-hint);font-style:italic;margin-bottom:10px;"></div>
+
+          <!-- Target + action row -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Target Type</label>
+              <select id="inline-target-type" onchange="onInlineTargetChange()" style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:11px;">
+                <option value="">-- Select --</option>
+                <option value="device">Device</option>
+                <option value="group">Group</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Target</label>
+              <select id="inline-target" style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:11px;">
+                <option value="" disabled selected>-- Choose --</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Strategy</label>
+              <select id="inline-strategy" style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:11px;">
+                <option value="5|7.5|30">5 — 25% shed</option>
+                <option value="9|15|30" selected>9 — 50% shed</option>
+                <option value="15|24|30">15 — 80% shed</option>
+                <option value="19|30|30">19 — 100% shed</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Duration (min)</label>
+              <input type="number" id="inline-duration" value="60" min="15" max="480" step="15"
+                style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:11px;" />
+            </div>
+          </div>
+
+          <!-- Guards row (compact) -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;" id="inline-guards-row">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Max triggers/day</label>
+              <input type="number" id="inline-max-per-day" value="3" min="1" max="24"
+                style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:11px;" />
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Min rest (min)</label>
+              <input type="number" id="inline-min-rest" value="120" min="15" max="480" step="15"
+                style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:11px;" />
+            </div>
+            <div id="inline-grace-row" style="display:none;">
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">&#9889; Grace period (min)</label>
+              <input type="number" id="inline-grace" value="5" min="1" max="30"
+                style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:11px;" />
+            </div>
+          </div>
+
+          <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button onclick="hideInlineRuleForm()" style="padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-secondary);">Cancel</button>
+            <button onclick="saveInlineRule()" style="padding:7px 20px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Save Rule</button>
+          </div>
+        </div>
+
+        <!-- Existing rules for this feed -->
+        <div id="feed-rules-list"><div class="sched-empty">No rules for this feed.</div></div>
+      </div>
+
+      <!-- Latest values table -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128200; Latest Feed Values</div>
+          <button class="queue-refresh" onclick="loadLatestFeedValues()">Refresh</button>
+        </div>
+        <div id="feed-latest-values"><div class="sched-empty">Loading...</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ── DRILL DOWN SIDE PANEL ── -->
 <div id="fh-drill-panel" style="position:fixed;top:0;right:-480px;width:480px;height:100vh;background:var(--surface);border-left:0.5px solid var(--border-md);z-index:1000;transition:right 0.3s ease;display:flex;flex-direction:column;box-shadow:-4px 0 20px rgba(0,0,0,0.15);">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:0.5px solid var(--border-md);">
@@ -2866,7 +3102,7 @@ function setStatus(type, msg) {
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 let currentMain = 'summary';
-let currentSub  = { events: 'scheduler', devices: 'data', admin: 'admin-users' };
+let currentSub  = { events: 'scheduler', devices: 'data', admin: 'admin-users', monitor: 'monitor-triggers' };
 
 function switchMain(main, btn) {
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
@@ -2875,11 +3111,13 @@ function switchMain(main, btn) {
   document.getElementById("sub-tabs-events").style.display  = main === "events"  ? "flex" : "none";
   document.getElementById("sub-tabs-devices").style.display = main === "devices" ? "flex" : "none";
   document.getElementById("sub-tabs-admin").style.display   = main === "admin"   ? "flex" : "none";
+  document.getElementById("sub-tabs-monitor").style.display = main === "monitor" ? "flex" : "none";
   if (main === "summary") { activatePane("summary"); initSummaryTab(); }
   else if (main === "weather") { activatePane("weather"); initWeatherTab(); }
   else if (main === "admin")   { const s = currentSub.admin||"admin-users"; activatePane(s); activateSubBtn("admin",s); }
   else if (main === "events")  { const s = currentSub.events||"scheduler";  activatePane(s); activateSubBtn("events",s); }
   else if (main === "devices") { const s = currentSub.devices||"data"; activatePane(s); activateSubBtn("devices",s); }
+  else if (main === "monitor") { const s = currentSub.monitor||"monitor-triggers"; activatePane(s); activateSubBtn("monitor",s); }
 }
 
 function switchSub(main, sub, btn) {
@@ -2923,6 +3161,10 @@ function runTabInit(name) {
   if (name === "admin-openadr")   { initOpenADRConfig(); }
   if (name === "admin-help")      { showHelpTab("scheduling"); }
   if (name === "admin-monitor-triggers") { initMonitorTriggers(); }
+  if (name === "monitor-triggers") { initMonitorTriggersMain(); }
+  if (name === "monitor-device")   { injectDeviceMonitoring(); }
+  if (name === "monitor-energy")   { injectEnergyMonitor(); }
+  if (name === "monitor-feeds")    { initFeedCharts(); }
 }
 
 function switchTab(name, btn) { switchMain(name, btn); }
@@ -6230,8 +6472,10 @@ async function signOut() {
 // ── Role-based UI permissions ─────────────────────────────────────────────────
 function applyRolePermissions(role) {
   // Show Admin tab only for administrators
-  const adminBtn = document.getElementById("main-admin");
-  if (adminBtn) adminBtn.style.display = role === "administrator" ? "" : "none";
+  const adminBtn    = document.getElementById("main-admin");
+  const monitorBtn  = document.getElementById("main-monitor");
+  if (adminBtn)   adminBtn.style.display   = role === "administrator" ? "" : "none";
+  if (monitorBtn) monitorBtn.style.display = ""; // visible to all roles
 
   // Read-only users: disable all command buttons
   if (role === "readonly") {
@@ -10701,7 +10945,8 @@ function showSuggestModal(rule, fv) {
   const msg = `📡 Monitor Trigger: ${rule.name || def.label}\n\nCurrent value: ${fv?.value} ${def.unit}\nThreshold: ${rule.operator} ${rule.threshold} ${def.unit}\n\nSuggested action:\n${rule.relay_action} on ${rule.target_name || rule.target_id}\nStrategy ${(rule.strategy_val||"").split("|")[0]} — ${rule.duration_mins} min\n\nOpen the Event Scheduler to confirm this event?`;
   if (confirm(msg)) {
     switchMain("events", document.getElementById("main-events"));
-    switchSub("events", "scheduler", document.getElementById("sub-scheduler"));
+    const schedBtn = document.getElementById("sub-scheduler");
+    if (schedBtn) switchSub("events", "scheduler", schedBtn);
   }
 }
 
@@ -10780,6 +11025,654 @@ async function fireAutopilotEvent(rule, fv) {
     });
   } catch(e) {}
   loadTriggerLog();
+}
+
+
+
+// ── Monitor Main Tab Functions ────────────────────────────────────────────────
+
+function initMonitorTriggersMain() {
+  // Sync coords from weather location
+  const coordEl = document.getElementById("fd-coords-m");
+  if (coordEl && wxLocationData && !coordEl.value) {
+    coordEl.value = `${wxLocationData.lat},${wxLocationData.lon}`;
+  }
+  loadActiveFeedsM();
+  loadRulesList("rules-list-m");
+  loadTriggerLogM();
+  if (!monitorPoller) startMonitorPoller();
+}
+
+// Feed Discovery (Monitor tab version — reads from -m suffixed inputs)
+async function runFeedDiscoveryM() {
+  const state   = document.getElementById("fd-state-m")?.value;
+  const utility = document.getElementById("fd-utility-m")?.value?.trim();
+  const coords  = document.getElementById("fd-coords-m")?.value?.trim();
+  const results = document.getElementById("fd-results-m");
+  if (!state) { results.innerHTML = '<div style="color:var(--red);font-size:12px;">Please select a state.</div>'; return; }
+
+  results.innerHTML = `<div style="font-size:12px;color:var(--text-hint);padding:8px 0;">&#128269; Discovering feeds for ${state}...</div>`;
+
+  // Override fd-state and fd-coords temporarily so runFeedDiscovery can use same logic
+  const fakeStateEl  = document.getElementById("fd-state");
+  const fakeCoordsEl = document.getElementById("fd-coords");
+  const fakeResultsEl = document.getElementById("fd-results");
+  const origState    = fakeStateEl?.value;
+  const origCoords   = fakeCoordsEl?.value;
+
+  if (fakeStateEl)  fakeStateEl.value  = state;
+  if (fakeCoordsEl) fakeCoordsEl.value = coords || "";
+
+  // Temporarily redirect results to -m container
+  const origDisplay = fakeResultsEl?.id;
+
+  // Run discovery using shared FEED_DEFS and utility portal logic
+  const isoInfo  = STATE_ISO_MAP[state];
+  const isoFeeds = isoInfo?.feeds || [];
+  const weatherFeeds = ["nws_temp","nws_humidity","nws_heat_index","openmeteo_uv","openmeteo_temp_forecast","tou_peak"];
+  const allFeedKeys  = [...new Set([...isoFeeds, ...weatherFeeds])];
+
+  const tested = await Promise.all(allFeedKeys.map(async key => {
+    const def = FEED_DEFS[key];
+    if (!def) return null;
+    let status = "live", latency = null;
+    if (def.auth === "registration") {
+      status = "registration";
+    } else if (def.testUrl) {
+      try {
+        const t0 = Date.now();
+        const res = await fetch(def.testUrl, { method:"HEAD", signal:AbortSignal.timeout(3000) });
+        latency = Date.now() - t0;
+        status = res.ok ? "live" : "unavailable";
+      } catch(e) {
+        try {
+          const t0 = Date.now();
+          const res = await fetch(def.testUrl, { signal:AbortSignal.timeout(4000) });
+          latency = Date.now() - t0;
+          status = res.ok ? "live" : "unavailable";
+        } catch(e2) { status = "unavailable"; }
+      }
+    } else if (key.startsWith("tou_")) { status = "live"; }
+    return { key, def, status, latency };
+  }));
+
+  const valid = tested.filter(Boolean);
+  const stateUtilityPortals = Object.values(UTILITY_PORTALS).filter(u => u.states.includes(state));
+
+  let html = "";
+
+  if (isoInfo) {
+    const bc = isoInfo.iso === "SERC" ? "var(--amber)" : "var(--green-dark)";
+    html += `<div style="background:var(--surface2);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
+      <span style="font-size:20px;">&#128204;</span>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-primary);">${state} is in <span style="color:${bc};">${isoInfo.iso}</span> — ${isoInfo.name}</div>
+        ${isoInfo.iso==="SERC"?'<div style="font-size:11px;color:var(--amber);margin-top:2px;">&#9888;&#65039; Southeast — no public ISO market. Grid pricing via utility only.</div>':""}
+      </div></div>`;
+  }
+
+  html += `<div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;font-family:monospace;">Available Feeds (${valid.length})</div>`;
+
+  html += valid.map(f => {
+    const sc = f.status==="live"?"var(--green-dark)":f.status==="registration"?"var(--amber)":"var(--red)";
+    const sl = f.status==="live"?"&#9679; Live":f.status==="registration"?"&#9679; Requires Registration":"&#9679; Unavailable";
+    const alreadyAdded = monitorFeeds.some(mf => mf.feed_key === f.key);
+    return `<div class="feed-card">
+      <div class="feed-status-dot ${f.status==="live"?"live":f.status==="registration"?"registration":"unavailable"}"></div>
+      <div class="feed-info">
+        <div class="feed-name">${f.def.icon} ${f.def.label}</div>
+        <div class="feed-meta">${f.def.description}</div>
+        <div class="feed-meta" style="margin-top:3px;">
+          <span style="color:${sc};font-weight:600;">${sl}</span>
+          ${f.latency?` &bull; ${f.latency}ms`:""} &bull; Every ${f.def.interval} min &bull; Typical: ${f.def.typical}
+        </div>
+      </div>
+      <div>
+        ${alreadyAdded
+          ? '<span style="font-size:11px;color:var(--green-dark);font-weight:600;">&#10003; Added</span>'
+          : f.status!=="unavailable"
+            ? `<button onclick="addFeedFromDiscovery('${f.key}')" style="padding:5px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--green);background:var(--green-bg);color:var(--green-dark);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">+ Add Feed</button>`
+            : '<span style="font-size:11px;color:var(--red);">Unavailable</span>'
+        }
+      </div>
+    </div>`;
+  }).join("");
+
+  if (stateUtilityPortals.length > 0) {
+    html += `<div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 8px;font-family:monospace;">Utility Data Portals</div>`;
+    html += stateUtilityPortals.map(u => `
+      <div class="feed-card">
+        <div class="feed-status-dot" style="background:var(--blue-dark);"></div>
+        <div class="feed-info">
+          <div class="feed-name">&#127968; ${u.name}</div>
+          <div class="feed-meta">Utility-specific rate and usage data portal</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <a href="${u.url}" target="_blank" style="padding:5px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);color:var(--text-secondary);font-size:11px;font-weight:600;text-decoration:none;white-space:nowrap;">Portal &#8599;</a>
+          ${u.dataUrl?`<a href="${u.dataUrl}" target="_blank" style="padding:5px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--blue);background:var(--blue-lt);color:var(--blue-dark);font-size:11px;font-weight:600;text-decoration:none;white-space:nowrap;">Rates &#8599;</a>`:""}
+        </div>
+      </div>`).join("");
+  }
+
+  html += `<div style="font-size:11px;color:var(--text-hint);margin-top:10px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);">
+    &#127777;&#65039; Weather feeds (NWS temperature, humidity, UV) are always available — set location in the Weather tab to activate.
+  </div>`;
+
+  results.innerHTML = html;
+
+  // Restore originals
+  if (fakeStateEl)  fakeStateEl.value  = origState  || "";
+  if (fakeCoordsEl) fakeCoordsEl.value = origCoords || "";
+}
+
+// Active feeds for Monitor tab
+async function loadActiveFeedsM() {
+  const list = document.getElementById("active-feeds-list-m");
+  if (!list) return;
+  try {
+    const rows = await supabaseGet("monitor_feeds?enabled=eq.true&order=added_at.asc");
+    monitorFeeds = Array.isArray(rows) ? rows : [];
+    if (!monitorFeeds.length) {
+      list.innerHTML = '<div class="sched-empty">No feeds configured. Use Feed Discovery above to add feeds.</div>';
+      return;
+    }
+    list.innerHTML = monitorFeeds.map(f => {
+      const def = FEED_DEFS[f.feed_key] || {};
+      const fv  = feedValues[f.feed_key];
+      const val = fv ? `${fv.value} ${f.unit||""}` : "—";
+      const ts  = fv ? new Date(fv.timestamp).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) : "";
+      return `<div class="feed-card">
+        <div class="feed-status-dot live"></div>
+        <div class="feed-info">
+          <div class="feed-name">${def.icon||"📡"} ${f.label}</div>
+          <div class="feed-meta">Every ${f.interval_minutes} min${ts?` &bull; Last: ${ts}`:""}</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="feed-value">${val}</div>
+          <button onclick="removeFeed(${f.id})" style="margin-top:4px;padding:3px 8px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">Remove</button>
+        </div>
+      </div>`;
+    }).join("");
+  } catch(e) { list.innerHTML = '<div class="sched-empty">Error loading feeds.</div>'; }
+}
+
+// Rules list for Monitor tab (reuses same data, different container)
+async function loadRulesList(containerId) {
+  const list = document.getElementById(containerId);
+  if (!list) return;
+  try {
+    const rows = await supabaseGet("monitor_rules?order=created_at.asc");
+    monitorRules = Array.isArray(rows) ? rows : [];
+    if (!monitorRules.length) { list.innerHTML = '<div class="sched-empty">No rules configured. Click + Add Rule to create one.</div>'; return; }
+    const tierColors = { alert:"var(--blue-dark)", suggest:"var(--amber)", autopilot:"var(--red)" };
+    list.innerHTML = monitorRules.map(r => {
+      const feed1 = FEED_DEFS[r.feed_key]||{label:r.feed_key,unit:""};
+      const feed2 = r.feed_key2 ? FEED_DEFS[r.feed_key2] : null;
+      const op1   = {gt:">",gte:"≥",lt:"<",lte:"≤",eq:"="}[r.operator]||r.operator;
+      const op2   = {gt:">",gte:"≥",lt:"<",lte:"≤",eq:"="}[r.operator2]||"";
+      const cond1 = `${feed1.label} ${op1} ${r.threshold} ${feed1.unit}`;
+      const cond2 = feed2&&r.threshold2?` AND ${feed2.label} ${op2} ${r.threshold2} ${feed2.unit}`:"";
+      return `<div class="rule-card">
+        <div class="rule-card-header">
+          <div class="rule-status ${r.enabled?"enabled":"disabled"}"></div>
+          <span class="rule-tier-badge ${r.tier}">${r.tier.toUpperCase()}</span>
+          <div class="rule-condition">${r.name||cond1+cond2}</div>
+          <div style="display:flex;gap:6px;">
+            <button onclick="editRule(${r.id})" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;cursor:pointer;">Edit</button>
+            <button onclick="toggleRuleEnabled(${r.id},${!r.enabled})" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;cursor:pointer;">${r.enabled?"Disable":"Enable"}</button>
+            <button onclick="deleteRule(${r.id})" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:11px;cursor:pointer;">Delete</button>
+          </div>
+        </div>
+        <div class="rule-card-body">
+          <strong>Condition:</strong> ${cond1}${cond2}<br/>
+          <strong>Action:</strong> ${r.relay_action||"—"} on ${r.target_name||r.target_id||"—"} &bull; Strategy ${(r.strategy_val||"").split("|")[0]} &bull; ${r.duration_mins} min<br/>
+          <strong>Guards:</strong> Max ${r.max_per_day}/day &bull; ${r.min_rest_mins} min rest${r.grace_mins?` &bull; ${r.grace_mins} min grace`:""}${r.blackout_start?` &bull; Blackout ${r.blackout_start}–${r.blackout_end}`:""}
+        </div>
+      </div>`;
+    }).join("");
+  } catch(e) { list.innerHTML = '<div class="sched-empty">Error loading rules.</div>'; }
+}
+
+// Trigger log for Monitor tab
+async function loadTriggerLogM() {
+  const list = document.getElementById("trigger-log-list-m");
+  if (!list) return;
+  try {
+    const rows = await supabaseGet("monitor_trigger_log?order=triggered_at.desc&limit=50");
+    if (!Array.isArray(rows)||!rows.length) { list.innerHTML = '<div class="sched-empty">No trigger events yet.</div>'; return; }
+    list.innerHTML = `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead><tr>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Time</th>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Rule</th>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Tier</th>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Value</th>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Action</th>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Outcome</th>
+      </tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);white-space:nowrap;">${new Date(r.triggered_at).toLocaleString()}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);">${r.rule_name||"—"}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);"><span class="trigger-tier ${r.tier}">${(r.tier||"").toUpperCase()}</span></td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-family:monospace;">${r.feed_value!=null?r.feed_value+" "+(r.feed_unit||""):"—"}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);">${r.action_description||"—"}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);color:${r.outcome==="fired"?"var(--green-dark)":r.outcome==="cancelled"?"var(--amber)":"var(--text-hint)"};">${r.outcome||"—"}</td>
+      </tr>`).join("")}</tbody></table></div>`;
+  } catch(e) { list.innerHTML = '<div class="sched-empty">Error loading trigger log.</div>'; }
+}
+
+// Device Monitoring proxy — clone admin-monitor content into monitor-device
+function injectDeviceMonitoring() {
+  const proxy  = document.getElementById("monitor-device-proxy");
+  const source = document.getElementById("tab-admin-monitor");
+  if (!proxy || !source) return;
+  proxy.innerHTML = source.innerHTML;
+  initMonitoring();
+}
+
+// Energy Monitor proxy — clone admin-energy content into monitor-energy
+function injectEnergyMonitor() {
+  const proxy  = document.getElementById("monitor-energy-proxy");
+  const source = document.getElementById("tab-admin-energy");
+  if (!proxy || !source) return;
+  proxy.innerHTML = source.innerHTML;
+  initEnergyMonitor();
+}
+
+// ── Data Feeds Chart ──────────────────────────────────────────────────────────
+
+let feedChartInstance = null;
+
+async function initFeedCharts() {
+  // Populate feed selector from active feeds
+  const sel = document.getElementById("feed-chart-key");
+  if (!sel) return;
+
+  const rows = await supabaseGet("monitor_feeds?enabled=eq.true&order=added_at.asc").catch(() => []);
+  monitorFeeds = Array.isArray(rows) ? rows : [];
+
+  sel.innerHTML = '<option value="">-- Select Feed --</option>';
+  monitorFeeds.forEach(f => {
+    const def = FEED_DEFS[f.feed_key] || {};
+    const o = document.createElement("option");
+    o.value       = f.feed_key;
+    o.textContent = `${def.icon||""} ${f.label} (${f.unit||""})`;
+    sel.appendChild(o);
+  });
+
+  // Auto-select first feed
+  if (monitorFeeds.length > 0) {
+    sel.value = monitorFeeds[0].feed_key;
+    await loadFeedChart();
+  }
+
+  await loadLatestFeedValues();
+}
+
+async function loadFeedChart() {
+  const feedKey  = document.getElementById("feed-chart-key")?.value;
+  const rangeHrs = parseInt(document.getElementById("feed-chart-range")?.value || "24");
+  const metaEl   = document.getElementById("feed-chart-meta");
+  const ctx      = document.getElementById("feed-data-chart");
+  if (!ctx) return;
+
+  if (!feedKey) {
+    if (metaEl) metaEl.textContent = "Select a feed to chart.";
+    return;
+  }
+
+  const def   = FEED_DEFS[feedKey] || {};
+  const since = new Date(Date.now() - rangeHrs * 60 * 60 * 1000).toISOString();
+
+  if (metaEl) metaEl.textContent = "Loading...";
+
+  try {
+    const rows = await supabaseGet(
+      `monitor_feed_readings?feed_key=eq.${encodeURIComponent(feedKey)}&recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=2000`
+    );
+
+    if (!Array.isArray(rows) || !rows.length) {
+      if (metaEl) metaEl.textContent = `No data for "${def.label}" in the last ${rangeHrs} hours. Data is collected every 5 minutes during monitor cycles.`;
+      if (feedChartInstance) { feedChartInstance.destroy(); feedChartInstance = null; }
+      await loadFeedRules(feedKey);
+      return;
+    }
+
+    const labels = rows.map(r => {
+      const d = new Date(r.recorded_at);
+      return rangeHrs <= 24
+        ? d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})
+        : d.toLocaleDateString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
+    });
+    const data = rows.map(r => r.value);
+
+    const min   = Math.min(...data.filter(v=>v!=null));
+    const max   = Math.max(...data.filter(v=>v!=null));
+    const avg   = (data.filter(v=>v!=null).reduce((a,b)=>a+b,0)/data.length).toFixed(1);
+    const last  = data[data.length-1];
+
+    if (metaEl) metaEl.innerHTML = `
+      <span style="margin-right:16px;"><strong>Latest:</strong> ${last} ${def.unit||""}</span>
+      <span style="margin-right:16px;"><strong>Min:</strong> ${min} ${def.unit||""}</span>
+      <span style="margin-right:16px;"><strong>Max:</strong> ${max} ${def.unit||""}</span>
+      <span><strong>Avg:</strong> ${avg} ${def.unit||""}</span>
+      <span style="margin-left:16px;color:var(--text-hint);">${rows.length} readings</span>`;
+
+    // Color by feed type
+    const color = feedKey.includes("temp")||feedKey.includes("heat") ? "#e67e22"
+      : feedKey.includes("lmp") ? "#c0392b"
+      : feedKey.includes("humidity") ? "#2980b9"
+      : feedKey.includes("uv")  ? "#8e44ad"
+      : "#1a5f4a";
+
+    if (feedChartInstance) { feedChartInstance.destroy(); feedChartInstance = null; }
+    feedChartInstance = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [{
+          label: `${def.label}${def.unit?" ("+def.unit+")":""}`,
+          data,
+          borderColor: color,
+          backgroundColor: color + "18",
+          borderWidth: 2,
+          pointRadius: rows.length > 100 ? 0 : 3,
+          tension: 0.3,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode:"index", intersect:false },
+        plugins: {
+          legend: { display:false },
+          tooltip: { callbacks: { label: ctx => `${ctx.parsed.y} ${def.unit||""}` } }
+        },
+        scales: {
+          x: { ticks: { maxTicksLimit:10, font:{size:10}, color:"#888780" }, grid:{color:"rgba(0,0,0,0.05)"} },
+          y: {
+            ticks: { font:{size:10}, color:"#888780" },
+            grid:  { color:"rgba(0,0,0,0.05)" },
+            title: { display:true, text: def.unit||"", font:{size:10}, color:"#888780" }
+          }
+        }
+      }
+    });
+    if (chartInstances) chartInstances["feed-data-chart"] = feedChartInstance;
+
+    // Load rules for this feed below the chart
+    await loadFeedRules(feedKey);
+
+  } catch(e) {
+    if (metaEl) metaEl.innerHTML = `<span style="color:var(--red);">Error loading feed data: ${e.message}</span>`;
+  }
+}
+
+async function loadLatestFeedValues() {
+  const container = document.getElementById("feed-latest-values");
+  if (!container) return;
+  if (!monitorFeeds.length) {
+    container.innerHTML = '<div class="sched-empty">No active feeds.</div>';
+    return;
+  }
+  try {
+    // Get the latest reading for each feed
+    const results = await Promise.all(monitorFeeds.map(async f => {
+      const rows = await supabaseGet(
+        `monitor_feed_readings?feed_key=eq.${encodeURIComponent(f.feed_key)}&order=recorded_at.desc&limit=1`
+      ).catch(() => []);
+      const latest = Array.isArray(rows) && rows.length ? rows[0] : null;
+      return { feed:f, latest };
+    }));
+
+    container.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Feed</th>
+        <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Latest Value</th>
+        <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Recorded</th>
+        <th style="text-align:center;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Chart</th>
+      </tr></thead>
+      <tbody>${results.map(({feed:f,latest}) => {
+        const def = FEED_DEFS[f.feed_key]||{};
+        const val = latest ? `${latest.value} ${f.unit||""}` : "No data";
+        const ts  = latest ? new Date(latest.recorded_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) : "—";
+        return `<tr>
+          <td style="padding:7px 10px;border-bottom:0.5px solid var(--border);">${def.icon||"📡"} ${f.label}</td>
+          <td style="padding:7px 10px;border-bottom:0.5px solid var(--border);text-align:right;font-family:monospace;font-weight:600;color:var(--text-primary);">${val}</td>
+          <td style="padding:7px 10px;border-bottom:0.5px solid var(--border);text-align:right;color:var(--text-hint);">${ts}</td>
+          <td style="padding:7px 10px;border-bottom:0.5px solid var(--border);text-align:center;">
+            <button onclick="document.getElementById('feed-chart-key').value='${f.feed_key}';loadFeedChart();"
+              style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:10px;cursor:pointer;">&#128202; Chart</button>
+          </td>
+        </tr>`;
+      }).join("")}</tbody></table>`;
+  } catch(e) {
+    container.innerHTML = `<div class="sched-empty">Error: ${e.message}</div>`;
+  }
+}
+
+
+
+// ── Inline Rule Form (Data Feeds tab) ─────────────────────────────────────────
+
+let inlineSelectedTier = null;
+let inlineCurrentFeedKey = null;
+
+function showInlineRuleForm() {
+  const form = document.getElementById("inline-rule-form");
+  if (!form) return;
+  form.style.display = "block";
+
+  // Pre-populate feed label and hint
+  const feedKey = document.getElementById("feed-chart-key")?.value;
+  inlineCurrentFeedKey = feedKey;
+  const def = FEED_DEFS[feedKey] || {};
+  const labelEl = document.getElementById("inline-feed-label");
+  const unitEl  = document.getElementById("inline-threshold-unit");
+  const hintEl  = document.getElementById("inline-threshold-hint");
+  if (labelEl) labelEl.textContent = def.label || feedKey;
+  if (unitEl)  unitEl.textContent  = def.unit || "";
+  if (hintEl)  hintEl.textContent  = `Typical: ${def.typical || "—"} — Suggested trigger: ${def.typical_trigger || "?"} ${def.unit || ""}`;
+
+  // Pre-fill threshold with current value if available
+  const fv = feedValues[feedKey];
+  const threshEl = document.getElementById("inline-threshold");
+  if (threshEl && def.typical_trigger) {
+    threshEl.placeholder = `e.g. ${def.typical_trigger}`;
+  }
+
+  // Reset tier selection
+  inlineSelectedTier = null;
+  document.querySelectorAll(".inline-tier-btn").forEach(b => {
+    b.style.borderColor = "var(--border-md)";
+    b.style.background  = "var(--surface)";
+  });
+  document.getElementById("inline-autopilot-warning").style.display = "none";
+  document.getElementById("inline-grace-row").style.display = "none";
+
+  // Reset target
+  document.getElementById("inline-target-type").selectedIndex = 0;
+  document.getElementById("inline-target").innerHTML = '<option value="" disabled selected>-- Choose --</option>';
+  document.getElementById("inline-rule-name").value = "";
+  document.getElementById("inline-threshold").value = "";
+
+  form.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function hideInlineRuleForm() {
+  const form = document.getElementById("inline-rule-form");
+  if (form) form.style.display = "none";
+  inlineSelectedTier = null;
+}
+
+function selectInlineTier(tier, btn) {
+  inlineSelectedTier = tier;
+  // Update button styles
+  document.querySelectorAll(".inline-tier-btn").forEach(b => {
+    b.style.borderColor = "var(--border-md)";
+    b.style.background  = "var(--surface)";
+    b.style.fontWeight  = "600";
+  });
+  const colors = { alert:"var(--blue-dark)", suggest:"var(--amber)", autopilot:"var(--red)" };
+  btn.style.borderColor = colors[tier];
+  btn.style.background  = tier === "alert" ? "var(--blue-lt)" : tier === "suggest" ? "var(--amber-bg)" : "var(--red-lt)";
+
+  // Show autopilot warning and grace period
+  const apWarn   = document.getElementById("inline-autopilot-warning");
+  const graceRow = document.getElementById("inline-grace-row");
+  if (apWarn)   apWarn.style.display   = tier === "autopilot" ? "block" : "none";
+  if (graceRow) graceRow.style.display = tier === "autopilot" ? "block" : "none";
+}
+
+function onInlineTargetChange() {
+  const type = document.getElementById("inline-target-type")?.value;
+  const sel  = document.getElementById("inline-target");
+  if (!sel || !type) return;
+  sel.innerHTML = '<option value="" disabled selected>-- Choose --</option>';
+  if (type === "group") {
+    [1,2,3].forEach(n => {
+      const o = document.createElement("option");
+      o.value = `group_${n}`;
+      o.textContent = groupNames[n] || `Group ${n}`;
+      sel.appendChild(o);
+    });
+  } else {
+    DEVICES.filter(d => !d.uid.includes("PLACEHOLDER")).forEach(d => {
+      const o = document.createElement("option");
+      o.value = d.uid;
+      o.textContent = d.name;
+      sel.appendChild(o);
+    });
+  }
+}
+
+async function saveInlineRule() {
+  if (!inlineSelectedTier) {
+    setStatus("error", "Please select a tier (Alert / Suggest / Autopilot).");
+    return;
+  }
+  if (!inlineCurrentFeedKey) {
+    setStatus("error", "No feed selected. Select a feed from the chart above first.");
+    return;
+  }
+  const threshold = parseFloat(document.getElementById("inline-threshold")?.value);
+  if (isNaN(threshold)) {
+    setStatus("error", "Please enter a threshold value.");
+    return;
+  }
+  const targetId = document.getElementById("inline-target")?.value;
+  if (!targetId && inlineSelectedTier !== "alert") {
+    setStatus("error", "Please select a target device or group.");
+    return;
+  }
+  if (inlineSelectedTier === "autopilot" && currentUserRole !== "administrator") {
+    setStatus("error", "Autopilot rules require Administrator role.");
+    return;
+  }
+
+  const targetType = document.getElementById("inline-target-type")?.value;
+  const targetName = targetType === "group"
+    ? (groupNames[parseInt(targetId.replace("group_",""))] || targetId)
+    : (DEVICES.find(d => d.uid === targetId)?.name || targetId);
+
+  const def = FEED_DEFS[inlineCurrentFeedKey] || {};
+
+  const record = {
+    tier:          inlineSelectedTier,
+    name:          document.getElementById("inline-rule-name")?.value?.trim() || `${def.label} ${document.getElementById("inline-operator")?.value} ${threshold} ${def.unit||""}`,
+    feed_key:      inlineCurrentFeedKey,
+    operator:      document.getElementById("inline-operator")?.value || "gt",
+    threshold,
+    target_type:   targetType || null,
+    target_id:     targetId   || null,
+    target_name:   targetName || null,
+    relay_action:  "all_on",
+    mode:          "dlc",
+    strategy_val:  document.getElementById("inline-strategy")?.value || "9|15|30",
+    duration_mins: parseInt(document.getElementById("inline-duration")?.value) || 60,
+    max_per_day:   parseInt(document.getElementById("inline-max-per-day")?.value) || 3,
+    min_rest_mins: parseInt(document.getElementById("inline-min-rest")?.value) || 120,
+    grace_mins:    inlineSelectedTier === "autopilot" ? parseInt(document.getElementById("inline-grace")?.value) || 5 : null,
+    enabled:       true,
+    created_by:    currentUser?.email || null,
+    created_at:    new Date().toISOString()
+  };
+
+  try {
+    await supabasePost("monitor_rules", record);
+    setStatus("ready", `Rule "${record.name}" saved.`);
+    hideInlineRuleForm();
+    // Reload rules list for this feed
+    await loadFeedRules(inlineCurrentFeedKey);
+    // Also refresh the rules lists on the Triggers sub-tab
+    await loadRules();
+    await loadRulesList("rules-list-m");
+  } catch(e) {
+    setStatus("error", "Failed to save rule: " + e.message);
+    console.error("saveInlineRule:", e);
+  }
+}
+
+// Load rules for the currently charted feed
+async function loadFeedRules(feedKey) {
+  const card    = document.getElementById("feed-rules-card");
+  const list    = document.getElementById("feed-rules-list");
+  if (!card || !list || !feedKey) return;
+
+  card.style.display = "block";
+
+  const def = FEED_DEFS[feedKey] || {};
+
+  // Update card title
+  const titleEl = card.querySelector(".sched-card-title");
+  if (titleEl) titleEl.innerHTML = `&#9881;&#65039; Rules — <span style="font-family:monospace;color:var(--text-secondary);">${def.label || feedKey}</span>`;
+
+  // Update inline feed label
+  const labelEl = document.getElementById("inline-feed-label");
+  const unitEl  = document.getElementById("inline-threshold-unit");
+  const hintEl  = document.getElementById("inline-threshold-hint");
+  if (labelEl) labelEl.textContent = def.label || feedKey;
+  if (unitEl)  unitEl.textContent  = def.unit  || "";
+  if (hintEl)  hintEl.textContent  = `Typical: ${def.typical||"—"} — Suggested trigger: ${def.typical_trigger||"?"} ${def.unit||""}`;
+
+  try {
+    const rows = await supabaseGet(
+      `monitor_rules?feed_key=eq.${encodeURIComponent(feedKey)}&order=created_at.asc`
+    );
+
+    if (!Array.isArray(rows) || !rows.length) {
+      list.innerHTML = `<div class="sched-empty">No rules for <strong>${def.label||feedKey}</strong> yet. Click + Quick Add Rule to create one.</div>`;
+      return;
+    }
+
+    list.innerHTML = rows.map(r => {
+      const op = {gt:">",gte:"≥",lt:"<",lte:"≤",eq:"="}[r.operator]||r.operator;
+      return `<div class="rule-card" style="margin-bottom:8px;">
+        <div class="rule-card-header">
+          <div class="rule-status ${r.enabled?"enabled":"disabled"}"></div>
+          <span class="rule-tier-badge ${r.tier}">${r.tier.toUpperCase()}</span>
+          <div class="rule-condition" style="flex:1;">${r.name||`${def.label} ${op} ${r.threshold} ${def.unit||""}`}</div>
+          <div style="display:flex;gap:5px;">
+            <button onclick="toggleRuleEnabled(${r.id},${!r.enabled});setTimeout(()=>loadFeedRules('${feedKey}'),300);"
+              style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:10px;cursor:pointer;">
+              ${r.enabled?"Disable":"Enable"}
+            </button>
+            <button onclick="editRule(${r.id})"
+              style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:10px;cursor:pointer;">Edit</button>
+            <button onclick="deleteRule(${r.id});setTimeout(()=>loadFeedRules('${feedKey}'),300);"
+              style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">Delete</button>
+          </div>
+        </div>
+        <div class="rule-card-body">
+          <strong>Condition:</strong> ${def.label} ${op} ${r.threshold} ${def.unit||""}<br/>
+          ${r.target_name ? `<strong>Action:</strong> ${r.relay_action||"all_on"} on ${r.target_name} &bull; Strategy ${(r.strategy_val||"").split("|")[0]} &bull; ${r.duration_mins} min<br/>` : ""}
+          <strong>Guards:</strong> Max ${r.max_per_day}/day &bull; ${r.min_rest_mins} min rest${r.grace_mins?` &bull; ${r.grace_mins} min grace`:""}
+        </div>
+      </div>`;
+    }).join("");
+  } catch(e) {
+    list.innerHTML = `<div class="sched-empty">Error loading rules: ${e.message}</div>`;
+  }
 }
 
 
