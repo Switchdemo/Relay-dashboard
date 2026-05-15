@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Relay Control Panel</title>
+<title>Load Control Panel v2.0.0</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -449,7 +449,7 @@
 <div class="sticky-header">
   <div class="page-header">
     <div class="page-title">Load Control Device Panel</div>
-    <div class="page-sub">Load control &amp; scheduling</div>
+    <div class="page-sub">Load control &amp; scheduling <span style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;color:var(--text-hint);background:var(--surface2);border:0.5px solid var(--border-md);padding:1px 7px;border-radius:10px;margin-left:6px;letter-spacing:0.04em;">v2.0.0</span></div>
   </div>
   <!-- 7-day weather strip -->
   <div id="header-wx-strip" style="display:none;">
@@ -1247,6 +1247,7 @@
       <button class="help-nav-btn" onclick="showHelpSection('devices')">Devices</button>
       <button class="help-nav-btn" onclick="showHelpSection('hex')">LC Hex</button>
       <button class="help-nav-btn" onclick="showHelpSection('glossary')">Glossary</button>
+      <button class="help-nav-btn" onclick="showHelpSection('changelog')">Version History</button>
     </div>
     <div class="help-modal-body" id="help-modal-body"></div>
   </div>
@@ -2175,6 +2176,7 @@
             <button class="queue-refresh" onclick="showHelpTab('devices')">Devices</button>
             <button class="queue-refresh" onclick="showHelpTab('hex')">LC Hex</button>
             <button class="queue-refresh" onclick="showHelpTab('glossary')">Glossary</button>
+            <button class="queue-refresh" onclick="showHelpTab('changelog')">Version History</button>
           </div>
         </div>
         <div id="help-tab-body" style="min-height:400px;"></div>
@@ -2214,6 +2216,8 @@
 </div>
 
 <script>
+const LCP_VERSION  = "2.0.0";
+
 const PROXY_URL    = "https://patient-shadow-e2b7.hurd71185.workers.dev/";
 const SUPABASE_URL = "https://diurqiuzknxzcdxqjfig.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRpdXJxaXV6a254emNkeHFqZmlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5ODQ3OTYsImV4cCI6MjA5MzU2MDc5Nn0.jUs0QYAyaOQmirQgCTjP7ldGqn9hhpzBunGLMVv0x8U";
@@ -9109,6 +9113,57 @@ const HELP_CONTENT = {
           </tbody>
         </table>
         <div class="help-note">Use the 🔍 Hex Parser button in the bottom-right corner to decode any LC hex string into human-readable fields.</div>
+      </div>`
+  },
+
+  changelog: {
+    title: "Version History",
+    html: `
+      <div class="help-section">
+        <div class="help-section-title">Current Version</div>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--green-bg);border:0.5px solid var(--green);border-radius:var(--radius-sm);margin-bottom:1rem;">
+          <div style="font-family:'DM Mono',monospace;font-size:24px;font-weight:700;color:var(--green-dark);">v2.0.0</div>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--text-primary);">Load Control Platform</div>
+            <div style="font-size:11px;color:var(--text-hint);">Released May 15, 2026</div>
+          </div>
+        </div>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">v2.0.0 — What's New</div>
+        <table class="help-table">
+          <thead><tr><th>Feature</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>OpenADR 2.0b VEN</td><td>Full Virtual End Node implementation. Receives utility dispatch signals and executes load control events automatically.</td></tr>
+            <tr><td>BAS/DI Architecture</td><td>Per-relay shed level assignment for building automation system integration. Each relay maps to a discrete input signal level.</td></tr>
+            <tr><td>Direct Load Architecture</td><td>Single designated relay with duty cycle intensity scaling by signal severity. For direct-wired equipment.</td></tr>
+            <tr><td>DR Device Configuration</td><td>Per-device and per-relay demand response configuration with bulk actions. VEN resource designation.</td></tr>
+            <tr><td>Dispatch Logging</td><td>Every LC hex command and OpenADR payload captured permanently in Supabase for audit and verification.</td></tr>
+            <tr><td>Auto Event Cleanup</td><td>Expired OpenADR events automatically restored and marked completed — even if browser was closed during the event.</td></tr>
+            <tr><td>Background Poller</td><td>OpenADR event monitoring starts automatically on login. No manual tab navigation required.</td></tr>
+            <tr><td>Dynamic Device Mgmt</td><td>Add, disable, or remove devices from the Admin tab without code changes. Instant effect across all dashboard views.</td></tr>
+            <tr><td>Schedule Confirmation</td><td>Full event review modal before any scheduled command is sent — shows LC hex, strategy, target, and timing.</td></tr>
+            <tr><td>In-App Help System</td><td>Contextual help icons throughout the dashboard linking directly to relevant reference content.</td></tr>
+            <tr><td>Client Intake Questionnaire</td><td>Professional 5-step intake form with JSON export for streamlined site onboarding.</td></tr>
+            <tr><td>Program Builder</td><td>Load questionnaire JSON, add credentials and devices, generate worker.js and SQL schema.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">v1.0.0 — Initial Release</div>
+        <table class="help-table">
+          <thead><tr><th>Feature</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>Relay Control</td><td>Manual 4-relay control per device with real-time status.</td></tr>
+            <tr><td>Event Scheduler</td><td>Date/time based scheduling with duty cycle strategy selection.</td></tr>
+            <tr><td>Device Groups</td><td>Group-based bulk command delivery.</td></tr>
+            <tr><td>Fleet Health</td><td>Signal strength, voltage, firmware monitoring.</td></tr>
+            <tr><td>Data & History</td><td>Device readings, charts, and historical data logs.</td></tr>
+            <tr><td>User Authentication</td><td>Role-based access with optional 2FA.</td></tr>
+            <tr><td>Weather Display</td><td>Current conditions and forecast in dashboard header.</td></tr>
+            <tr><td>Energy Monitor</td><td>Power consumption tracking and monitoring sessions.</td></tr>
+          </tbody>
+        </table>
       </div>`
   },
 
