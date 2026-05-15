@@ -402,6 +402,55 @@
   .nws-headline-desc { font-size:14px; font-weight:600; color:var(--text-primary); }
   .nws-headline-station { font-size:11px; color:var(--text-hint); margin-top:2px; }
   .nws-alert { background:var(--amber-bg); border:0.5px solid var(--amber); border-radius:var(--radius-sm); padding:8px 12px; font-size:12px; color:var(--amber); margin-bottom:10px; display:flex; gap:8px; align-items:flex-start; }
+
+  /* ── Monitor & Triggers ── */
+  .feed-card { display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border:0.5px solid var(--border-md);border-radius:var(--radius-sm);margin-bottom:8px;background:var(--surface); }
+  .feed-status-dot { width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:3px; }
+  .feed-status-dot.live { background:var(--green-dark); }
+  .feed-status-dot.registration { background:var(--amber); }
+  .feed-status-dot.unavailable { background:var(--red); }
+  .feed-status-dot.weather { background:var(--blue-dark); }
+  .feed-info { flex:1;min-width:0; }
+  .feed-name { font-size:13px;font-weight:600;color:var(--text-primary); }
+  .feed-meta { font-size:11px;color:var(--text-hint);margin-top:2px; }
+  .feed-value { font-family:monospace;font-size:12px;font-weight:600;color:var(--text-primary);white-space:nowrap; }
+  .feed-badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;font-family:monospace; }
+  .feed-badge.live { background:var(--green-bg);color:var(--green-dark); }
+  .feed-badge.registration { background:var(--amber-bg);color:var(--amber); }
+  .feed-badge.unavailable { background:var(--red-lt);color:var(--red); }
+  .feed-badge.weather { background:var(--blue-lt);color:var(--blue-dark); }
+  .rule-card { border:0.5px solid var(--border-md);border-radius:var(--radius-sm);margin-bottom:8px;overflow:hidden; }
+  .rule-card-header { display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2); }
+  .rule-tier-badge { padding:2px 10px;border-radius:10px;font-size:10px;font-weight:700;font-family:monospace; }
+  .rule-tier-badge.alert { background:var(--blue-lt);color:var(--blue-dark); }
+  .rule-tier-badge.suggest { background:var(--amber-bg);color:var(--amber); }
+  .rule-tier-badge.autopilot { background:var(--red-lt);color:var(--red); }
+  .rule-condition { font-size:12px;color:var(--text-primary);flex:1;font-family:monospace; }
+  .rule-status { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
+  .rule-status.enabled { background:var(--green-dark); }
+  .rule-status.disabled { background:var(--border-md); }
+  .rule-card-body { padding:10px 14px;border-top:0.5px solid var(--border);font-size:12px;color:var(--text-secondary);line-height:1.6; }
+  .trigger-row { display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:0.5px solid var(--border);font-size:12px; }
+  .trigger-row:last-child { border-bottom:none; }
+  .trigger-tier { padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;font-family:monospace; }
+
+  /* Add Rule Modal */
+  .rule-modal-overlay { display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:600;align-items:center;justify-content:center;padding:1rem; }
+  .rule-modal-overlay.active { display:flex; }
+  .rule-modal-box { background:var(--surface);border-radius:var(--radius);width:100%;max-width:620px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,0.25);overflow:hidden; }
+  .rule-modal-header { display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:0.5px solid var(--border-md);background:var(--text-primary);color:#fff;flex-shrink:0; }
+  .rule-modal-body { overflow-y:auto;padding:1.25rem;flex:1; }
+  .rule-form-section { margin-bottom:1.25rem;padding-bottom:1.25rem;border-bottom:0.5px solid var(--border); }
+  .rule-form-section:last-child { border-bottom:none;margin-bottom:0; }
+  .rule-form-label { font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;font-family:monospace;display:block; }
+  .rule-tier-selector { display:grid;grid-template-columns:repeat(3,1fr);gap:8px; }
+  .rule-tier-opt { padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;text-align:center;transition:all .15s; }
+  .rule-tier-opt:hover { border-color:var(--text-primary); }
+  .rule-tier-opt.selected { border-color:var(--text-primary);background:var(--surface2); }
+  .rule-tier-opt-name { font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:3px; }
+  .rule-tier-opt-desc { font-size:10px;color:var(--text-hint);line-height:1.4; }
+  .autopilot-warning { background:var(--red-lt);border:0.5px solid var(--red);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--red);margin-top:10px;line-height:1.6; }
+  .grace-period-row { display:none; }
 </style>
 </head>
 <body>
@@ -535,6 +584,7 @@
     <button class="sub-tab-btn" id="sub-admin-energy" onclick="switchSub('admin','admin-energy',this)">Energy Monitor</button>
     <button class="sub-tab-btn" id="sub-admin-openadr" onclick="switchSub('admin','admin-openadr',this)">OpenADR Config</button>
     <button class="sub-tab-btn" id="sub-admin-help" onclick="switchSub('admin','admin-help',this)">Help & Reference</button>
+    <button class="sub-tab-btn" id="sub-admin-monitor-triggers" onclick="switchSub('admin','admin-monitor-triggers',this)">Monitor & Triggers</button>
   </div>
   <div class="sub-tabs" id="sub-tabs-events" style="display:none;">
     <button class="sub-tab-btn active" id="sub-scheduler" onclick="switchSub('events','scheduler',this)">Event Scheduler</button>
@@ -1375,6 +1425,194 @@
       <button class="font-size-btn" data-size="20px">X-Large</button>
     </div>
     <button onclick="location.reload()" style="width:100%;padding:8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;cursor:pointer;color:var(--text-secondary);font-weight:500;">↺ Apply & Refresh</button>
+  </div>
+</div>
+
+
+<!-- ── Add/Edit Rule Modal ── -->
+<div class="rule-modal-overlay" id="rule-modal" onclick="closeRuleModal(event)">
+  <div class="rule-modal-box">
+    <div class="rule-modal-header">
+      <span id="rule-modal-title" style="font-size:14px;font-weight:600;">New Trigger Rule</span>
+      <button style="background:none;border:none;color:rgba(255,255,255,.7);font-size:18px;cursor:pointer;" onclick="closeRuleModal()">&#10005;</button>
+    </div>
+    <div class="rule-modal-body">
+
+      <!-- Tier selection -->
+      <div class="rule-form-section">
+        <label class="rule-form-label">Action Tier</label>
+        <div class="rule-tier-selector">
+          <div class="rule-tier-opt" id="tier-alert" onclick="selectRuleTier('alert')">
+            <div class="rule-tier-opt-name" style="color:var(--blue-dark);">&#128276; Alert</div>
+            <div class="rule-tier-opt-desc">Notify operator. No automatic action.</div>
+          </div>
+          <div class="rule-tier-opt" id="tier-suggest" onclick="selectRuleTier('suggest')">
+            <div class="rule-tier-opt-name" style="color:var(--amber);">&#128161; Suggest</div>
+            <div class="rule-tier-opt-desc">Pre-fill an event for operator to confirm.</div>
+          </div>
+          <div class="rule-tier-opt" id="tier-autopilot" onclick="selectRuleTier('autopilot')">
+            <div class="rule-tier-opt-name" style="color:var(--red);">&#9889; Autopilot</div>
+            <div class="rule-tier-opt-desc">Fire event automatically with grace period.</div>
+          </div>
+        </div>
+        <div class="autopilot-warning" id="autopilot-warning" style="display:none;">
+          &#9888;&#65039; <strong>Autopilot</strong> will automatically send commands to devices without operator confirmation.
+          Restricted to Administrator role. Ensure hard guards (max events/day, rest period, blackout hours) are configured before enabling.
+        </div>
+      </div>
+
+      <!-- Rule name -->
+      <div class="rule-form-section">
+        <label class="rule-form-label">Rule Name</label>
+        <input type="text" id="rule-name" placeholder="e.g. High Price Alert, Heat Wave DR" style="width:100%;padding:8px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:13px;" />
+      </div>
+
+      <!-- Condition -->
+      <div class="rule-form-section">
+        <label class="rule-form-label">Condition</label>
+        <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin-bottom:10px;">
+          <select id="rule-feed" onchange="onRuleFeedChange()" style="padding:8px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+            <option value="">-- Select Feed --</option>
+            <optgroup label="Grid Pricing">
+              <option value="spp_lmp">SPP Real-Time LMP ($/MWh)</option>
+              <option value="ercot_lmp">ERCOT Real-Time LMP ($/MWh)</option>
+              <option value="spp_da_lmp">SPP Day-Ahead LMP ($/MWh)</option>
+            </optgroup>
+            <optgroup label="Grid Status">
+              <option value="spp_status">SPP Grid Status Level</option>
+              <option value="ercot_status">ERCOT Grid Status Level</option>
+            </optgroup>
+            <optgroup label="Weather">
+              <option value="nws_temp">Temperature (&#176;F)</option>
+              <option value="nws_humidity">Humidity (%)</option>
+              <option value="nws_heat_index">Heat Index (&#176;F)</option>
+              <option value="openmeteo_uv">UV Index</option>
+              <option value="openmeteo_temp_forecast">Forecast High (&#176;F)</option>
+            </optgroup>
+            <optgroup label="Time-Based">
+              <option value="tou_peak">Time-of-Use Peak Window</option>
+              <option value="tou_offpeak">Time-of-Use Off-Peak Window</option>
+            </optgroup>
+          </select>
+          <select id="rule-operator" style="padding:8px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+            <option value="gt">&gt; Greater than</option>
+            <option value="gte">&ge; Greater or equal</option>
+            <option value="lt">&lt; Less than</option>
+            <option value="lte">&le; Less or equal</option>
+            <option value="eq">= Equals</option>
+          </select>
+          <div style="position:relative;">
+            <input type="number" id="rule-threshold" placeholder="Value" style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:13px;font-family:monospace;" />
+            <span id="rule-threshold-hint" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-hint);pointer-events:none;"></span>
+          </div>
+        </div>
+        <div id="rule-feed-hint" style="font-size:11px;color:var(--text-hint);font-style:italic;margin-bottom:8px;display:none;"></div>
+
+        <!-- Second condition (AND) -->
+        <div id="rule-condition2-row" style="margin-top:8px;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;margin-bottom:8px;">
+            <input type="checkbox" id="rule-use-condition2" onchange="toggleCondition2()" />
+            Add second condition (AND)
+          </label>
+          <div id="rule-condition2" style="display:none;display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;">
+            <select id="rule-feed2" style="padding:8px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="">-- Select Feed --</option>
+              <optgroup label="Weather"><option value="nws_temp">Temperature (&#176;F)</option><option value="nws_humidity">Humidity (%)</option><option value="nws_heat_index">Heat Index (&#176;F)</option><option value="openmeteo_uv">UV Index</option></optgroup>
+              <optgroup label="Grid Pricing"><option value="spp_lmp">SPP LMP ($/MWh)</option><option value="ercot_lmp">ERCOT LMP ($/MWh)</option></optgroup>
+              <optgroup label="Time-Based"><option value="tou_peak">TOU Peak Window</option></optgroup>
+            </select>
+            <select id="rule-operator2" style="padding:8px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="gt">&gt; Greater than</option><option value="gte">&ge; &ge; or equal</option><option value="lt">&lt; Less than</option><option value="lte">&le; &le; or equal</option>
+            </select>
+            <input type="number" id="rule-threshold2" placeholder="Value" style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:13px;font-family:monospace;" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Action -->
+      <div class="rule-form-section" id="rule-action-section">
+        <label class="rule-form-label">Action</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div>
+            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Target Type</label>
+            <select id="rule-target-type" onchange="onRuleTargetChange()" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="">-- Select --</option>
+              <option value="device">Individual Device</option>
+              <option value="group">Group</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Target</label>
+            <select id="rule-target" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="" disabled selected>-- Choose One --</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Relay Action</label>
+            <select id="rule-relay-action" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="all_on">All Relays ON</option>
+              <option value="relay1_on">Relay 1 ON</option>
+              <option value="relay2_on">Relay 2 ON</option>
+              <option value="relay3_on">Relay 3 ON</option>
+              <option value="relay4_on">Relay 4 ON</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Control Mode</label>
+            <select id="rule-mode" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="dlc">DLC</option><option value="di">DI</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Strategy</label>
+            <select id="rule-strategy" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="5|30|30">5 — 25% shed (30 min)</option>
+              <option value="9|15|30">9 — 50% shed (30 min)</option>
+              <option value="15|6|30">15 — 80% shed (30 min)</option>
+              <option value="19|0|30">19 — 100% shed (30 min)</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Duration (min)</label>
+            <input type="number" id="rule-duration" value="60" min="15" max="480" step="15" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Guards (shown for all tiers, required for autopilot) -->
+      <div class="rule-form-section">
+        <label class="rule-form-label">Guards & Limits</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+          <div>
+            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Max triggers / 24h</label>
+            <input type="number" id="rule-max-per-day" value="3" min="1" max="24" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Min rest between (min)</label>
+            <input type="number" id="rule-min-rest" value="120" min="15" max="480" step="15" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div class="grace-period-row" id="rule-grace-row">
+            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">&#9889; Grace period (min)</label>
+            <input type="number" id="rule-grace" value="5" min="1" max="30" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+        </div>
+        <div style="margin-top:10px;">
+          <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Blackout Hours (no triggers during)</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <input type="time" id="rule-blackout-start" style="padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+            <input type="time" id="rule-blackout-end" style="padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <span style="font-size:10px;color:var(--text-hint);">Leave blank for no blackout window</span>
+        </div>
+      </div>
+
+      <!-- Save -->
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button onclick="closeRuleModal()" style="padding:9px 20px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:13px;cursor:pointer;color:var(--text-secondary);">Cancel</button>
+        <button onclick="saveRule()" style="padding:9px 24px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save Rule</button>
+      </div>
+
+    </div>
   </div>
 </div>
 
@@ -2339,6 +2577,118 @@
 </div>
 
 
+
+<!-- ── MONITOR & TRIGGERS TAB ── -->
+<div class="tab-pane" id="tab-admin-monitor-triggers">
+  <div class="scroll-content">
+    <div style="max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <!-- Feed Discovery -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128225; Feed Discovery</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="queue-refresh" onclick="runFeedDiscovery()">&#128269; Discover Feeds</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:12px;line-height:1.6;">
+          Enter your state and utility to discover available grid and weather data feeds. Each feed is tested live before being shown.
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end;margin-bottom:1rem;">
+          <div>
+            <label style="font-size:10px;font-weight:600;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;font-family:monospace;">State</label>
+            <select id="fd-state" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="">-- Select State --</option>
+              <option value="TX">Texas</option>
+              <option value="OK">Oklahoma</option>
+              <option value="KS">Kansas</option>
+              <option value="NE">Nebraska</option>
+              <option value="ND">North Dakota</option>
+              <option value="SD">South Dakota</option>
+              <option value="MN">Minnesota</option>
+              <option value="IA">Iowa</option>
+              <option value="MO">Missouri</option>
+              <option value="AR">Arkansas</option>
+              <option value="LA">Louisiana</option>
+              <option value="MT">Montana</option>
+              <option value="WY">Wyoming</option>
+              <option value="CO">Colorado</option>
+              <option value="NM">New Mexico</option>
+              <option value="ME">Maine</option>
+              <option value="NH">New Hampshire</option>
+              <option value="VT">Vermont</option>
+              <option value="MA">Massachusetts</option>
+              <option value="CT">Connecticut</option>
+              <option value="RI">Rhode Island</option>
+              <option value="NY">New York</option>
+              <option value="CA">California</option>
+              <option value="IL">Illinois</option>
+              <option value="MI">Michigan</option>
+              <option value="IN">Indiana</option>
+              <option value="OH">Ohio</option>
+              <option value="WI">Wisconsin</option>
+              <option value="PA">Pennsylvania</option>
+              <option value="NJ">New Jersey</option>
+              <option value="MD">Maryland</option>
+              <option value="DE">Delaware</option>
+              <option value="VA">Virginia</option>
+              <option value="WV">West Virginia</option>
+              <option value="NC">North Carolina</option>
+              <option value="KY">Kentucky</option>
+              <option value="TN">Tennessee</option>
+              <option value="MS">Mississippi</option>
+              <option value="AL">Alabama</option>
+              <option value="GA">Georgia</option>
+              <option value="FL">Florida</option>
+              <option value="SC">South Carolina</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:600;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;font-family:monospace;">Utility (optional)</label>
+            <input type="text" id="fd-utility" placeholder="e.g. OG&E, PSO, Entergy..." style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:600;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;font-family:monospace;">Site Coordinates</label>
+            <input type="text" id="fd-coords" placeholder="lat,lon (auto from weather)" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;" />
+          </div>
+          <button onclick="runFeedDiscovery()" style="padding:7px 18px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;height:34px;">Discover</button>
+        </div>
+        <div id="fd-results"></div>
+      </div>
+
+      <!-- Active Feeds -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128225; Active Data Feeds</div>
+          <button class="queue-refresh" onclick="loadActiveFeeds()">Refresh</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:10px;">Feeds added from discovery. Each is polled on its configured interval and values stored for trending.</div>
+        <div id="active-feeds-list"><div class="sched-empty">No feeds configured. Use Feed Discovery above to add feeds.</div></div>
+      </div>
+
+      <!-- Rules Engine -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#9881;&#65039; Trigger Rules</div>
+          <button class="queue-refresh" onclick="showAddRuleModal()">+ Add Rule</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:10px;">Rules watch active feeds and trigger actions when conditions are met.</div>
+        <div id="rules-list"><div class="sched-empty">No rules configured.</div></div>
+      </div>
+
+      <!-- Trigger Log -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128203; Trigger Log</div>
+          <button class="queue-refresh" onclick="loadTriggerLog()">Refresh</button>
+        </div>
+        <div id="trigger-log-list"><div class="sched-empty">No trigger events yet.</div></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- ── HELP & REFERENCE TAB ── -->
 <div class="tab-pane" id="tab-admin-help">
   <div class="scroll-content">
@@ -2572,6 +2922,7 @@ function runTabInit(name) {
   if (name === "openadr")         { initOpenADREvents(); }
   if (name === "admin-openadr")   { initOpenADRConfig(); }
   if (name === "admin-help")      { showHelpTab("scheduling"); }
+  if (name === "admin-monitor-triggers") { initMonitorTriggers(); }
 }
 
 function switchTab(name, btn) { switchMain(name, btn); }
@@ -9614,6 +9965,805 @@ function initWxExportDates() {
     ro.observe(target);
   }
 })();
+
+
+// ── Monitor & Triggers Engine ─────────────────────────────────────────────────
+
+// ── ISO/State mapping ─────────────────────────────────────────────────────────
+const STATE_ISO_MAP = {
+  TX:{ iso:"ERCOT", name:"Electric Reliability Council of Texas", feeds:["ercot_lmp","ercot_status"] },
+  OK:{ iso:"SPP",   name:"Southwest Power Pool", feeds:["spp_lmp","spp_da_lmp","spp_status"] },
+  KS:{ iso:"SPP",   name:"Southwest Power Pool", feeds:["spp_lmp","spp_da_lmp","spp_status"] },
+  NE:{ iso:"SPP",   name:"Southwest Power Pool", feeds:["spp_lmp","spp_status"] },
+  ND:{ iso:"SPP",   name:"Southwest Power Pool", feeds:["spp_lmp","spp_status"] },
+  SD:{ iso:"SPP",   name:"Southwest Power Pool", feeds:["spp_lmp","spp_status"] },
+  MN:{ iso:"MISO",  name:"Midcontinent ISO",     feeds:["miso_lmp"] },
+  IA:{ iso:"MISO",  name:"Midcontinent ISO",     feeds:["miso_lmp"] },
+  MO:{ iso:"MISO",  name:"Midcontinent ISO",     feeds:["miso_lmp"] },
+  AR:{ iso:"MISO",  name:"Midcontinent ISO",     feeds:["miso_lmp"] },
+  IL:{ iso:"MISO",  name:"Midcontinent ISO",     feeds:["miso_lmp"] },
+  MI:{ iso:"MISO",  name:"Midcontinent ISO",     feeds:["miso_lmp"] },
+  IN:{ iso:"MISO",  name:"Midcontinent ISO",     feeds:["miso_lmp"] },
+  WI:{ iso:"MISO",  name:"Midcontinent ISO",     feeds:["miso_lmp"] },
+  MT:{ iso:"SPP",   name:"Southwest Power Pool", feeds:["spp_lmp"] },
+  WY:{ iso:"SPP",   name:"Southwest Power Pool", feeds:["spp_lmp"] },
+  CO:{ iso:"SPP",   name:"Southwest Power Pool", feeds:["spp_lmp"] },
+  NM:{ iso:"SPP",   name:"Southwest Power Pool", feeds:["spp_lmp"] },
+  ME:{ iso:"ISO-NE",name:"ISO New England",      feeds:["isone_lmp","isone_status"] },
+  NH:{ iso:"ISO-NE",name:"ISO New England",      feeds:["isone_lmp","isone_status"] },
+  VT:{ iso:"ISO-NE",name:"ISO New England",      feeds:["isone_lmp","isone_status"] },
+  MA:{ iso:"ISO-NE",name:"ISO New England",      feeds:["isone_lmp","isone_status"] },
+  CT:{ iso:"ISO-NE",name:"ISO New England",      feeds:["isone_lmp","isone_status"] },
+  RI:{ iso:"ISO-NE",name:"ISO New England",      feeds:["isone_lmp","isone_status"] },
+  NY:{ iso:"NYISO", name:"New York ISO",         feeds:["nyiso_lmp"] },
+  CA:{ iso:"CAISO", name:"California ISO",       feeds:["caiso_lmp"] },
+  PA:{ iso:"PJM",   name:"PJM Interconnection",  feeds:["pjm_lmp"] },
+  NJ:{ iso:"PJM",   name:"PJM Interconnection",  feeds:["pjm_lmp"] },
+  MD:{ iso:"PJM",   name:"PJM Interconnection",  feeds:["pjm_lmp"] },
+  DE:{ iso:"PJM",   name:"PJM Interconnection",  feeds:["pjm_lmp"] },
+  VA:{ iso:"PJM",   name:"PJM Interconnection",  feeds:["pjm_lmp"] },
+  WV:{ iso:"PJM",   name:"PJM Interconnection",  feeds:["pjm_lmp"] },
+  OH:{ iso:"PJM",   name:"PJM Interconnection",  feeds:["pjm_lmp"] },
+  KY:{ iso:"PJM",   name:"PJM Interconnection",  feeds:["pjm_lmp"] },
+  NC:{ iso:"PJM",   name:"PJM Interconnection",  feeds:["pjm_lmp"] },
+  TN:{ iso:"SERC",  name:"Southeast (Non-ISO)",  feeds:[] },
+  MS:{ iso:"SERC",  name:"Southeast (Non-ISO)",  feeds:[] },
+  AL:{ iso:"SERC",  name:"Southeast (Non-ISO)",  feeds:[] },
+  GA:{ iso:"SERC",  name:"Southeast (Non-ISO)",  feeds:[] },
+  FL:{ iso:"SERC",  name:"Southeast (Non-ISO)",  feeds:[] },
+  SC:{ iso:"SERC",  name:"Southeast (Non-ISO)",  feeds:[] },
+  LA:{ iso:"MISO",  name:"Midcontinent ISO",     feeds:["miso_lmp"] }
+};
+
+// ── Feed definitions — endpoint, test URL, typical value range ─────────────────
+const FEED_DEFS = {
+  spp_lmp:    { label:"SPP Real-Time LMP", unit:"$/MWh", icon:"⚡", interval:5, testUrl:"https://portal.spp.org/file-browser-api/download/rtbm-lmp-by-location?path=/RTBM-LMP-SL-latestInterval.csv", auth:"none", typical:"$20–$150/MWh", typical_trigger:150, description:"5-minute real-time locational marginal price from Southwest Power Pool" },
+  spp_da_lmp: { label:"SPP Day-Ahead LMP", unit:"$/MWh", icon:"📅", interval:60, testUrl:"https://portal.spp.org/file-browser-api/download/da-lmp-by-location?path=/DA-LMP-SL-latestInterval.csv", auth:"none", typical:"$25–$120/MWh", typical_trigger:100, description:"Day-ahead hourly LMP from SPP" },
+  spp_status: { label:"SPP Grid Status", unit:"level", icon:"🔴", interval:5, testUrl:"https://pricecontourmap.spp.org/arcgis/rest/services/MarketMaps/RTBM_FeatureData/MapServer/2/query?f=json&where=1=1&outFields=*", auth:"none", typical:"Normal / Advisory / EEA", typical_trigger:1, description:"SPP reliability level: 0=Normal, 1=Advisory, 2=EEA1, 3=EEA2, 4=EEA3" },
+  ercot_lmp:  { label:"ERCOT Real-Time LMP", unit:"$/MWh", icon:"⚡", interval:5, testUrl:"https://www.ercot.com/api/1/services/read/dashboards/loadforecast.json", auth:"registration", typical:"$25–$250/MWh (spikes possible)", typical_trigger:200, description:"5-min SCED locational marginal price — ERCOT public API requires free registration" },
+  ercot_status:{ label:"ERCOT Grid Conditions", unit:"level", icon:"🔴", interval:5, testUrl:"https://www.ercot.com/api/1/services/read/dashboards/gridconditions.json", auth:"none", typical:"Normal / Conservative Ops / EEA", typical_trigger:1, description:"ERCOT operating conditions and reserve margin status" },
+  isone_lmp:  { label:"ISO-NE Real-Time LMP", unit:"$/MWh", icon:"⚡", interval:5, testUrl:"https://webservices.iso-ne.com/api/v1.1/fiveminutelmp/current.json", auth:"registration", typical:"$30–$200/MWh", typical_trigger:150, description:"ISO New England 5-minute LMP — requires free ISO Express account" },
+  miso_lmp:   { label:"MISO Real-Time LMP", unit:"$/MWh", icon:"⚡", interval:5, testUrl:"https://api.misoenergy.org/MISORTWDDataBroker/DataBrokerServices.asmx?messageType=getrtsystemlambda&returnType=json", auth:"none", typical:"$20–$150/MWh", typical_trigger:120, description:"MISO real-time system lambda (marginal price)" },
+  nyiso_lmp:  { label:"NYISO Real-Time LMP", unit:"$/MWh", icon:"⚡", interval:5, testUrl:"https://mis.nyiso.com/public/csv/realtime/", auth:"none", typical:"$30–$250/MWh", typical_trigger:180, description:"NYISO 5-minute real-time LMP — CSV download" },
+  pjm_lmp:    { label:"PJM Real-Time LMP", unit:"$/MWh", icon:"⚡", interval:5, testUrl:"https://api.pjm.com/api/v1/", auth:"registration", typical:"$20–$200/MWh", typical_trigger:150, description:"PJM real-time LMP via Data Miner 2 — free PJM account required" },
+  caiso_lmp:  { label:"CAISO Real-Time LMP", unit:"$/MWh", icon:"⚡", interval:5, testUrl:"https://www.caiso.com/outlook/current/fuelsource.csv", auth:"none", typical:"$20–$300/MWh", typical_trigger:200, description:"CAISO 5-minute LMP via OASIS — no authentication required" },
+  nws_temp:   { label:"Temperature", unit:"°F", icon:"🌡️", interval:60, testUrl:"https://api.weather.gov/stations/KOKC/observations/latest", auth:"none", typical:"60–110°F", typical_trigger:95, description:"Current observed temperature from nearest NWS station" },
+  nws_humidity:{ label:"Humidity", unit:"%", icon:"💧", interval:60, testUrl:"https://api.weather.gov/stations/KOKC/observations/latest", auth:"none", typical:"20–90%", typical_trigger:80, description:"Relative humidity from nearest NWS station" },
+  nws_heat_index:{ label:"Heat Index", unit:"°F", icon:"🔥", interval:60, testUrl:"https://api.weather.gov/stations/KOKC/observations/latest", auth:"none", typical:"70–120°F", typical_trigger:100, description:"Apparent temperature combining heat and humidity" },
+  openmeteo_uv:{ label:"UV Index", unit:"index", icon:"☀️", interval:60, testUrl:"https://api.open-meteo.com/v1/forecast?latitude=35.46&longitude=-97.51&hourly=uv_index&forecast_days=1", auth:"none", typical:"0–11", typical_trigger:8, description:"UV index from Open-Meteo (NOAA model)" },
+  openmeteo_temp_forecast:{ label:"Forecast High", unit:"°F", icon:"📅", interval:60, testUrl:"https://api.open-meteo.com/v1/forecast?latitude=35.46&longitude=-97.51&daily=temperature_2m_max&forecast_days=1&temperature_unit=fahrenheit", auth:"none", typical:"60–110°F", typical_trigger:100, description:"Tomorrow's forecast high temperature from Open-Meteo" },
+  tou_peak:   { label:"TOU Peak Window", unit:"boolean", icon:"⏰", interval:1, testUrl:null, auth:"none", typical:"On/Off", typical_trigger:1, description:"Time-of-use peak pricing window (no external API — time-based)" },
+  tou_offpeak:{ label:"TOU Off-Peak Window", unit:"boolean", icon:"🌙", interval:1, testUrl:null, auth:"none", typical:"On/Off", typical_trigger:1, description:"Time-of-use off-peak window (no external API — time-based)" }
+};
+
+// ── Utility portal database ────────────────────────────────────────────────────
+const UTILITY_PORTALS = {
+  "OGE":  { name:"Oklahoma Gas & Electric (OG&E)", url:"https://www.oge.com/wps/portal/oge/home", dataUrl:"https://www.oge.com/wps/portal/oge/home/residential/rates", states:["OK"] },
+  "PSO":  { name:"Public Service Oklahoma (PSO)", url:"https://www.psoklahoma.com", dataUrl:"https://www.psoklahoma.com/account/rates.aspx", states:["OK"] },
+  "AEPCO":{ name:"AEP Central (Texas)", url:"https://www.aepcentral.com", dataUrl:"https://www.aepcentral.com/rates", states:["TX"] },
+  "ONCOR":{ name:"Oncor Electric Delivery", url:"https://www.oncor.com", dataUrl:"https://www.oncor.com/en/pages/about/rates-tariffs/rates-tariffs.aspx", states:["TX"] },
+  "ERGON":{ name:"Entergy (AR/LA/TX)", url:"https://www.entergy.com", dataUrl:"https://www.entergy.com/electric-rates/", states:["AR","LA","TX"] },
+  "EVERGY":{ name:"Evergy (KS/MO)", url:"https://www.evergy.com", dataUrl:"https://www.evergy.com/rates", states:["KS","MO"] },
+  "XCEL": { name:"Xcel Energy (CO/MN)", url:"https://www.xcelenergy.com", dataUrl:"https://www.xcelenergy.com/staticfiles/xe-responsive/Admin/Managed%20Documents%20&%20PDFs/Rates%20and%20Regulations/CO/All-CO-Electric-Rates-and-Regulations.pdf", states:["CO","MN","ND","SD"] },
+  "GMP":  { name:"Green Mountain Power (VT)", url:"https://greenmountainpower.com", dataUrl:"https://greenmountainpower.com/rates/", states:["VT"] },
+  "EVERSOURCE":{ name:"Eversource (CT/MA/NH)", url:"https://www.eversource.com", dataUrl:"https://www.eversource.com/content/ema-c/residential/account-billing/billing-payment/rates-tariffs", states:["CT","MA","NH"] },
+  "NATIONAL_GRID":{ name:"National Grid (MA/NY/RI)", url:"https://www.nationalgridus.com", dataUrl:"https://www.nationalgridus.com/rates", states:["MA","NY","RI"] }
+};
+
+// ── In-memory state ────────────────────────────────────────────────────────────
+let monitorFeeds   = [];   // active configured feeds
+let monitorRules   = [];   // saved rules
+let feedValues     = {};   // { feedKey: { value, timestamp, raw } }
+let monitorPoller  = null;
+let editingRuleId  = null;
+let selectedTier   = null;
+let pendingAutopilotEvents = {}; // { ruleId: { timer, event, countdown } }
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+async function initMonitorTriggers() {
+  // Auto-fill coords from current weather location
+  const coordEl = document.getElementById("fd-coords");
+  if (coordEl && wxLocationData && !coordEl.value) {
+    coordEl.value = `${wxLocationData.lat},${wxLocationData.lon}`;
+  }
+  await loadActiveFeeds();
+  await loadRules();
+  await loadTriggerLog();
+  if (!monitorPoller) startMonitorPoller();
+}
+
+// ── Feed Discovery ─────────────────────────────────────────────────────────────
+async function runFeedDiscovery() {
+  const state   = document.getElementById("fd-state")?.value;
+  const utility = document.getElementById("fd-utility")?.value?.trim();
+  const coords  = document.getElementById("fd-coords")?.value?.trim();
+  const results = document.getElementById("fd-results");
+  if (!state) { results.innerHTML = '<div style="color:var(--red);font-size:12px;">Please select a state.</div>'; return; }
+
+  results.innerHTML = '<div style="font-size:12px;color:var(--text-hint);padding:8px 0;">&#128269; Discovering available feeds for ' + state + '...</div>';
+
+  const isoInfo   = STATE_ISO_MAP[state];
+  const isoFeeds  = isoInfo?.feeds || [];
+  const weatherFeeds = ["nws_temp","nws_humidity","nws_heat_index","openmeteo_uv","openmeteo_temp_forecast","tou_peak"];
+
+  const allFeedKeys = [...new Set([...isoFeeds, ...weatherFeeds])];
+
+  // Test each feed live
+  const tested = await Promise.all(allFeedKeys.map(async key => {
+    const def = FEED_DEFS[key];
+    if (!def) return null;
+    let status = "live";
+    let latency = null;
+    if (def.auth === "registration") {
+      status = "registration";
+    } else if (def.testUrl) {
+      try {
+        const t0 = Date.now();
+        const res = await fetch(def.testUrl, { method:"HEAD", signal: AbortSignal.timeout(3000) });
+        latency = Date.now() - t0;
+        status = res.ok ? "live" : "unavailable";
+      } catch(e) {
+        // HEAD might be blocked, try GET with short timeout
+        try {
+          const t0 = Date.now();
+          const res = await fetch(def.testUrl, { signal: AbortSignal.timeout(4000) });
+          latency = Date.now() - t0;
+          status = res.ok ? "live" : "unavailable";
+        } catch(e2) {
+          status = "unavailable";
+        }
+      }
+    } else if (key.startsWith("tou_")) {
+      status = "live"; // time-based, always available
+    }
+    return { key, def, status, latency };
+  }));
+
+  const valid = tested.filter(Boolean);
+
+  // Find utility portals for the state
+  const stateUtilityPortals = Object.values(UTILITY_PORTALS).filter(u => u.states.includes(state));
+
+  let html = "";
+
+  // ISO info banner
+  if (isoInfo) {
+    const badgeColor = isoInfo.iso === "SERC" ? "var(--amber)" : "var(--green-dark)";
+    html += `<div style="background:var(--surface2);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
+      <span style="font-size:20px;">&#128204;</span>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-primary);">${state} is in the <span style="color:${badgeColor};">${isoInfo.iso}</span> territory</div>
+        <div style="font-size:11px;color:var(--text-hint);">${isoInfo.name}</div>
+        ${isoInfo.iso === "SERC" ? '<div style="font-size:11px;color:var(--amber);margin-top:2px;">&#9888;&#65039; Southeast states are not in a public ISO market. Grid pricing data is utility-specific and not publicly available.</div>' : ""}
+      </div>
+    </div>`;
+  }
+
+  // Feed results
+  html += `<div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;font-family:monospace;">Available Feeds (${valid.length})</div>`;
+
+  const liveCount = valid.filter(f => f.status === "live").length;
+  const regCount  = valid.filter(f => f.status === "registration").length;
+
+  html += valid.map(f => {
+    const statusLabel = f.status === "live" ? "&#9679; Live" : f.status === "registration" ? "&#9679; Requires Registration" : "&#9679; Unavailable";
+    const statusColor = f.status === "live" ? "var(--green-dark)" : f.status === "registration" ? "var(--amber)" : "var(--red)";
+    const alreadyAdded = monitorFeeds.some(mf => mf.feed_key === f.key);
+    return `<div class="feed-card">
+      <div class="feed-status-dot ${f.status === "live" ? "live" : f.status === "registration" ? "registration" : "unavailable"}"></div>
+      <div class="feed-info">
+        <div class="feed-name">${f.def.icon} ${f.def.label}</div>
+        <div class="feed-meta">${f.def.description}</div>
+        <div class="feed-meta" style="margin-top:3px;">
+          <span style="color:${statusColor};font-weight:600;">${statusLabel}</span>
+          ${f.latency ? ` &bull; ${f.latency}ms` : ""}
+          &bull; Updates every ${f.def.interval} min
+          &bull; Typical: ${f.def.typical}
+        </div>
+        ${f.def.auth === "registration" ? `<div style="font-size:11px;color:var(--amber);margin-top:4px;">&#128279; Requires free account — <a href="${f.def.testUrl || "#"}" target="_blank" style="color:var(--amber);">Register here</a></div>` : ""}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+        ${alreadyAdded
+          ? '<span style="font-size:11px;color:var(--green-dark);font-weight:600;">&#10003; Added</span>'
+          : f.status !== "unavailable"
+            ? `<button onclick="addFeedFromDiscovery('${f.key}')" style="padding:5px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--green);background:var(--green-bg);color:var(--green-dark);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">+ Add Feed</button>`
+            : '<span style="font-size:11px;color:var(--red);">Unavailable</span>'
+        }
+      </div>
+    </div>`;
+  }).join("");
+
+  // Utility portals
+  if (stateUtilityPortals.length > 0) {
+    html += `<div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 8px;font-family:monospace;">Utility Data Portals</div>`;
+    html += stateUtilityPortals.map(u => `
+      <div class="feed-card">
+        <div class="feed-status-dot" style="background:var(--blue-dark);"></div>
+        <div class="feed-info">
+          <div class="feed-name">&#127968; ${u.name}</div>
+          <div class="feed-meta">Utility-specific rate and usage data portal</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <a href="${u.url}" target="_blank" style="padding:5px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);color:var(--text-secondary);font-size:11px;font-weight:600;text-decoration:none;white-space:nowrap;">Open Portal &#8599;</a>
+          ${u.dataUrl ? `<a href="${u.dataUrl}" target="_blank" style="padding:5px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--blue);background:var(--blue-lt);color:var(--blue-dark);font-size:11px;font-weight:600;text-decoration:none;white-space:nowrap;">Rate Data &#8599;</a>` : ""}
+        </div>
+      </div>`).join("");
+  }
+
+  // Weather feeds note
+  html += `<div style="font-size:11px;color:var(--text-hint);margin-top:10px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);">
+    &#127777;&#65039; <strong>Weather feeds</strong> (NWS temperature, humidity, UV index) are always available for any location at no cost. Set your location in the Weather tab to activate them.
+  </div>`;
+
+  results.innerHTML = html;
+}
+
+async function addFeedFromDiscovery(feedKey) {
+  const def = FEED_DEFS[feedKey];
+  if (!def) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/monitor_feeds`, {
+      method:"POST",
+      headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", "Prefer":"resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({ feed_key:feedKey, label:def.label, unit:def.unit, interval_minutes:def.interval, auth_required:def.auth !== "none", endpoint_url:def.testUrl||null, enabled:true, added_at:new Date().toISOString() })
+    });
+    setStatus("ready", `${def.label} added to active feeds.`);
+    await loadActiveFeeds();
+    runFeedDiscovery(); // refresh discovery to show "Added" badge
+  } catch(e) { console.error("addFeedFromDiscovery:", e); }
+}
+
+// ── Active Feeds ───────────────────────────────────────────────────────────────
+async function loadActiveFeeds() {
+  const list = document.getElementById("active-feeds-list");
+  if (!list) return;
+  try {
+    const rows = await supabaseGet("monitor_feeds?enabled=eq.true&order=added_at.asc");
+    monitorFeeds = Array.isArray(rows) ? rows : [];
+    if (!monitorFeeds.length) { list.innerHTML = '<div class="sched-empty">No feeds configured. Use Feed Discovery above to add feeds.</div>'; return; }
+    list.innerHTML = monitorFeeds.map(f => {
+      const def  = FEED_DEFS[f.feed_key] || {};
+      const fv   = feedValues[f.feed_key];
+      const val  = fv ? `${fv.value} ${f.unit}` : "—";
+      const ts   = fv ? new Date(fv.timestamp).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}) : "";
+      return `<div class="feed-card">
+        <div class="feed-status-dot live"></div>
+        <div class="feed-info">
+          <div class="feed-name">${def.icon||"📡"} ${f.label}</div>
+          <div class="feed-meta">Updates every ${f.interval_minutes} min${ts ? ` &bull; Last: ${ts}` : ""}</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="feed-value">${val}</div>
+          <button onclick="removeFeed(${f.id})" style="margin-top:4px;padding:3px 8px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">Remove</button>
+        </div>
+      </div>`;
+    }).join("");
+  } catch(e) { list.innerHTML = '<div class="sched-empty">Error loading feeds.</div>'; }
+}
+
+async function removeFeed(id) {
+  if (!confirm("Remove this feed? Any rules using it will be disabled.")) return;
+  await fetch(`${SUPABASE_URL}/rest/v1/monitor_feeds?id=eq.${id}`, {
+    method:"DELETE", headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}` }
+  });
+  await loadActiveFeeds();
+}
+
+// ── Rules ──────────────────────────────────────────────────────────────────────
+async function loadRules() {
+  const list = document.getElementById("rules-list");
+  if (!list) return;
+  try {
+    const rows = await supabaseGet("monitor_rules?order=created_at.asc");
+    monitorRules = Array.isArray(rows) ? rows : [];
+    if (!monitorRules.length) { list.innerHTML = '<div class="sched-empty">No rules configured. Click + Add Rule to create one.</div>'; return; }
+    list.innerHTML = monitorRules.map(r => {
+      const feed1  = FEED_DEFS[r.feed_key]  || { label:r.feed_key, unit:"" };
+      const feed2  = r.feed_key2 ? FEED_DEFS[r.feed_key2] : null;
+      const op1    = { gt:">", gte:"≥", lt:"<", lte:"≤", eq:"=" }[r.operator] || r.operator;
+      const op2    = { gt:">", gte:"≥", lt:"<", lte:"≤", eq:"=" }[r.operator2] || "";
+      const cond1  = `${feed1.label} ${op1} ${r.threshold} ${feed1.unit}`;
+      const cond2  = feed2 && r.threshold2 ? ` AND ${feed2.label} ${op2} ${r.threshold2} ${feed2.unit}` : "";
+      const tierColors = { alert:"var(--blue-dark)", suggest:"var(--amber)", autopilot:"var(--red)" };
+      return `<div class="rule-card">
+        <div class="rule-card-header">
+          <div class="rule-status ${r.enabled ? "enabled" : "disabled"}"></div>
+          <span class="rule-tier-badge ${r.tier}">${r.tier.toUpperCase()}</span>
+          <div class="rule-condition">${r.name || cond1 + cond2}</div>
+          <div style="display:flex;gap:6px;">
+            <button onclick="editRule(${r.id})" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;cursor:pointer;">Edit</button>
+            <button onclick="toggleRuleEnabled(${r.id}, ${!r.enabled})" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;cursor:pointer;">${r.enabled ? "Disable" : "Enable"}</button>
+            <button onclick="deleteRule(${r.id})" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:11px;cursor:pointer;">Delete</button>
+          </div>
+        </div>
+        <div class="rule-card-body">
+          <strong>Condition:</strong> ${cond1}${cond2}<br/>
+          <strong>Action:</strong> ${r.relay_action || "—"} on ${r.target_name || r.target_id || "—"} &bull; Strategy ${(r.strategy_val||"").split("|")[0]} &bull; ${r.duration_mins} min<br/>
+          <strong>Guards:</strong> Max ${r.max_per_day}/day &bull; ${r.min_rest_mins} min rest${r.grace_mins ? ` &bull; ${r.grace_mins} min grace` : ""}${r.blackout_start ? ` &bull; Blackout ${r.blackout_start}–${r.blackout_end}` : ""}
+        </div>
+      </div>`;
+    }).join("");
+  } catch(e) { list.innerHTML = '<div class="sched-empty">Error loading rules.</div>'; }
+}
+
+function showAddRuleModal() {
+  editingRuleId = null;
+  selectedTier  = null;
+  document.getElementById("rule-modal-title").textContent = "New Trigger Rule";
+  // Reset form
+  ["rule-name","rule-threshold","rule-threshold2"].forEach(id => { const el = document.getElementById(id); if(el) el.value = ""; });
+  ["rule-feed","rule-operator","rule-feed2","rule-operator2","rule-target-type","rule-target","rule-relay-action","rule-mode","rule-strategy"].forEach(id => { const el = document.getElementById(id); if(el) el.selectedIndex=0; });
+  document.getElementById("rule-duration").value = "60";
+  document.getElementById("rule-max-per-day").value = "3";
+  document.getElementById("rule-min-rest").value = "120";
+  document.getElementById("rule-grace").value = "5";
+  document.getElementById("rule-blackout-start").value = "";
+  document.getElementById("rule-blackout-end").value = "";
+  document.getElementById("rule-use-condition2").checked = false;
+  document.getElementById("rule-condition2").style.display = "none";
+  document.getElementById("rule-grace-row").style.display = "none";
+  document.getElementById("autopilot-warning").style.display = "none";
+  ["tier-alert","tier-suggest","tier-autopilot"].forEach(id => document.getElementById(id)?.classList.remove("selected"));
+  document.getElementById("rule-modal").classList.add("active");
+}
+
+function closeRuleModal(e) {
+  if (e && e.target !== document.getElementById("rule-modal")) return;
+  document.getElementById("rule-modal").classList.remove("active");
+}
+
+function selectRuleTier(tier) {
+  selectedTier = tier;
+  ["tier-alert","tier-suggest","tier-autopilot"].forEach(id => document.getElementById(id)?.classList.remove("selected"));
+  document.getElementById(`tier-${tier}`)?.classList.add("selected");
+  const graceRow = document.getElementById("rule-grace-row");
+  const apWarn   = document.getElementById("autopilot-warning");
+  if (graceRow) graceRow.style.display = tier === "autopilot" ? "block" : "none";
+  if (apWarn)   apWarn.style.display   = tier === "autopilot" ? "block" : "none";
+}
+
+function onRuleFeedChange() {
+  const feedKey = document.getElementById("rule-feed")?.value;
+  const def = FEED_DEFS[feedKey];
+  const hintEl = document.getElementById("rule-feed-hint");
+  const threshEl = document.getElementById("rule-threshold-hint");
+  if (def && hintEl) {
+    hintEl.textContent = `${def.description} — Typical: ${def.typical}. Suggested trigger: ${def.typical_trigger} ${def.unit}`;
+    hintEl.style.display = "block";
+  } else if (hintEl) hintEl.style.display = "none";
+  if (threshEl) threshEl.textContent = def?.unit || "";
+}
+
+function toggleCondition2() {
+  const checked = document.getElementById("rule-use-condition2")?.checked;
+  const el = document.getElementById("rule-condition2");
+  if (el) el.style.display = checked ? "grid" : "none";
+}
+
+function onRuleTargetChange() {
+  const type = document.getElementById("rule-target-type")?.value;
+  const sel  = document.getElementById("rule-target");
+  if (!sel || !type) return;
+  sel.innerHTML = '<option value="" disabled selected>-- Choose One --</option>';
+  if (type === "group") {
+    [1,2,3].forEach(n => { const o = document.createElement("option"); o.value=`group_${n}`; o.textContent=groupNames[n]||`Group ${n}`; sel.appendChild(o); });
+  } else {
+    DEVICES.filter(d => !d.uid.includes("PLACEHOLDER")).forEach(d => { const o = document.createElement("option"); o.value=d.uid; o.textContent=d.name; sel.appendChild(o); });
+  }
+}
+
+async function saveRule() {
+  if (!selectedTier) { alert("Please select an action tier."); return; }
+  const feedKey = document.getElementById("rule-feed")?.value;
+  if (!feedKey) { alert("Please select a feed to monitor."); return; }
+  const threshold = parseFloat(document.getElementById("rule-threshold")?.value);
+  if (isNaN(threshold)) { alert("Please enter a threshold value."); return; }
+  const targetId = document.getElementById("rule-target")?.value;
+  if (!targetId && selectedTier !== "alert") { alert("Please select a target device or group."); return; }
+
+  // Autopilot requires admin role
+  if (selectedTier === "autopilot" && currentUserRole !== "administrator") {
+    alert("Autopilot rules can only be created by Administrators."); return;
+  }
+
+  const useC2  = document.getElementById("rule-use-condition2")?.checked;
+  const feed2  = useC2 ? document.getElementById("rule-feed2")?.value : null;
+  const op2    = useC2 ? document.getElementById("rule-operator2")?.value : null;
+  const thresh2= useC2 ? parseFloat(document.getElementById("rule-threshold2")?.value) : null;
+
+  const targetType = document.getElementById("rule-target-type")?.value;
+  const targetName = targetType === "group"
+    ? (groupNames[parseInt(targetId.replace("group_",""))] || targetId)
+    : (DEVICES.find(d => d.uid === targetId)?.name || targetId);
+
+  const record = {
+    tier:           selectedTier,
+    name:           document.getElementById("rule-name")?.value?.trim() || null,
+    feed_key:       feedKey,
+    operator:       document.getElementById("rule-operator")?.value || "gt",
+    threshold:      threshold,
+    feed_key2:      feed2 || null,
+    operator2:      op2   || null,
+    threshold2:     isNaN(thresh2) ? null : thresh2,
+    target_type:    targetType || null,
+    target_id:      targetId   || null,
+    target_name:    targetName || null,
+    relay_action:   document.getElementById("rule-relay-action")?.value || "all_on",
+    mode:           document.getElementById("rule-mode")?.value || "dlc",
+    strategy_val:   document.getElementById("rule-strategy")?.value || "9|15|30",
+    duration_mins:  parseInt(document.getElementById("rule-duration")?.value) || 60,
+    max_per_day:    parseInt(document.getElementById("rule-max-per-day")?.value) || 3,
+    min_rest_mins:  parseInt(document.getElementById("rule-min-rest")?.value) || 120,
+    grace_mins:     selectedTier === "autopilot" ? parseInt(document.getElementById("rule-grace")?.value) || 5 : null,
+    blackout_start: document.getElementById("rule-blackout-start")?.value || null,
+    blackout_end:   document.getElementById("rule-blackout-end")?.value   || null,
+    enabled:        true,
+    created_by:     currentUser?.email || null,
+    created_at:     new Date().toISOString()
+  };
+
+  try {
+    if (editingRuleId) {
+      await fetch(`${SUPABASE_URL}/rest/v1/monitor_rules?id=eq.${editingRuleId}`, {
+        method:"PATCH", headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", "Prefer":"return=minimal" },
+        body: JSON.stringify(record)
+      });
+    } else {
+      await supabasePost("monitor_rules", record);
+    }
+    closeRuleModal();
+    await loadRules();
+    setStatus("ready", `Rule "${record.name || feedKey}" saved.`);
+  } catch(e) { console.error("saveRule:", e); setStatus("error", "Failed to save rule: " + e.message); }
+}
+
+async function editRule(id) {
+  const rule = monitorRules.find(r => r.id === id);
+  if (!rule) return;
+  editingRuleId = id;
+  showAddRuleModal();
+  document.getElementById("rule-modal-title").textContent = "Edit Trigger Rule";
+  setTimeout(() => {
+    document.getElementById("rule-name").value      = rule.name || "";
+    document.getElementById("rule-feed").value      = rule.feed_key;
+    document.getElementById("rule-operator").value  = rule.operator;
+    document.getElementById("rule-threshold").value = rule.threshold;
+    document.getElementById("rule-duration").value  = rule.duration_mins;
+    document.getElementById("rule-max-per-day").value = rule.max_per_day;
+    document.getElementById("rule-min-rest").value  = rule.min_rest_mins;
+    if (rule.grace_mins) document.getElementById("rule-grace").value = rule.grace_mins;
+    if (rule.blackout_start) document.getElementById("rule-blackout-start").value = rule.blackout_start;
+    if (rule.blackout_end)   document.getElementById("rule-blackout-end").value   = rule.blackout_end;
+    if (rule.feed_key2) {
+      document.getElementById("rule-use-condition2").checked = true;
+      document.getElementById("rule-condition2").style.display = "grid";
+      document.getElementById("rule-feed2").value      = rule.feed_key2;
+      document.getElementById("rule-operator2").value  = rule.operator2;
+      document.getElementById("rule-threshold2").value = rule.threshold2;
+    }
+    selectRuleTier(rule.tier);
+    onRuleFeedChange();
+    onRuleTargetChange();
+    setTimeout(() => {
+      document.getElementById("rule-target-type").value = rule.target_type || "";
+      onRuleTargetChange();
+      setTimeout(() => {
+        document.getElementById("rule-target").value       = rule.target_id || "";
+        document.getElementById("rule-relay-action").value = rule.relay_action || "all_on";
+        document.getElementById("rule-mode").value         = rule.mode || "dlc";
+        document.getElementById("rule-strategy").value     = rule.strategy_val || "9|15|30";
+      }, 50);
+    }, 50);
+  }, 50);
+}
+
+async function toggleRuleEnabled(id, enabled) {
+  await fetch(`${SUPABASE_URL}/rest/v1/monitor_rules?id=eq.${id}`, {
+    method:"PATCH", headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", "Prefer":"return=minimal" },
+    body: JSON.stringify({ enabled })
+  });
+  await loadRules();
+}
+
+async function deleteRule(id) {
+  if (!confirm("Delete this rule?")) return;
+  await fetch(`${SUPABASE_URL}/rest/v1/monitor_rules?id=eq.${id}`, {
+    method:"DELETE", headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}` }
+  });
+  await loadRules();
+}
+
+// ── Trigger Log ────────────────────────────────────────────────────────────────
+async function loadTriggerLog() {
+  const list = document.getElementById("trigger-log-list");
+  if (!list) return;
+  try {
+    const rows = await supabaseGet("monitor_trigger_log?order=triggered_at.desc&limit=50");
+    if (!Array.isArray(rows) || !rows.length) { list.innerHTML = '<div class="sched-empty">No trigger events yet.</div>'; return; }
+    list.innerHTML = `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead><tr>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Time</th>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Rule</th>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Tier</th>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Feed Value</th>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Action</th>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Outcome</th>
+      </tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);white-space:nowrap;">${new Date(r.triggered_at).toLocaleString()}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);">${r.rule_name || "—"}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);"><span class="trigger-tier ${r.tier}">${(r.tier||"").toUpperCase()}</span></td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-family:monospace;">${r.feed_value != null ? r.feed_value + " " + (r.feed_unit||"") : "—"}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);">${r.action_description || "—"}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);color:${r.outcome === "fired" ? "var(--green-dark)" : r.outcome === "cancelled" ? "var(--amber)" : "var(--text-hint)"};">${r.outcome || "—"}</td>
+      </tr>`).join("")}
+      </tbody></table></div>`;
+  } catch(e) { list.innerHTML = '<div class="sched-empty">Error loading trigger log.</div>'; }
+}
+
+// ── Monitor Poller ─────────────────────────────────────────────────────────────
+function startMonitorPoller() {
+  if (monitorPoller) clearInterval(monitorPoller);
+  // Run immediately then every 5 minutes
+  runMonitorCycle();
+  monitorPoller = setInterval(runMonitorCycle, 5 * 60 * 1000);
+  console.log("Monitor & Triggers poller started (5 min interval)");
+}
+
+async function runMonitorCycle() {
+  if (!monitorRules.length && !monitorFeeds.length) return;
+
+  // Collect current feed values
+  await collectFeedValues();
+
+  // Evaluate rules
+  const enabledRules = monitorRules.filter(r => r.enabled);
+  for (const rule of enabledRules) {
+    await evaluateRule(rule);
+  }
+
+  // Update feed display if tab is active
+  if (document.getElementById("tab-admin-monitor-triggers")?.classList.contains("active")) {
+    loadActiveFeeds();
+  }
+}
+
+async function collectFeedValues() {
+  // NWS weather — use existing nwsObsData if fresh (< 20 min)
+  if (nwsObsData) {
+    const obsAge = nwsObsData.timestamp ? (Date.now() - new Date(nwsObsData.timestamp).getTime()) / 60000 : 999;
+    if (obsAge < 20) {
+      const p = nwsObsData;
+      const tempF = cToF(p.temperature?.value);
+      const rh    = p.relativeHumidity?.value != null ? Math.round(p.relativeHumidity.value) : null;
+      feedValues["nws_temp"]       = { value: tempF,                  timestamp: p.timestamp, unit:"°F" };
+      feedValues["nws_humidity"]   = { value: rh,                     timestamp: p.timestamp, unit:"%" };
+      feedValues["nws_heat_index"] = { value: heatIndex(tempF, rh),   timestamp: p.timestamp, unit:"°F" };
+    }
+  }
+
+  // Open-Meteo UV index — use wxForecastData if available
+  if (wxForecastData?.hourly) {
+    const now  = new Date();
+    const hour = now.getHours();
+    const uv   = wxForecastData.hourly.uv_index_instant?.[hour];
+    if (uv != null) feedValues["openmeteo_uv"] = { value: Math.round(uv*10)/10, timestamp: now.toISOString(), unit:"" };
+    const forecastHigh = wxForecastData.daily?.temperature_2m_max?.[1]; // tomorrow
+    if (forecastHigh != null) feedValues["openmeteo_temp_forecast"] = { value: Math.round(forecastHigh), timestamp: now.toISOString(), unit:"°F" };
+  }
+
+  // Time-of-use — simple peak hours check (configurable later)
+  const hour = new Date().getHours();
+  const isPeak = (hour >= 14 && hour < 20); // 2pm-8pm typical peak
+  feedValues["tou_peak"]    = { value: isPeak ? 1 : 0,  timestamp: new Date().toISOString(), unit:"" };
+  feedValues["tou_offpeak"] = { value: isPeak ? 0 : 1,  timestamp: new Date().toISOString(), unit:"" };
+
+  // SPP LMP — fetch CSV, parse first numeric LMP value
+  if (monitorFeeds.some(f => f.feed_key === "spp_lmp")) {
+    try {
+      const res = await fetch("https://portal.spp.org/file-browser-api/download/rtbm-lmp-by-location?path=/RTBM-LMP-SL-latestInterval.csv");
+      if (res.ok) {
+        const text = await res.text();
+        const lines = text.trim().split("\n");
+        if (lines.length > 1) {
+          const cols = lines[1].split(",");
+          const lmp = parseFloat(cols[2]); // LMP column
+          if (!isNaN(lmp)) feedValues["spp_lmp"] = { value: Math.round(lmp*100)/100, timestamp: new Date().toISOString(), unit:"$/MWh" };
+        }
+      }
+    } catch(e) { console.warn("SPP LMP fetch:", e.message); }
+  }
+
+  // Save to Supabase monitor_feed_readings
+  for (const [key, fv] of Object.entries(feedValues)) {
+    if (fv.value == null) continue;
+    try {
+      await supabasePost("monitor_feed_readings", {
+        feed_key: key, value: fv.value, unit: fv.unit, recorded_at: new Date().toISOString()
+      });
+    } catch(e) {} // silent — table might not exist yet
+  }
+}
+
+function checkCondition(feedKey, operator, threshold) {
+  const fv = feedValues[feedKey];
+  if (!fv || fv.value == null) return false;
+  const v = parseFloat(fv.value);
+  switch(operator) {
+    case "gt":  return v > threshold;
+    case "gte": return v >= threshold;
+    case "lt":  return v < threshold;
+    case "lte": return v <= threshold;
+    case "eq":  return v === threshold;
+    default:    return false;
+  }
+}
+
+async function evaluateRule(rule) {
+  const cond1 = checkCondition(rule.feed_key, rule.operator, rule.threshold);
+  const cond2 = rule.feed_key2
+    ? checkCondition(rule.feed_key2, rule.operator2, rule.threshold2)
+    : true;
+  const triggered = cond1 && cond2;
+  if (!triggered) return;
+
+  // Guard: blackout hours
+  if (rule.blackout_start && rule.blackout_end) {
+    const now  = new Date();
+    const hhmm = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+    if (hhmm >= rule.blackout_start && hhmm <= rule.blackout_end) {
+      console.log(`Rule "${rule.name}" triggered but within blackout window. Skipping.`);
+      return;
+    }
+  }
+
+  // Guard: check recent trigger log for this rule (max per day, min rest)
+  try {
+    const dayAgo = new Date(Date.now() - 24*60*60*1000).toISOString();
+    const recent = await supabaseGet(`monitor_trigger_log?rule_id=eq.${rule.id}&triggered_at=gte.${encodeURIComponent(dayAgo)}&order=triggered_at.desc&limit=20`);
+    if (Array.isArray(recent)) {
+      if (recent.length >= rule.max_per_day) {
+        console.log(`Rule "${rule.name}" hit max_per_day limit. Skipping.`);
+        return;
+      }
+      if (recent.length > 0) {
+        const lastFired = new Date(recent[0].triggered_at).getTime();
+        const minutesSince = (Date.now() - lastFired) / 60000;
+        if (minutesSince < rule.min_rest_mins) {
+          console.log(`Rule "${rule.name}" within min_rest_mins. Skipping.`);
+          return;
+        }
+      }
+    }
+  } catch(e) { console.warn("Guard check failed:", e); }
+
+  const fv = feedValues[rule.feed_key];
+  const def = FEED_DEFS[rule.feed_key] || {};
+  const actionDesc = `${rule.relay_action || "all_on"} on ${rule.target_name || rule.target_id} — Strategy ${(rule.strategy_val||"").split("|")[0]} — ${rule.duration_mins} min`;
+
+  console.log(`Rule triggered: "${rule.name}" — ${def.label} = ${fv?.value} ${def.unit} — Tier: ${rule.tier}`);
+
+  if (rule.tier === "alert") {
+    await fireTrigger(rule, fv, "alert", "notified", actionDesc);
+    // Show dashboard notification
+    setStatus("ready", `⚠️ Monitor Alert: ${rule.name || def.label + " threshold crossed"} — ${fv?.value} ${def.unit}`);
+
+  } else if (rule.tier === "suggest") {
+    await fireTrigger(rule, fv, "suggest", "suggested", actionDesc);
+    showSuggestModal(rule, fv);
+
+  } else if (rule.tier === "autopilot") {
+    if (currentUserRole !== "administrator") return;
+    // Check no pending timer already running for this rule
+    if (pendingAutopilotEvents[rule.id]) return;
+    await fireTrigger(rule, fv, "autopilot", "pending", actionDesc);
+    startAutopilotGrace(rule, fv);
+  }
+}
+
+async function fireTrigger(rule, fv, tier, outcome, actionDesc) {
+  try {
+    await supabasePost("monitor_trigger_log", {
+      rule_id:           rule.id,
+      rule_name:         rule.name || rule.feed_key,
+      tier,
+      feed_key:          rule.feed_key,
+      feed_value:        fv?.value,
+      feed_unit:         FEED_DEFS[rule.feed_key]?.unit || "",
+      action_description: actionDesc,
+      outcome,
+      triggered_at:      new Date().toISOString()
+    });
+    loadTriggerLog();
+  } catch(e) { console.warn("fireTrigger log:", e); }
+}
+
+function showSuggestModal(rule, fv) {
+  const def = FEED_DEFS[rule.feed_key] || {};
+  const msg = `📡 Monitor Trigger: ${rule.name || def.label}\n\nCurrent value: ${fv?.value} ${def.unit}\nThreshold: ${rule.operator} ${rule.threshold} ${def.unit}\n\nSuggested action:\n${rule.relay_action} on ${rule.target_name || rule.target_id}\nStrategy ${(rule.strategy_val||"").split("|")[0]} — ${rule.duration_mins} min\n\nOpen the Event Scheduler to confirm this event?`;
+  if (confirm(msg)) {
+    switchMain("events", document.getElementById("main-events"));
+    switchSub("events", "scheduler", document.getElementById("sub-scheduler"));
+  }
+}
+
+function startAutopilotGrace(rule, fv) {
+  const graceMs = (rule.grace_mins || 5) * 60 * 1000;
+  let remaining  = rule.grace_mins || 5;
+
+  setStatus("ready", `⚡ Autopilot: "${rule.name}" firing in ${remaining} min — click to cancel`);
+
+  const countdown = setInterval(() => {
+    remaining--;
+    setStatus("ready", `⚡ Autopilot: "${rule.name}" firing in ${remaining} min — click status to cancel`);
+    if (remaining <= 0) clearInterval(countdown);
+  }, 60000);
+
+  const timer = setTimeout(async () => {
+    clearInterval(countdown);
+    delete pendingAutopilotEvents[rule.id];
+    // Fire the actual event
+    await fireAutopilotEvent(rule, fv);
+    setStatus("ready", `⚡ Autopilot event fired: "${rule.name}"`);
+  }, graceMs);
+
+  pendingAutopilotEvents[rule.id] = { timer, countdown, rule, fv };
+}
+
+async function cancelAutopilot(ruleId) {
+  const pending = pendingAutopilotEvents[ruleId];
+  if (!pending) return;
+  clearTimeout(pending.timer);
+  clearInterval(pending.countdown);
+  delete pendingAutopilotEvents[ruleId];
+  // Update log entry
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/monitor_trigger_log?rule_id=eq.${ruleId}&outcome=eq.pending`, {
+      method:"PATCH", headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json" },
+      body: JSON.stringify({ outcome:"cancelled" })
+    });
+  } catch(e) {}
+  setStatus("ready", `Autopilot cancelled for rule ${ruleId}`);
+  loadTriggerLog();
+}
+
+async function fireAutopilotEvent(rule, fv) {
+  const [stratNum, stratTimeout, stratCycle] = (rule.strategy_val || "9|15|30").split("|").map(Number);
+  const reps = Math.max(1, Math.round((rule.duration_mins || 60) / (stratCycle || 30)));
+  const schedUnix = Math.floor(Date.now() / 1000);
+  const hex = buildLCHex(rule.relay_action || "all_on", rule.mode || "dlc", stratNum, reps, schedUnix);
+
+  if (rule.target_type === "group") {
+    const gNum = parseInt((rule.target_id || "group_1").replace("group_",""));
+    const members = DEVICES.filter(d => (groupAssignments[d.uid]||[]).includes(gNum));
+    for (const d of members) await sendLCToDevice(d.uid, hex);
+  } else {
+    await sendLCToDevice(rule.target_id, hex);
+  }
+
+  // Log to schedule_queue for audit trail
+  try {
+    await supabasePost("schedule_queue", {
+      name: `AUTO: ${rule.name || rule.feed_key}`,
+      fire_at: new Date().toISOString(),
+      fired_at: new Date().toISOString(),
+      target_type: rule.target_type, target_id: rule.target_id, target_name: rule.target_name,
+      relay_action: rule.relay_action, duration_minutes: rule.duration_mins,
+      lc_mode: rule.mode, lc_strategy: stratNum, lc_reps: reps,
+      status: "fired"
+    });
+  } catch(e) {}
+
+  // Update trigger log
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/monitor_trigger_log?rule_id=eq.${rule.id}&outcome=eq.pending`, {
+      method:"PATCH", headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json" },
+      body: JSON.stringify({ outcome:"fired" })
+    });
+  } catch(e) {}
+  loadTriggerLog();
+}
+
 
 // ── Background Theme System ───────────────────────────────────────────────────
 
