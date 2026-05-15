@@ -19,8 +19,9 @@
     --red: #E24B4A; --amber: #BA7517; --amber-bg: #FEF3C7;
     --purple: #7C3AED; --purple-bg: #EDE9FE;
     --radius: 12px; --radius-sm: 8px;
+    --base-font: 14px;
   }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); min-height: 100vh; padding: 0 0 3rem; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); min-height: 100vh; padding: 0 0 3rem; font-size: var(--base-font, 14px); }
 
   /* ── Sticky Header ── */
   .sticky-header { position: sticky; top: 0; z-index: 100; background: var(--bg); padding: 1.25rem 1rem 0.75rem; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
@@ -365,6 +366,12 @@
   .theme-swatch:hover { transform:scale(1.12); }
   .theme-swatch.active { border-color:var(--text-primary); box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--text-primary); }
   .theme-swatch[title]:hover::after { content:attr(title); position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%); background:var(--text-primary); color:#fff; font-size:10px; white-space:nowrap; padding:3px 7px; border-radius:4px; pointer-events:none; font-family:monospace; }
+
+  /* ── Font Size Picker ── */
+  .font-size-options { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .font-size-btn { padding:6px 14px; border-radius:20px; border:0.5px solid var(--border-md); background:var(--surface2); color:var(--text-secondary); font-size:12px; font-weight:500; cursor:pointer; transition:all 0.15s; }
+  .font-size-btn:hover { border-color:var(--green); color:var(--green-dark); }
+  .font-size-btn.active { background:var(--green-dark); color:#fff; border-color:var(--green-dark); }
 </style>
 </head>
 <body>
@@ -1409,6 +1416,16 @@
           <div class="theme-swatch"        data-theme="charcoal" style="background:#2b2b2b;" title="Charcoal"></div>
           <div class="theme-swatch"        data-theme="navy"     style="background:#1c2a3a;" title="Navy"></div>
           <div class="theme-swatch"        data-theme="forest"   style="background:#1a2e22;" title="Forest"></div>
+        </div>
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:0.5px solid var(--border);">
+          <div style="font-size:12px;color:var(--text-hint);margin-bottom:8px;">Text Size</div>
+          <div class="font-size-options" id="font-size-options">
+            <button class="font-size-btn" data-size="12px">Small</button>
+            <button class="font-size-btn active" data-size="14px">Default</button>
+            <button class="font-size-btn" data-size="16px">Medium</button>
+            <button class="font-size-btn" data-size="18px">Large</button>
+            <button class="font-size-btn" data-size="20px">X-Large</button>
+          </div>
         </div>
       </div>
 
@@ -5570,8 +5587,9 @@ async function onSignedIn(session) {
   buildDataCards();
   // Start OpenADR background poller immediately after login
   startOADRPoller();
-  // Apply saved theme
+  // Apply saved theme and font size
   initTheme();
+  initFontSize();
   hideLoginOverlay();
   applyRolePermissions(currentUserRole);
   updateAdminHeader();
@@ -8960,6 +8978,29 @@ function applyTheme(name) {
 
   // Persist
   try { localStorage.setItem("lcp_theme", name); } catch(e) {}
+}
+
+
+function applyFontSize(size) {
+  document.documentElement.style.setProperty("--base-font", size);
+  document.body.style.fontSize = size;
+
+  // Update active button
+  document.querySelectorAll(".font-size-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.size === size);
+  });
+
+  try { localStorage.setItem("lcp_font_size", size); } catch(e) {}
+}
+
+function initFontSize() {
+  let saved = "14px";
+  try { saved = localStorage.getItem("lcp_font_size") || "14px"; } catch(e) {}
+  applyFontSize(saved);
+
+  document.querySelectorAll(".font-size-btn").forEach(btn => {
+    btn.addEventListener("click", () => applyFontSize(btn.dataset.size));
+  });
 }
 
 function initTheme() {
