@@ -358,6 +358,13 @@
   .help-nav-btn { padding:4px 10px; border-radius:12px; border:0.5px solid var(--border-md); background:var(--surface); color:var(--text-secondary); font-size:11px; font-weight:500; cursor:pointer; transition:all 0.15s; }
   .help-nav-btn:hover { background:var(--text-primary); color:#fff; border-color:var(--text-primary); }
   .help-nav-btn.active { background:var(--text-primary); color:#fff; border-color:var(--text-primary); }
+
+  /* ── Theme Picker ── */
+  .theme-swatches { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .theme-swatch { width:32px; height:32px; border-radius:50%; cursor:pointer; border:2.5px solid transparent; transition:all 0.15s; position:relative; flex-shrink:0; }
+  .theme-swatch:hover { transform:scale(1.12); }
+  .theme-swatch.active { border-color:var(--text-primary); box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--text-primary); }
+  .theme-swatch[title]:hover::after { content:attr(title); position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%); background:var(--text-primary); color:#fff; font-size:10px; white-space:nowrap; padding:3px 7px; border-radius:4px; pointer-events:none; font-family:monospace; }
 </style>
 </head>
 <body>
@@ -5544,6 +5551,8 @@ async function onSignedIn(session) {
   buildDataCards();
   // Start OpenADR background poller immediately after login
   startOADRPoller();
+  // Apply saved theme
+  initTheme();
   hideLoginOverlay();
   applyRolePermissions(currentUserRole);
   updateAdminHeader();
@@ -8893,6 +8902,57 @@ async function removeDevice(id, name) {
   } catch(e) { console.error("removeDevice:", e); }
 }
 
+
+
+// ── Background Theme System ───────────────────────────────────────────────────
+
+const THEMES = {
+  default:  { bg:"#f5f5f3", surface:"#ffffff", surface2:"#f0efeb", textPrimary:"#1a1a18", textSecondary:"#5f5e5a", textHint:"#888780", border:"rgba(0,0,0,0.10)", borderMd:"rgba(0,0,0,0.18)" },
+  white:    { bg:"#ffffff", surface:"#f8f8f8", surface2:"#f0f0f0", textPrimary:"#1a1a18", textSecondary:"#5f5e5a", textHint:"#888780", border:"rgba(0,0,0,0.10)", borderMd:"rgba(0,0,0,0.18)" },
+  slate:    { bg:"#e8eaed", surface:"#ffffff", surface2:"#f0f1f3", textPrimary:"#1a1a18", textSecondary:"#5f5e5a", textHint:"#888780", border:"rgba(0,0,0,0.10)", borderMd:"rgba(0,0,0,0.18)" },
+  warm:     { bg:"#fdf6ec", surface:"#ffffff", surface2:"#f7efe0", textPrimary:"#1a1208", textSecondary:"#5f4e3a", textHint:"#8f7a60", border:"rgba(0,0,0,0.10)", borderMd:"rgba(0,0,0,0.18)" },
+  cool:     { bg:"#eef2f7", surface:"#ffffff", surface2:"#e4ebf4", textPrimary:"#0e1c2f", textSecondary:"#3a5270", textHint:"#7090b0", border:"rgba(0,0,0,0.10)", borderMd:"rgba(0,0,0,0.18)" },
+  sage:     { bg:"#eef4f0", surface:"#ffffff", surface2:"#e2ede5", textPrimary:"#0e1f14", textSecondary:"#3a5940", textHint:"#6b8f72", border:"rgba(0,0,0,0.10)", borderMd:"rgba(0,0,0,0.18)" },
+  charcoal: { bg:"#2b2b2b", surface:"#363636", surface2:"#404040", textPrimary:"#f0eeea", textSecondary:"#b8b4ae", textHint:"#888480", border:"rgba(255,255,255,0.10)", borderMd:"rgba(255,255,255,0.18)" },
+  navy:     { bg:"#1c2a3a", surface:"#243344", surface2:"#2c3d50", textPrimary:"#e8eef5", textSecondary:"#9ab0c8", textHint:"#6a8aa8", border:"rgba(255,255,255,0.10)", borderMd:"rgba(255,255,255,0.18)" },
+  forest:   { bg:"#1a2e22", surface:"#213829", surface2:"#294230", textPrimary:"#e2ede5", textSecondary:"#8ab89a", textHint:"#5a8868", border:"rgba(255,255,255,0.10)", borderMd:"rgba(255,255,255,0.18)" },
+};
+
+function applyTheme(name) {
+  const t = THEMES[name] || THEMES.default;
+  const root = document.documentElement.style;
+  root.setProperty("--bg",             t.bg);
+  root.setProperty("--surface",        t.surface);
+  root.setProperty("--surface2",       t.surface2);
+  root.setProperty("--text-primary",   t.textPrimary);
+  root.setProperty("--text-secondary", t.textSecondary);
+  root.setProperty("--text-hint",      t.textHint);
+  root.setProperty("--border",         t.border);
+  root.setProperty("--border-md",      t.borderMd);
+
+  // Update sticky header background
+  const hdr = document.querySelector(".sticky-header");
+  if (hdr) hdr.style.background = t.bg;
+
+  // Update active swatch
+  document.querySelectorAll(".theme-swatch").forEach(s => {
+    s.classList.toggle("active", s.dataset.theme === name);
+  });
+
+  // Persist
+  try { localStorage.setItem("lcp_theme", name); } catch(e) {}
+}
+
+function initTheme() {
+  let saved = "default";
+  try { saved = localStorage.getItem("lcp_theme") || "default"; } catch(e) {}
+  applyTheme(saved);
+
+  // Wire up swatches
+  document.querySelectorAll(".theme-swatch").forEach(swatch => {
+    swatch.addEventListener("click", () => applyTheme(swatch.dataset.theme));
+  });
+}
 
 // ── Help & Reference System ───────────────────────────────────────────────────
 
