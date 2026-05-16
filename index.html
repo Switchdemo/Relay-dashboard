@@ -451,6 +451,21 @@
   .rule-tier-opt-desc { font-size:10px;color:var(--text-hint);line-height:1.4; }
   .autopilot-warning { background:var(--red-lt);border:0.5px solid var(--red);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--red);margin-top:10px;line-height:1.6; }
   .grace-period-row { display:none; }
+
+  /* ── Outage Tracker ── */
+  .outage-util-card { border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px 16px;display:flex;align-items:center;gap:14px;background:var(--surface);cursor:pointer;transition:all .15s;margin-bottom:8px; }
+  .outage-util-card:hover { border-color:var(--text-primary);background:var(--surface2); }
+  .outage-util-icon { font-size:24px;flex-shrink:0; }
+  .outage-util-info { flex:1;min-width:0; }
+  .outage-util-name { font-size:13px;font-weight:600;color:var(--text-primary); }
+  .outage-util-meta { font-size:11px;color:var(--text-hint);margin-top:2px; }
+  .outage-count-badge { padding:4px 12px;border-radius:12px;font-size:12px;font-weight:700;font-family:monospace;white-space:nowrap;flex-shrink:0; }
+  .outage-count-none { background:var(--green-bg);color:var(--green-dark); }
+  .outage-count-low  { background:var(--amber-bg);color:var(--amber); }
+  .outage-count-high { background:var(--red-lt);color:var(--red); }
+  .outage-corr-row { display:grid;grid-template-columns:1fr 1fr;gap:16px; }
+  @media(max-width:600px) { .outage-corr-row { grid-template-columns:1fr; } }
+  .outage-stat-pill { display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;border:0.5px solid var(--border-md);background:var(--surface2); }
 </style>
 </head>
 <body>
@@ -582,6 +597,7 @@
     <button class="sub-tab-btn" id="sub-monitor-device" onclick="switchSub('monitor','monitor-device',this)">Device Monitoring</button>
     <button class="sub-tab-btn" id="sub-monitor-energy" onclick="switchSub('monitor','monitor-energy',this)">Energy Monitor</button>
     <button class="sub-tab-btn" id="sub-monitor-feeds" onclick="switchSub('monitor','monitor-feeds',this)">Data Feeds</button>
+    <button class="sub-tab-btn" id="sub-monitor-outage" onclick="switchSub('monitor','monitor-outage',this)">&#9889; Outage Tracker</button>
   </div>
   <div class="sub-tabs" id="sub-tabs-admin" style="display:none;">
     <button class="sub-tab-btn active" id="sub-admin-users" onclick="switchSub('admin','admin-users',this)">User Management</button>
@@ -3041,6 +3057,113 @@
   </div>
 </div>
 
+
+<!-- ── MONITOR OUTAGE TRACKER TAB ── -->
+<div class="tab-pane" id="tab-monitor-outage">
+  <div class="scroll-content">
+    <div style="max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <!-- Utility Selector & Config -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#9889; Utility Outage Tracker</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="queue-refresh" onclick="refreshOutageData()">&#8635; Refresh</button>
+            <button class="queue-refresh" onclick="toggleAddUtility()">+ Add Utility</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:12px;line-height:1.6;">
+          Monitors utility outage counts via DOE/ODIN data. Outage counts are recorded every 15 minutes for correlation with device health and system reports.
+        </div>
+
+        <!-- Add utility form -->
+        <div id="add-utility-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px;border:0.5px solid var(--border-md);">
+          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;font-family:monospace;">Add Utility</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Utility Name</label>
+              <select id="new-util-preset" onchange="applyUtilityPreset()" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="">-- Select or enter custom --</option>
+                <optgroup label="Oklahoma">
+                  <option value="OGE|Oklahoma Gas &amp; Electric|Oklahoma|OK|https://outagemap.oge.com/|617">OG&amp;E — Oklahoma Gas &amp; Electric</option>
+                  <option value="PSO|Public Service Oklahoma|Oklahoma|OK|https://www.psoklahoma.com/outage/outage-map/|618">PSO — Public Service Oklahoma</option>
+                  <option value="OEC|Oklahoma Electric Cooperative|Oklahoma|OK|https://okcoop.org/outage-map/|">OEC — Oklahoma Electric Cooperative</option>
+                </optgroup>
+                <optgroup label="Texas">
+                  <option value="ONCOR|Oncor Electric Delivery|Dallas|TX|https://stormcenter.oncor.com/|376">Oncor Electric Delivery</option>
+                  <option value="TNMP|Texas New Mexico Power|Texas|TX|https://tnmp.com/outages/|">TNMP — Texas New Mexico Power</option>
+                  <option value="AEPCENTRAL|AEP Texas Central|Texas|TX|https://www.aeptexas.com/outage/|">AEP Texas Central</option>
+                </optgroup>
+                <optgroup label="New England">
+                  <option value="GMP|Green Mountain Power|Vermont|VT|https://gmpoutages.comed.com/|">Green Mountain Power</option>
+                  <option value="EVERSOURCE|Eversource Energy|Connecticut|CT|https://www.eversource.com/content/ct-c/residential/outages-emergencies/report-power-outage/outage-map|">Eversource Energy</option>
+                </optgroup>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">County / Area</label>
+              <input type="text" id="new-util-county" placeholder="e.g. Oklahoma County" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;" />
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">State</label>
+              <input type="text" id="new-util-state" placeholder="e.g. OK" maxlength="2" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;font-family:monospace;text-transform:uppercase;" />
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:12px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Outage Map URL</label>
+              <input type="url" id="new-util-map-url" placeholder="https://outagemap.utility.com/" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;" />
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">ODIN Utility ID (optional)</label>
+              <input type="text" id="new-util-odin-id" placeholder="e.g. 617" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;font-family:monospace;" />
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button onclick="toggleAddUtility()" style="padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-secondary);">Cancel</button>
+            <button onclick="saveUtilityConfig()" style="padding:7px 20px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Save Utility</button>
+          </div>
+        </div>
+
+        <!-- Utility list -->
+        <div id="outage-utility-list"><div class="sched-empty">No utilities configured. Click + Add Utility to begin.</div></div>
+        <div id="outage-last-updated" style="font-size:10px;color:var(--text-hint);margin-top:8px;text-align:right;display:none;"></div>
+      </div>
+
+      <!-- ODIN County Data -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#127758; ODIN County Outage Data <span style="font-size:9px;font-family:monospace;color:var(--text-hint);margin-left:6px;">DOE / Oak Ridge National Lab</span></div>
+          <button class="queue-refresh" onclick="fetchODINData()">Refresh</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:10px;">Real-time county-level outage counts from the DOE Outage Data Initiative Nationwide (ODIN). Updated every 15 minutes and recorded for correlation analysis.</div>
+        <div id="odin-county-list"><div class="sched-empty">Configure a utility above to load ODIN county data.</div></div>
+      </div>
+
+      <!-- Correlation View -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128202; Outage Correlation</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select id="corr-range" onchange="loadCorrelationChart()" style="padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="24">Last 24 hours</option>
+              <option value="72">Last 3 days</option>
+              <option value="168">Last 7 days</option>
+              <option value="720">Last 30 days</option>
+            </select>
+            <button class="queue-refresh" onclick="loadCorrelationChart()">Refresh</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:10px;">Grid outage counts vs device offline events — identify when your devices went offline during grid outages.</div>
+        <div id="corr-stats" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;"></div>
+        <div style="position:relative;height:260px;width:100%;"><canvas id="outage-corr-chart"></canvas></div>
+        <div id="corr-events-list" style="margin-top:12px;"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- ── DRILL DOWN SIDE PANEL ── -->
 <div id="fh-drill-panel" style="position:fixed;top:0;right:-480px;width:480px;height:100vh;background:var(--surface);border-left:0.5px solid var(--border-md);z-index:1000;transition:right 0.3s ease;display:flex;flex-direction:column;box-shadow:-4px 0 20px rgba(0,0,0,0.15);">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:0.5px solid var(--border-md);">
@@ -3256,6 +3379,7 @@ function runTabInit(name) {
   if (name === "monitor-device")   { injectDeviceMonitoring(); }
   if (name === "monitor-energy")   { injectEnergyMonitor(); }
   if (name === "monitor-feeds")    { initFeedCharts(); }
+  if (name === "monitor-outage")   { initOutageTracker(); }
 }
 
 function switchTab(name, btn) { switchMain(name, btn); }
@@ -12335,6 +12459,415 @@ function confirmSuggestedEvent(ruleId) {
     clearInterval(pending.countdown);
     fireAutopilotEvent(pending.rule, pending.fv);
     delete pendingAutopilotEvents[ruleId];
+  }
+}
+
+
+
+// ── Outage Tracker ────────────────────────────────────────────────────────────
+
+const UTILITY_PRESETS = {
+  "OGE":      { name:"Oklahoma Gas & Electric", county:"Oklahoma", state:"OK", mapUrl:"https://outagemap.oge.com/", odinId:"617" },
+  "PSO":      { name:"Public Service Oklahoma", county:"Oklahoma", state:"OK", mapUrl:"https://www.psoklahoma.com/outage/outage-map/", odinId:"618" },
+  "OEC":      { name:"Oklahoma Electric Cooperative", county:"Oklahoma", state:"OK", mapUrl:"https://okcoop.org/outage-map/", odinId:"" },
+  "ONCOR":    { name:"Oncor Electric Delivery", county:"Dallas", state:"TX", mapUrl:"https://stormcenter.oncor.com/", odinId:"376" },
+  "TNMP":     { name:"Texas New Mexico Power", county:"Texas", state:"TX", mapUrl:"https://tnmp.com/outages/", odinId:"" },
+  "AEPCENTRAL":{ name:"AEP Texas Central", county:"Texas", state:"TX", mapUrl:"https://www.aeptexas.com/outage/", odinId:"" },
+  "GMP":      { name:"Green Mountain Power", county:"Vermont", state:"VT", mapUrl:"https://gmpoutages.comed.com/", odinId:"" },
+  "EVERSOURCE":{ name:"Eversource Energy", county:"Connecticut", state:"CT", mapUrl:"https://www.eversource.com/content/ct-c/residential/outages-emergencies/report-power-outage/outage-map", odinId:"" }
+};
+
+let configuredUtilities = []; // loaded from Supabase utility_outage_config
+let outagePoller = null;
+let corrChartInstance = null;
+const OUTAGE_CONFIG_KEY = "lcp_outage_utilities_v1";
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function initOutageTracker() {
+  await loadConfiguredUtilities();
+  await refreshOutageData();
+  await loadCorrelationChart();
+  if (!outagePoller) {
+    outagePoller = setInterval(() => {
+      refreshOutageData();
+    }, 15 * 60 * 1000); // every 15 minutes
+  }
+}
+
+// ── Utility Configuration ─────────────────────────────────────────────────────
+function toggleAddUtility() {
+  const form = document.getElementById("add-utility-form");
+  if (!form) return;
+  form.style.display = form.style.display === "none" ? "block" : "none";
+  if (form.style.display === "block") {
+    document.getElementById("new-util-preset").selectedIndex = 0;
+    document.getElementById("new-util-county").value = "";
+    document.getElementById("new-util-state").value = "";
+    document.getElementById("new-util-map-url").value = "";
+    document.getElementById("new-util-odin-id").value = "";
+  }
+}
+
+function applyUtilityPreset() {
+  const val = document.getElementById("new-util-preset")?.value;
+  if (!val) return;
+  const [key, name, county, state, mapUrl, odinId] = val.split("|");
+  document.getElementById("new-util-county").value  = county || "";
+  document.getElementById("new-util-state").value   = state  || "";
+  document.getElementById("new-util-map-url").value = mapUrl || "";
+  document.getElementById("new-util-odin-id").value = odinId || "";
+}
+
+async function saveUtilityConfig() {
+  const preset  = document.getElementById("new-util-preset")?.value || "";
+  const parts   = preset.split("|");
+  const name    = parts[1] || document.getElementById("new-util-preset")?.options[document.getElementById("new-util-preset").selectedIndex]?.text || "Custom Utility";
+  const county  = document.getElementById("new-util-county")?.value?.trim();
+  const state   = document.getElementById("new-util-state")?.value?.trim().toUpperCase();
+  const mapUrl  = document.getElementById("new-util-map-url")?.value?.trim();
+  const odinId  = document.getElementById("new-util-odin-id")?.value?.trim();
+
+  if (!name || !state) { setStatus("error", "Utility name and state are required."); return; }
+
+  const record = {
+    utility_name: name,
+    county:       county || state,
+    state,
+    map_url:      mapUrl || null,
+    odin_id:      odinId || null,
+    enabled:      true,
+    added_at:     new Date().toISOString()
+  };
+
+  try {
+    await supabasePost("utility_outage_config", record);
+    setStatus("ready", `${name} added to outage tracker.`);
+    toggleAddUtility();
+    await loadConfiguredUtilities();
+    await refreshOutageData();
+  } catch(e) {
+    setStatus("error", "Failed to save utility: " + e.message);
+  }
+}
+
+async function loadConfiguredUtilities() {
+  try {
+    const rows = await supabaseGet("utility_outage_config?enabled=eq.true&order=added_at.asc");
+    configuredUtilities = Array.isArray(rows) ? rows : [];
+  } catch(e) {
+    // Fall back to localStorage if table not created yet
+    try {
+      const saved = localStorage.getItem(OUTAGE_CONFIG_KEY);
+      configuredUtilities = saved ? JSON.parse(saved) : [];
+    } catch(e2) { configuredUtilities = []; }
+  }
+  renderUtilityList();
+}
+
+function renderUtilityList() {
+  const list = document.getElementById("outage-utility-list");
+  if (!list) return;
+  if (!configuredUtilities.length) {
+    list.innerHTML = '<div class="sched-empty">No utilities configured. Click + Add Utility to begin.</div>';
+    return;
+  }
+  list.innerHTML = configuredUtilities.map(u => {
+    const count   = u._outageCount;
+    const total   = u._customersTotal;
+    const pct     = u._pctOut;
+    const age     = u._lastUpdated ? Math.round((Date.now() - new Date(u._lastUpdated).getTime()) / 60000) : null;
+    const badgeClass = count == null ? "" : count === 0 ? "outage-count-none" : count < 100 ? "outage-count-low" : "outage-count-high";
+    const badge = count != null
+      ? `<span class="outage-count-badge ${badgeClass}">${count.toLocaleString()} out${pct ? ` (${pct}%)` : ""}</span>`
+      : `<span class="outage-count-badge" style="background:var(--surface2);color:var(--text-hint);">Loading...</span>`;
+
+    return `<div class="outage-util-card" onclick="openOutageMap('${u.map_url || ""}','${u.utility_name}')">
+      <div class="outage-util-icon">&#9889;</div>
+      <div class="outage-util-info">
+        <div class="outage-util-name">${u.utility_name}</div>
+        <div class="outage-util-meta">${u.county || ""} &bull; ${u.state} ${age != null ? `&bull; Updated ${age < 2 ? "just now" : age + " min ago"}` : ""}</div>
+        ${u.map_url ? `<div style="font-size:10px;color:var(--blue-dark);margin-top:2px;">&#128279; Click to open outage map</div>` : ""}
+      </div>
+      ${badge}
+      <button onclick="event.stopPropagation();removeUtility(${u.id})" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;flex-shrink:0;">Remove</button>
+    </div>`;
+  }).join("");
+}
+
+function openOutageMap(url, name) {
+  if (!url) { setStatus("error", `No outage map URL configured for ${name}.`); return; }
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+async function removeUtility(id) {
+  if (!confirm("Remove this utility from outage tracking?")) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/utility_outage_config?id=eq.${id}`, {
+      method: "DELETE",
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+    });
+    await loadConfiguredUtilities();
+  } catch(e) { console.error("removeUtility:", e); }
+}
+
+// ── Outage Data Refresh ────────────────────────────────────────────────────────
+async function refreshOutageData() {
+  if (!configuredUtilities.length) return;
+  await fetchODINData();
+}
+
+async function fetchODINData() {
+  const odinList = document.getElementById("odin-county-list");
+  const lastEl   = document.getElementById("outage-last-updated");
+  if (odinList) odinList.innerHTML = '<div class="sched-empty">Fetching ODIN data...</div>';
+
+  const stateSet = [...new Set(configuredUtilities.map(u => u.state).filter(Boolean))];
+  if (!stateSet.length) {
+    if (odinList) odinList.innerHTML = '<div class="sched-empty">Configure a utility above to load ODIN county data.</div>';
+    return;
+  }
+
+  const allResults = [];
+
+  for (const state of stateSet) {
+    try {
+      // ODIN API via OpenEnergyHub — county-level, filter by state
+      const url = `https://ornl.opendatasoft.com/api/explore/v2.1/catalog/datasets/odin-real-time-outages-county/records?where=state_abbr="${state}"&limit=50&order_by=customers_out desc`;
+      const res = await fetch(url, { headers: { "Accept": "application/json" } });
+      if (!res.ok) throw new Error(`ODIN API: ${res.status}`);
+      const data = await res.json();
+      const records = data?.results || [];
+      allResults.push(...records.map(r => ({ ...r, _state: state })));
+    } catch(e) {
+      console.warn(`ODIN fetch for ${state}:`, e.message);
+    }
+  }
+
+  // Match ODIN results to configured utilities and update counts
+  configuredUtilities.forEach(u => {
+    const match = allResults.find(r =>
+      r.state_abbr === u.state &&
+      (r.utility_name?.toLowerCase().includes(u.utility_name?.toLowerCase().split(" ")[0].toLowerCase()) ||
+       (u.odin_id && String(r.utility_id) === String(u.odin_id)))
+    );
+    if (match) {
+      u._outageCount    = match.customers_out || 0;
+      u._customersTotal = match.customers_tracked || match.customers_total || null;
+      u._pctOut         = match.percent_out != null ? parseFloat(match.percent_out).toFixed(2) : null;
+      u._lastUpdated    = match.recorded_at || new Date().toISOString();
+    } else {
+      // No ODIN match — try to get state-level total
+      const stateTotal = allResults.filter(r => r._state === u.state);
+      if (stateTotal.length) {
+        u._outageCount = stateTotal.reduce((sum, r) => sum + (r.customers_out || 0), 0);
+        u._lastUpdated = new Date().toISOString();
+        u._pctOut = null;
+      }
+    }
+  });
+
+  renderUtilityList();
+
+  // Render ODIN county breakdown
+  if (odinList) {
+    if (!allResults.length) {
+      odinList.innerHTML = '<div class="sched-empty">No ODIN data available for configured states. ODIN covers utilities that participate in the DOE data initiative.</div>';
+    } else {
+      const topCounties = allResults.filter(r => (r.customers_out || 0) > 0).slice(0, 20);
+      odinList.innerHTML = topCounties.length ? `
+        <table style="width:100%;border-collapse:collapse;font-size:11px;">
+          <thead><tr>
+            <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">County</th>
+            <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Utility</th>
+            <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Customers Out</th>
+            <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">% Out</th>
+            <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Updated</th>
+          </tr></thead>
+          <tbody>${topCounties.map(r => {
+            const pct = r.percent_out != null ? parseFloat(r.percent_out).toFixed(2) : "—";
+            const pctColor = parseFloat(r.percent_out) > 5 ? "var(--red)" : parseFloat(r.percent_out) > 1 ? "var(--amber)" : "var(--text-primary)";
+            return `<tr>
+              <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-weight:600;">${r.county_name || "—"}, ${r.state_abbr}</td>
+              <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);color:var(--text-secondary);">${r.utility_name || "—"}</td>
+              <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;font-family:monospace;font-weight:700;color:var(--red);">${(r.customers_out||0).toLocaleString()}</td>
+              <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;font-weight:600;color:${pctColor};">${pct}%</td>
+              <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;color:var(--text-hint);">${r.recorded_at ? new Date(r.recorded_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) : "—"}</td>
+            </tr>`;
+          }).join("")}
+          </tbody>
+        </table>` : '<div class="sched-empty">&#10003; No active outages reported in ODIN for configured states.</div>';
+    }
+  }
+
+  // Save to Supabase outage_readings for correlation
+  const now = new Date().toISOString();
+  for (const u of configuredUtilities) {
+    if (u._outageCount == null) continue;
+    try {
+      await supabasePost("outage_readings", {
+        utility_name:    u.utility_name,
+        county:          u.county || u.state,
+        state:           u.state,
+        customers_out:   u._outageCount,
+        customers_total: u._customersTotal || null,
+        pct_out:         u._pctOut || null,
+        source:          "odin",
+        outage_map_url:  u.map_url || null,
+        recorded_at:     now
+      });
+    } catch(e) { /* table might not exist yet */ }
+  }
+
+  if (lastEl) {
+    lastEl.textContent = `Last updated: ${new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})} — Source: DOE/ODIN`;
+    lastEl.style.display = "block";
+  }
+}
+
+// ── Correlation Chart ──────────────────────────────────────────────────────────
+async function loadCorrelationChart() {
+  const rangeHrs = parseInt(document.getElementById("corr-range")?.value || "24");
+  const since    = new Date(Date.now() - rangeHrs * 60 * 60 * 1000).toISOString();
+  const statsEl  = document.getElementById("corr-stats");
+  const eventsEl = document.getElementById("corr-events-list");
+  const ctx      = document.getElementById("outage-corr-chart");
+  if (!ctx) return;
+
+  try {
+    // Fetch outage readings
+    const outageRows = await supabaseGet(
+      `outage_readings?recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=2000`
+    ).catch(() => []);
+
+    // Fetch device health (offline events — no report in 2+ hours)
+    const healthRows = await supabaseGet(
+      `device_health?recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=2000`
+    ).catch(() => []);
+
+    if (!Array.isArray(outageRows) || !outageRows.length) {
+      if (ctx.getContext) {
+        const c = ctx.getContext("2d");
+        c.clearRect(0, 0, ctx.width, ctx.height);
+      }
+      if (statsEl) statsEl.innerHTML = '<div class="sched-empty">No outage data recorded yet. Data is collected every 15 minutes when utilities are configured.</div>';
+      if (eventsEl) eventsEl.innerHTML = "";
+      return;
+    }
+
+    // Aggregate outage counts by hour
+    const hourBuckets = {};
+    outageRows.forEach(r => {
+      const h = new Date(r.recorded_at);
+      h.setMinutes(0, 0, 0);
+      const key = h.toISOString();
+      if (!hourBuckets[key]) hourBuckets[key] = 0;
+      hourBuckets[key] = Math.max(hourBuckets[key], r.customers_out || 0);
+    });
+
+    // Count offline device events by hour
+    const deviceOfflineByHour = {};
+    if (Array.isArray(healthRows)) {
+      healthRows.forEach(r => {
+        const age = r.recorded_at ? (Date.now() - new Date(r.recorded_at).getTime()) / 3600000 : 99;
+        if (age > 2) { // offline if no report in 2+ hours
+          const h = new Date(r.recorded_at);
+          h.setMinutes(0, 0, 0);
+          const key = h.toISOString();
+          if (!deviceOfflineByHour[key]) deviceOfflineByHour[key] = 0;
+          deviceOfflineByHour[key]++;
+        }
+      });
+    }
+
+    const sortedKeys  = Object.keys(hourBuckets).sort();
+    const labels      = sortedKeys.map(k => {
+      const d = new Date(k);
+      return rangeHrs <= 24
+        ? d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})
+        : d.toLocaleDateString([], {month:"short",day:"numeric",hour:"2-digit"});
+    });
+    const outageData  = sortedKeys.map(k => hourBuckets[k]);
+    const deviceData  = sortedKeys.map(k => deviceOfflineByHour[k] || 0);
+
+    // Peak stats
+    const peakOut    = Math.max(...outageData);
+    const totalObs   = outageRows.length;
+    const correlated = sortedKeys.filter(k => hourBuckets[k] > 0 && deviceOfflineByHour[k] > 0).length;
+
+    if (statsEl) {
+      statsEl.innerHTML = `
+        <span class="outage-stat-pill">&#9889; Peak: <strong style="margin-left:4px;">${peakOut.toLocaleString()} customers out</strong></span>
+        <span class="outage-stat-pill">&#128202; ${totalObs} readings recorded</span>
+        ${correlated > 0 ? `<span class="outage-stat-pill" style="background:var(--red-lt);border-color:var(--red);color:var(--red);">&#9888;&#65039; ${correlated} hour${correlated!==1?"s":""} with both outages + offline devices</span>` : '<span class="outage-stat-pill" style="background:var(--green-bg);border-color:var(--green);color:var(--green-dark);">&#10003; No correlated outage/device events</span>'}`;
+    }
+
+    if (corrChartInstance) { corrChartInstance.destroy(); corrChartInstance = null; }
+
+    corrChartInstance = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "Customers Without Power",
+            data: outageData,
+            borderColor: "#c0392b",
+            backgroundColor: "rgba(192,57,43,0.1)",
+            borderWidth: 2,
+            pointRadius: outageData.length > 50 ? 0 : 3,
+            tension: 0.3,
+            fill: true,
+            yAxisID: "y"
+          },
+          {
+            label: "Offline Devices",
+            data: deviceData,
+            borderColor: "#e67e22",
+            backgroundColor: "rgba(230,126,34,0.15)",
+            borderWidth: 2,
+            pointRadius: deviceData.length > 50 ? 0 : 3,
+            tension: 0.3,
+            fill: true,
+            yAxisID: "y1"
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { display: true, position: "top", labels: { font: { size: 11 } } },
+          tooltip: {
+            callbacks: {
+              label: ctx => ctx.dataset.label + ": " + ctx.parsed.y.toLocaleString()
+            }
+          }
+        },
+        scales: {
+          x:  { ticks: { maxTicksLimit: 10, font: { size: 10 }, color: "#888780" }, grid: { color: "rgba(0,0,0,0.05)" } },
+          y:  { type: "linear", display: true, position: "left",  title: { display: true, text: "Customers Out", font: { size: 10 } }, ticks: { font: { size: 10 }, color: "#c0392b" }, grid: { color: "rgba(0,0,0,0.05)" } },
+          y1: { type: "linear", display: true, position: "right", title: { display: true, text: "Offline Devices", font: { size: 10 } }, ticks: { font: { size: 10 }, color: "#e67e22" }, grid: { drawOnChartArea: false } }
+        }
+      }
+    });
+    if (chartInstances) chartInstances["outage-corr-chart"] = corrChartInstance;
+
+    // Show correlated events
+    if (eventsEl && correlated > 0) {
+      const corrKeys = sortedKeys.filter(k => hourBuckets[k] > 0 && deviceOfflineByHour[k] > 0);
+      eventsEl.innerHTML = `<div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;font-family:monospace;">Correlated Events</div>` +
+        corrKeys.map(k => `<div style="font-size:12px;padding:6px 10px;background:var(--red-lt);border-radius:var(--radius-sm);margin-bottom:4px;display:flex;justify-content:space-between;">
+          <span>&#9888;&#65039; ${new Date(k).toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}</span>
+          <span style="color:var(--red);font-weight:600;">${hourBuckets[k].toLocaleString()} out &bull; ${deviceOfflineByHour[k]} device${deviceOfflineByHour[k]!==1?"s":""} offline</span>
+        </div>`).join("");
+    } else if (eventsEl) {
+      eventsEl.innerHTML = "";
+    }
+
+  } catch(e) {
+    console.error("loadCorrelationChart:", e);
+    if (statsEl) statsEl.innerHTML = `<span style="color:var(--red);font-size:12px;">Error: ${e.message}</span>`;
   }
 }
 
