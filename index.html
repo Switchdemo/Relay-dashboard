@@ -19081,4 +19081,96 @@ const HELP_CONTENT = {
           <tbody>
             <tr><td>Relay Control</td><td>Manual 4-relay control per device with real-time status.</td></tr>
             <tr><td>Event Scheduler</td><td>Date/time based scheduling with duty cycle strategy selection.</td></tr>
-            <tr><td
+            <tr><td>Device Groups</td><td>Group-based bulk command delivery.</td></tr>
+            <tr><td>Fleet Health</td><td>Signal strength, voltage, firmware monitoring.</td></tr>
+            <tr><td>Data & History</td><td>Device readings, charts, and historical data logs.</td></tr>
+            <tr><td>User Authentication</td><td>Role-based access with optional 2FA.</td></tr>
+            <tr><td>Weather Display</td><td>Current conditions and forecast in dashboard header.</td></tr>
+            <tr><td>Energy Monitor</td><td>Power consumption tracking and monitoring sessions.</td></tr>
+          </tbody>
+        </table>
+      </div>`
+  },
+
+  glossary: {
+    title: "Glossary",
+    html: `
+      <div class="help-section">
+        <table class="help-table">
+          <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+          <tbody>
+            <tr><td>BAS</td><td>Building Automation System. Controls HVAC and other systems via preprogrammed sequences triggered by discrete inputs.</td></tr>
+            <tr><td>Bubble-Up</td><td>The interval at which a field device proactively reports status to Notehub. Configurable per device in Device Settings.</td></tr>
+            <tr><td>DI</td><td>Distributed Intelligence. Control mode where the device has more autonomy in executing cycling behavior.</td></tr>
+            <tr><td>DLC</td><td>Direct Load Control. Platform directly manages relay on/off timing.</td></tr>
+            <tr><td>Duty Cycle</td><td>The ratio of ON time to total cycle time. 50% duty cycle = relay energized half the time.</td></tr>
+            <tr><td>LC Hex</td><td>Load Control hexadecimal command string. 26 characters encoding mode, strategy, relays, reps, and scheduled time.</td></tr>
+            <tr><td>Notecard</td><td>Blues Wireless cellular module embedded in field switch devices.</td></tr>
+            <tr><td>Notehub</td><td>Blues Wireless cloud platform routing messages between Notecards and the Cloudflare Worker.</td></tr>
+            <tr><td>OpenADR</td><td>Open Automated Demand Response. Standard protocol for utility-to-customer load control communication.</td></tr>
+            <tr><td>Relay</td><td>An electrically operated switch. Each device has 4 independently controllable relays (R1–R4).</td></tr>
+            <tr><td>Restore</td><td>LC command using Strategy 61 that returns all relays to pre-event state.</td></tr>
+            <tr><td>RLS</td><td>Row Level Security. Supabase access control. Must be disabled on all LCP tables for the anon key to work.</td></tr>
+            <tr><td>Schedule Queue</td><td>Supabase table logging all scheduled and fired events with full status lifecycle tracking.</td></tr>
+            <tr><td>VEN</td><td>Virtual End Node. This platform's role in OpenADR — receives and executes utility signals.</td></tr>
+            <tr><td>VTN</td><td>Virtual Top Node. The utility system that sends demand response dispatch signals to VENs.</td></tr>
+          </tbody>
+        </table>
+      </div>`
+  }
+};
+
+function openPrefsModal() {
+  document.getElementById("prefs-overlay").classList.add("active");
+}
+function closePrefsModal(e) {
+  if (e && e.target !== document.getElementById("prefs-overlay")) return;
+  document.getElementById("prefs-overlay").classList.remove("active");
+}
+
+function openHelp(section) {
+  section = section || 'scheduling';
+  showHelpSection(section);
+  document.getElementById('help-modal').classList.add('active');
+}
+
+function closeHelpModal(e) {
+  if (e && e.target !== document.getElementById('help-modal')) return;
+  document.getElementById('help-modal').classList.remove('active');
+}
+
+function showHelpSection(key) {
+  const data = HELP_CONTENT[key];
+  if (!data) return;
+
+  // Update modal title
+  const titleEl = document.getElementById('help-modal-title');
+  if (titleEl) titleEl.textContent = 'Help: ' + data.title;
+
+  // Update modal body
+  const bodyEl = document.getElementById('help-modal-body');
+  if (bodyEl) bodyEl.innerHTML = data.html;
+
+  // Update nav buttons in modal
+  document.querySelectorAll('#help-nav .help-nav-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('onclick').includes("'" + key + "'"));
+  });
+
+  // Also update tab body if help tab is open
+  showHelpTab(key);
+}
+
+function showHelpTab(key) {
+  const data = HELP_CONTENT[key];
+  if (!data) return;
+  const tabBody = document.getElementById('help-tab-body');
+  if (tabBody) {
+    tabBody.innerHTML = '<div class="help-modal-body" style="padding:0;">' + data.html + '</div>';
+  }
+}
+
+// Init help tab with scheduling content when navigated to
+
+</script>
+</body>
+</html>
