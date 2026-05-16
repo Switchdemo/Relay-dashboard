@@ -6103,9 +6103,19 @@ async function searchWeatherLocation() {
       lon:  result.longitude
     };
     localStorage.setItem(WEATHER_LOC_KEY, JSON.stringify(wxLocationData));
-    // Reset NWS station so it rediscovers for new location
-    nwsStationId = null;
-    nwsStationName = null;
+    // Only reset NWS station if location actually changed — preserve manual station selection
+    const prevLocation = JSON.parse(localStorage.getItem(WEATHER_LOC_KEY) || "{}");
+    const locationChanged = Math.abs((prevLocation.lat||0) - wxLocationData.lat) > 0.1
+                         || Math.abs((prevLocation.lon||0) - wxLocationData.lon) > 0.1;
+    if (locationChanged) {
+      // Location changed — clear saved station so it rediscovers for new area
+      try { localStorage.removeItem(NWS_STATION_KEY); } catch(e) {}
+      nwsStationId   = null;
+      nwsStationName = null;
+    } else {
+      // Same location — reload saved station preference if set
+      loadSavedNWSStation();
+    }
     startNWSPoller();
     showWeatherLocation();
     await fetchWeatherForecast();
@@ -9827,9 +9837,15 @@ const NWS_USER_AGENT = "LCP-Dashboard/2.0 (contact@yourdomain.com)"; // NWS requ
 
 // Step 1: Given lat/lon, find the nearest NWS observation station
 async function discoverNWSStation(lat, lon) {
-  // If a station is already configured, skip auto-discovery
+  // If a station is already configured (manually selected), skip auto-discovery
   if (nwsStationId) {
     console.log(`Using configured NWS station: ${nwsStationId}`);
+    return true;
+  }
+  // Check localStorage before hitting API
+  const saved = loadSavedNWSStation();
+  if (saved) {
+    console.log(`Restored saved NWS station: ${nwsStationId}`);
     return true;
   }
   try {
@@ -10199,13 +10215,14 @@ function loadSavedNWSStation() {
     const saved = localStorage.getItem(NWS_STATION_KEY);
     if (saved) {
       const { id, name } = JSON.parse(saved);
+      if (!id) return false;
       nwsStationId   = id;
       nwsStationName = name;
       const labelEl = document.getElementById("nws-station-label");
       const shortEl = document.getElementById("nws-station-name-short");
-      if (labelEl) labelEl.title = name;
+      if (labelEl) labelEl.title = name || id;
       if (shortEl) shortEl.textContent = id;
-      console.log(`Loaded saved NWS station: ${id}`);
+      console.log(`Loaded saved NWS station: ${id} — ${name}`);
       return true;
     }
   } catch(e) {}
