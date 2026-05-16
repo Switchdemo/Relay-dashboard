@@ -6217,7 +6217,7 @@ async function fetchWeatherForecast() {
     const res = await fetch(
       `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
       `&daily=temperature_2m_max,temperature_2m_min,weathercode` +
-      `&hourly=temperature_2m,weathercode` +
+      `&hourly=temperature_2m,weathercode,uv_index,precipitation_probability` +
       `&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=14`
     );
     const data = await res.json();
@@ -9935,6 +9935,12 @@ function renderNWSCurrentConditions() {
 
   // Update header if weather tab not active
   updateHeaderNWSTemp(tempF, desc);
+
+  // Immediately seed feedValues so monitor poller has fresh data without waiting
+  if (tempF != null) feedValues["nws_temp"]       = { value: tempF,             timestamp: p.timestamp||new Date().toISOString(), unit:"°F" };
+  if (rh    != null) feedValues["nws_humidity"]   = { value: rh,                timestamp: p.timestamp||new Date().toISOString(), unit:"%" };
+  const hi = heatIndex(tempF, rh);
+  if (hi    != null) feedValues["nws_heat_index"] = { value: hi,                timestamp: p.timestamp||new Date().toISOString(), unit:"°F" };
 }
 
 function updateHeaderNWSTemp(tempF, desc) {
@@ -10867,27 +10873,88 @@ async function runMonitorCycle() {
 }
 
 async function collectFeedValues() {
-  // NWS weather — use existing nwsObsData if fresh (< 20 min)
-  if (nwsObsData) {
-    const obsAge = nwsObsData.timestamp ? (Date.now() - new Date(nwsObsData.timestamp).getTime()) / 60000 : 999;
-    if (obsAge < 20) {
-      const p = nwsObsData;
-      const tempF = cToF(p.temperature?.value);
-      const rh    = p.relativeHumidity?.value != null ? Math.round(p.relativeHumidity.value) : null;
-      feedValues["nws_temp"]       = { value: tempF,                  timestamp: p.timestamp, unit:"°F" };
-      feedValues["nws_humidity"]   = { value: rh,                     timestamp: p.timestamp, unit:"%" };
-      feedValues["nws_heat_index"] = { value: heatIndex(tempF, rh),   timestamp: p.timestamp, unit:"°F" };
+  // ── NWS weather — use cached nwsObsData (relaxed age: 90 min to cover hourly obs) ──
+  let nwsData = nwsObsData;
+
+  // If no cached data or data is very old, try a fresh fetch
+  if (!nwsData || !nwsData.timestamp) {
+    if (nwsStationId) {
+      try {
+        const res = await fetch(
+          `https://api.weather.gov/stations/${nwsStationId}/observations/latest`,
+          { headers: { "User-Agent": NWS_USER_AGENT, "Accept": "application/json" } }
+        );
+        if (res.ok) {
+          const d = await res.json();
+          nwsData = d?.properties;
+          if (nwsData) nwsObsData = nwsData; // update cache
+        }
+      } catch(e) { console.warn("collectFeedValues NWS fetch:", e.message); }
     }
   }
 
-  // Open-Meteo UV index — use wxForecastData if available
+  if (nwsData) {
+    // NWS stations update hourly — accept data up to 90 minutes old
+    const obsAge = nwsData.timestamp
+      ? (Date.now() - new Date(nwsData.timestamp).getTime()) / 60000
+      : 0;
+    if (obsAge < 90) {
+      const p    = nwsData;
+      const tempF = cToF(p.temperature?.value);
+      const rh    = p.relativeHumidity?.value != null ? Math.round(p.relativeHumidity.value) : null;
+      if (tempF != null) feedValues["nws_temp"]       = { value: tempF,               timestamp: p.timestamp, unit:"°F" };
+      if (rh    != null) feedValues["nws_humidity"]   = { value: rh,                  timestamp: p.timestamp, unit:"%" };
+      const hi = heatIndex(tempF, rh);
+      if (hi   != null) feedValues["nws_heat_index"] = { value: hi,                  timestamp: p.timestamp, unit:"°F" };
+    } else {
+      console.warn(`NWS obs age ${Math.round(obsAge)} min — too old, skipping`);
+    }
+  }
+
+  // ── Open-Meteo UV index ────────────────────────────────────────────────────
+  // First try from cached wxForecastData (updated when weather tab loads)
   if (wxForecastData?.hourly) {
     const now  = new Date();
     const hour = now.getHours();
-    const uv   = wxForecastData.hourly.uv_index_instant?.[hour];
+    // Try uv_index (requested in updated URL) or uv_index_instant as fallback
+    const uv = wxForecastData.hourly.uv_index?.[hour]
+            ?? wxForecastData.hourly.uv_index_instant?.[hour];
     if (uv != null) feedValues["openmeteo_uv"] = { value: Math.round(uv*10)/10, timestamp: now.toISOString(), unit:"" };
-    const forecastHigh = wxForecastData.daily?.temperature_2m_max?.[1]; // tomorrow
+    // Forecast high — index 0 = today, 1 = tomorrow
+    const forecastHigh = wxForecastData.daily?.temperature_2m_max?.[1];
     if (forecastHigh != null) feedValues["openmeteo_temp_forecast"] = { value: Math.round(forecastHigh), timestamp: now.toISOString(), unit:"°F" };
+  }
+
+  // If UV still not available, fetch directly from Open-Meteo
+  if (feedValues["openmeteo_uv"] == null && wxLocationData) {
+    try {
+      const { lat, lon } = wxLocationData;
+      const res = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index&forecast_days=1&timezone=auto`
+      );
+      if (res.ok) {
+        const d = await res.json();
+        const now  = new Date();
+        const hour = now.getHours();
+        const uv   = d?.hourly?.uv_index?.[hour];
+        if (uv != null) feedValues["openmeteo_uv"] = { value: Math.round(uv*10)/10, timestamp: now.toISOString(), unit:"" };
+      }
+    } catch(e) { console.warn("Open-Meteo UV direct fetch:", e.message); }
+  }
+
+  // If forecast high still not available, fetch directly
+  if (feedValues["openmeteo_temp_forecast"] == null && wxLocationData) {
+    try {
+      const { lat, lon } = wxLocationData;
+      const res = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max&forecast_days=2&temperature_unit=fahrenheit&timezone=auto`
+      );
+      if (res.ok) {
+        const d = await res.json();
+        const high = d?.daily?.temperature_2m_max?.[1];
+        if (high != null) feedValues["openmeteo_temp_forecast"] = { value: Math.round(high), timestamp: new Date().toISOString(), unit:"°F" };
+      }
+    } catch(e) { console.warn("Open-Meteo forecast fetch:", e.message); }
   }
 
   // Time-of-use — simple peak hours check (configurable later)
