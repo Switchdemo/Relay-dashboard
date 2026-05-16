@@ -3874,6 +3874,10 @@
                 <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Blink Network</div>
                 <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">REST API — OCPP backend</div>
               </div>
+              <div class="ev-integ-opt" data-integ="tesla" onclick="selectEVInteg('tesla',this)" style="padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Tesla Fleet API</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Official API — commercial fleet charging</div>
+              </div>
               <div class="ev-integ-opt" data-integ="relay" onclick="selectEVInteg('relay',this)" style="padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;">
                 <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Relay Fallback</div>
                 <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">No API — circuit cut via Notecard</div>
@@ -4006,6 +4010,59 @@
                 </div>
               </div>
               <div style="font-size:11px;color:var(--text-hint);margin-top:6px;">Blink uses REST API with session token auth. DR control via remote start/stop and charging rate limit commands.</div>
+            </div>
+          </div>
+
+          <div id="ev-integ-tesla" style="display:none;" class="ev-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px;">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+                <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;">Tesla Fleet API</div>
+                <a href="https://developer.tesla.com" target="_blank" style="font-size:10px;color:var(--blue-dark);">developer.tesla.com &#8599;</a>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Client ID</label>
+                  <input type="text" id="ev-tesla-client-id" placeholder="From Tesla Developer Dashboard" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Client Secret</label>
+                  <input type="password" id="ev-tesla-client-secret" placeholder="From Tesla Developer Dashboard" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Refresh Token (long-lived)</label>
+                  <input type="password" id="ev-tesla-refresh-token" placeholder="OAuth refresh token from Fleet API auth flow" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Region</label>
+                  <select id="ev-tesla-region" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                    <option value="na">North America (na)</option>
+                    <option value="eu">Europe (eu)</option>
+                    <option value="cn">China (cn)</option>
+                  </select>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Vehicle VIN</label>
+                  <input type="text" id="ev-tesla-vin" placeholder="17-character VIN" maxlength="17" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;text-transform:uppercase;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Max Amps (vehicle rating)</label>
+                  <input type="number" id="ev-tesla-max-amps" value="48" min="5" max="80" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+                </div>
+                <div style="display:flex;flex-direction:column;justify-content:flex-end;">
+                  <button onclick="testTeslaConnection()" style="padding:7px 14px;border-radius:var(--radius-sm);border:0.5px solid var(--blue-dark);background:var(--blue-lt);color:var(--blue-dark);font-size:12px;font-weight:600;cursor:pointer;">Test Connection</button>
+                  <div id="ev-tesla-test-result" style="font-size:10px;margin-top:4px;color:var(--text-hint);"></div>
+                </div>
+              </div>
+              <div style="background:var(--amber-bg);border:0.5px solid var(--amber);border-radius:var(--radius-sm);padding:10px 12px;font-size:11px;color:var(--amber);line-height:1.7;">
+                &#9888;&#65039; <strong>Vehicle Command Proxy required for post-2021 vehicles.</strong>
+                Commands must be signed with a virtual key registered to each vehicle via the Tesla app.
+                See <a href="https://developer.tesla.com/docs/fleet-api/getting-started/vehicle-commands" target="_blank" style="color:var(--amber);">Fleet API Vehicle Commands docs</a> for setup.
+                Pre-2021 Model S and X vehicles do not require the proxy.
+              </div>
             </div>
           </div>
 
@@ -15606,6 +15663,16 @@ async function saveEVDevAsset() {
     if (!integConfig.username || !integConfig.charger_id) {
       setStatus("error", "Blink username and charger ID required."); return;
     }
+  } else if (evDevSelectedInteg === "tesla") {
+    integConfig.client_id     = document.getElementById("ev-tesla-client-id")?.value?.trim();
+    integConfig.client_secret = document.getElementById("ev-tesla-client-secret")?.value?.trim();
+    integConfig.refresh_token = document.getElementById("ev-tesla-refresh-token")?.value?.trim();
+    integConfig.region        = document.getElementById("ev-tesla-region")?.value || "na";
+    integConfig.vin           = document.getElementById("ev-tesla-vin")?.value?.trim().toUpperCase();
+    integConfig.max_amps      = parseInt(document.getElementById("ev-tesla-max-amps")?.value || "48");
+    if (!integConfig.client_id || !integConfig.refresh_token || !integConfig.vin) {
+      setStatus("error", "Tesla Client ID, refresh token, and VIN required."); return;
+    }
   } else if (evDevSelectedInteg === "relay") {
     integConfig.relay_uid = document.getElementById("ev-relay-device")?.value;
     integConfig.relay_num = parseInt(document.getElementById("ev-relay-num")?.value || "1");
@@ -15705,12 +15772,12 @@ function renderEVDevAssets() {
   const INTEG_LABELS = {
     ocpp201:"OCPP 2.0.1", ocpp16:"OCPP 1.6J",
     chargepoint:"ChargePoint API", enelx:"Enel X / JuiceNet",
-    blink:"Blink Network", relay:"Relay Fallback"
+    blink:"Blink Network", tesla:"Tesla Fleet API", relay:"Relay Fallback"
   };
   const INTEG_COLORS = {
     ocpp201:"var(--green-dark)", ocpp16:"var(--blue-dark)",
     chargepoint:"#e87722", enelx:"var(--amber)",
-    blink:"#0057a8", relay:"var(--text-secondary)"
+    blink:"#0057a8", tesla:"#cc0000", relay:"var(--text-secondary)"
   };
   const STATUS_DOT = { available:"live", charging:"live", faulted:"unavailable",
     offline:"unavailable", preparing:"registration", connected:"live" };
@@ -15873,6 +15940,22 @@ async function dispatchEVDRSingle(stationId, signalLevel) {
       });
       return (await res.json()).ok;
 
+    } else if (integ === "tesla") {
+      // Tesla Fleet API — set_charging_amps or charge_stop via Worker proxy
+      const res = await fetch(PROXY_URL + "ev/tesla/shed", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          client_id:     asset.integ_config.client_id,
+          client_secret: asset.integ_config.client_secret,
+          refresh_token: asset.integ_config.refresh_token,
+          region:        asset.integ_config.region || "na",
+          vin:           asset.integ_config.vin,
+          limit_amps:    limitAmps,
+          max_amps:      asset.integ_config.max_amps || 48
+        })
+      });
+      return (await res.json()).ok;
+
     } else if (integ === "relay") {
       // Relay fallback — LC hex via Notehub
       const relayUid = asset.integ_config?.relay_uid;
@@ -15938,6 +16021,18 @@ async function restoreEVSingle(stationId) {
         body: JSON.stringify({ username:asset.integ_config.username,
           password:asset.integ_config.password, charger_id:asset.integ_config.charger_id })
       });
+    } else if (integ === "tesla") {
+      await fetch(PROXY_URL + "ev/tesla/restore", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          client_id:     asset.integ_config.client_id,
+          client_secret: asset.integ_config.client_secret,
+          refresh_token: asset.integ_config.refresh_token,
+          region:        asset.integ_config.region || "na",
+          vin:           asset.integ_config.vin,
+          max_amps:      asset.integ_config.max_amps || 48
+        })
+      });
     } else if (integ === "relay") {
       // Restore relay — send all relays ON
       const relayUid = asset.integ_config?.relay_uid;
@@ -15998,6 +16093,37 @@ async function dispatchEVChargersDR(signalLevel) {
   }
 }
 
+
+
+// ── Tesla Fleet API Helpers ───────────────────────────────────────────────────
+async function testTeslaConnection() {
+  const clientId     = document.getElementById("ev-tesla-client-id")?.value?.trim();
+  const clientSecret = document.getElementById("ev-tesla-client-secret")?.value?.trim();
+  const refreshToken = document.getElementById("ev-tesla-refresh-token")?.value?.trim();
+  const region       = document.getElementById("ev-tesla-region")?.value || "na";
+  const vin          = document.getElementById("ev-tesla-vin")?.value?.trim().toUpperCase();
+  const resultEl     = document.getElementById("ev-tesla-test-result");
+
+  if (!clientId || !refreshToken || !vin) {
+    if (resultEl) { resultEl.textContent = "Client ID, refresh token, and VIN required."; resultEl.style.color = "var(--red)"; }
+    return;
+  }
+  if (resultEl) { resultEl.textContent = "Testing..."; resultEl.style.color = "var(--text-hint)"; }
+  try {
+    const res  = await fetch(PROXY_URL + "ev/tesla/status", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ client_id:clientId, client_secret:clientSecret, refresh_token:refreshToken, region, vin })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      if (resultEl) { resultEl.textContent = `✅ ${data.display_name||vin} — ${data.state||"connected"} — ${data.battery_level!=null?data.battery_level+"%":""}`.trim(); resultEl.style.color = "var(--green-dark)"; }
+    } else {
+      if (resultEl) { resultEl.textContent = `⚠️ ${data.error||"Connection failed"}`; resultEl.style.color = "var(--amber)"; }
+    }
+  } catch(e) {
+    if (resultEl) { resultEl.textContent = `Error: ${e.message}`; resultEl.style.color = "var(--red)"; }
+  }
+}
 
 // ── Background Theme System ───────────────────────────────────────────────────
 
