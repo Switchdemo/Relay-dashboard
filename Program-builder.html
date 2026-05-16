@@ -187,6 +187,26 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
         <input type="password" id="cred-supabase-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." style="font-family:'DM Mono',monospace;font-size:12px" />
       </div>
     </div>
+
+    <!-- mTLS Section -->
+    <div style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid var(--rule);">
+      <div style="font-size:11px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:1rem;">OpenADR mTLS Certificate (optional)</div>
+      <div style="background:var(--gold-lt);border:1px solid var(--gold);border-radius:8px;padding:12px 16px;margin-bottom:1rem;font-size:12px;color:var(--gold);line-height:1.6;">
+        &#128274; Only required if your utility VTN uses mutual TLS authentication. Leave blank for standard registration ID or API key auth.
+      </div>
+      <div class="form-grid cols-2">
+        <div class="form-field">
+          <label>Cloudflare Certificate ID</label>
+          <input type="text" id="cred-mtls-cert-id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="font-family:'DM Mono',monospace;font-size:12px" />
+          <span class="help-text">From: npx wrangler mtls-certificate upload --cert cert.pem --key key.pem --name vtn-cert</span>
+        </div>
+        <div class="form-field">
+          <label>mTLS Binding Name</label>
+          <input type="text" id="cred-mtls-binding" placeholder="VTN_CERT" value="VTN_CERT" style="font-family:'DM Mono',monospace;font-size:12px" />
+          <span class="help-text">The binding name used in wrangler.toml and worker.js</span>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ── 4. Module Selection ── -->
@@ -267,6 +287,12 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
         <div class="output-file-desc">Supabase schema — run in SQL editor</div>
         <button class="download-btn" id="dl-sql" onclick="downloadFile('sql')">&#11015;&#65039; Download</button>
       </div>
+      <div class="output-file">
+        <div class="output-file-icon">&#9881;&#65039;</div>
+        <div class="output-file-name">wrangler.toml</div>
+        <div class="output-file-desc">Cloudflare Worker config — includes mTLS binding if configured</div>
+        <button class="download-btn" id="dl-wrangler" onclick="downloadFile('wrangler')">&#11015;&#65039; Download</button>
+      </div>
     </div>
   </div>
 
@@ -277,7 +303,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 let intakeData    = null;
 let templateHTML  = null;
 let deviceCount   = 0;
-let generatedFiles = { index: null, worker: null, sql: null };
+let generatedFiles = { index: null, worker: null, sql: null, wrangler: null };
 
 const ARCH_LABELS = { bas_di:"BAS / Discrete Input", direct_load:"Direct Load Control", mixed:"Mixed", "":"—" };
 const MODULE_KEYS = ["scheduler","groups","data","health","energy","monitor","map","weather","eventstats","openadr"];
@@ -469,9 +495,12 @@ async function generateAll() {
     if (!sbKey)      { throw new Error("Supabase Anon Key is required."); }
     if (!devices.length) { throw new Error("At least one device is required."); }
 
-    generatedFiles.worker = generateWorker({ workerUrl, nhProject, nhToken, sbUrl, sbKey, devices });
-    generatedFiles.sql    = generateSQL(modules);
-    generatedFiles.index  = generateDashboard({ workerUrl, sbUrl, sbKey, devices, modules, title, subtitle, version, intake: intakeData });
+    const mtlsCertId  = document.getElementById("cred-mtls-cert-id")?.value?.trim();
+    const mtlsBinding = document.getElementById("cred-mtls-binding")?.value?.trim() || "VTN_CERT";
+    generatedFiles.worker   = generateWorker({ workerUrl, nhProject, nhToken, sbUrl, sbKey, devices, mtlsCertId, mtlsBinding });
+    generatedFiles.sql      = generateSQL(modules);
+    generatedFiles.index    = generateDashboard({ workerUrl, sbUrl, sbKey, devices, modules, title, subtitle, version, intake: intakeData });
+    generatedFiles.wrangler = generateWranglerToml({ workerUrl, nhProject, mtlsCertId, mtlsBinding, title });
 
     document.getElementById("output-files").style.display = "grid";
     status.textContent = `✅ Build complete — ${modules.length} modules, ${devices.length} device${devices.length!==1?"s":""}. Download each file below.`;
@@ -486,11 +515,58 @@ async function generateAll() {
   btn.textContent = "⚡ Generate Dashboard Files";
 }
 
+
+// ── Wrangler TOML Generator ───────────────────────────────────────────────────
+function generateWranglerToml({ workerUrl, nhProject, mtlsCertId, mtlsBinding, title }) {
+  const workerName = (title || "lcp-dashboard")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  const mtlsSection = mtlsCertId ? `
+# ── mTLS Certificate Binding ──────────────────────────────────────────────────
+# Required for OpenADR VTN connections that use mutual TLS authentication
+# Upload your cert first: npx wrangler mtls-certificate upload --cert cert.pem --key key.pem --name vtn-cert
+[[mtls_certificates]]
+binding = "${mtlsBinding}"
+certificate_id = "${mtlsCertId}"
+` : `
+# ── mTLS Certificate Binding (not configured) ─────────────────────────────────
+# Uncomment and fill in to enable mutual TLS for OpenADR VTN connections:
+# [[mtls_certificates]]
+# binding = "VTN_CERT"
+# certificate_id = "your-certificate-id-here"
+`;
+
+  return `# ── Cloudflare Worker Configuration ──────────────────────────────────────────
+# Generated by LCP Program Builder — ${new Date().toLocaleDateString()}
+# Deploy with: npx wrangler deploy
+
+name = "${workerName}-worker"
+main = "worker.js"
+compatibility_date = "${new Date().toISOString().slice(0,10)}"
+${mtlsSection}
+# ── Environment Variables ─────────────────────────────────────────────────────
+# Store sensitive values as Worker Secrets (not in this file):
+#   npx wrangler secret put NOTEHUB_TOKEN
+#   npx wrangler secret put SUPABASE_SERVICE_KEY
+#
+# Non-sensitive config can go in [vars]:
+[vars]
+NOTEHUB_PROJECT_UID = "${nhProject || "app:your-project-uid"}"
+
+# ── Routes (optional — only if using a custom domain) ─────────────────────────
+# [[routes]]
+# pattern = "api.yourdomain.com/*"
+# zone_name = "yourdomain.com"
+`;
+}
+
 function downloadFile(type) {
   const content = generatedFiles[type];
   if (!content) return;
-  const names = { index:"index.html", worker:"worker.js", sql:"setup.sql" };
-  const types = { index:"text/html", worker:"application/javascript", sql:"text/plain" };
+  const names = { index:"index.html", worker:"worker.js", sql:"setup.sql", wrangler:"wrangler.toml" };
+  const types = { index:"text/html", worker:"application/javascript", sql:"text/plain", wrangler:"text/plain" };
   const blob = new Blob([content], { type: types[type] });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement("a");
@@ -502,7 +578,7 @@ function downloadFile(type) {
 }
 
 // ── Worker Generator ──────────────────────────────────────────────────────────
-function generateWorker({ nhProject, nhToken, sbUrl, sbKey, devices }) {
+function generateWorker({ nhProject, nhToken, sbUrl, sbKey, devices, mtlsCertId, mtlsBinding }) {
   const primaryUID = devices[0]?.uid || "dev:PLACEHOLDER";
   return `// Generated by LCP Program Builder
 // Site: ${intakeData?.site?.name || "Unknown"}
@@ -529,9 +605,62 @@ function supabasePost(table, data) {
   });
 }
 
+  // ── OpenADR mTLS Routes ─────────────────────────────────────────────────────
+  async function handleOpenADRRoute(pathname, body, env) {
+    const useMTLS = env.${mtlsBinding} != null;
+    const vtlFetch = (url, opts) => useMTLS
+      ? env.${mtlsBinding || "VTN_CERT"}.fetch(url, opts)
+      : fetch(url, opts);
+
+    if (pathname === "/openadr/mtls-status") {
+      return new Response(JSON.stringify({ configured: useMTLS }), {
+        headers: { ...CORS, "Content-Type": "application/json" }
+      });
+    }
+    if (pathname === "/openadr/test") {
+      const { vtn_url, auth_mode, api_key } = body;
+      if (!vtn_url) return new Response(JSON.stringify({ ok:false, error:"vtn_url required" }), { status:400, headers:{...CORS,"Content-Type":"application/json"} });
+      try {
+        const headers = { "Content-Type":"application/xml", "Accept":"application/xml" };
+        if (auth_mode === "apikey" && api_key) headers["Authorization"] = "Bearer " + api_key;
+        const res = await vtlFetch(vtn_url, { method:"GET", headers });
+        return new Response(JSON.stringify({ ok:res.ok, status:res.status, message:res.statusText, mtls_active:useMTLS }), {
+          headers: { ...CORS, "Content-Type":"application/json" }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok:false, error:e.message }), { headers:{...CORS,"Content-Type":"application/json"} });
+      }
+    }
+    if (pathname === "/openadr/event") {
+      await supabasePost("openadr_events", {
+        event_id: body.event_id || body.eiEventID || crypto.randomUUID(),
+        vtn_id: body.vtn_id || "unknown", signal_level: parseFloat(body.signal_level||"0"),
+        signal_type: body.signal_type||"SIMPLE", opt_type: body.opt_type||"optIn",
+        dtstart: body.dtstart||new Date().toISOString(), duration_mins: parseInt(body.duration_mins||"60"),
+        status: "pending", raw_payload: JSON.stringify(body), received_at: new Date().toISOString()
+      });
+      return new Response(JSON.stringify({ ok:true }), { headers:{...CORS,"Content-Type":"application/json"} });
+    }
+    if (pathname === "/openadr/cancel") {
+      const id = body.event_id||body.eiEventID;
+      if (id) await fetch(SUPABASE_URL+"/rest/v1/openadr_events?event_id=eq."+encodeURIComponent(id), {
+        method:"PATCH", headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY,"Content-Type":"application/json","Prefer":"return=minimal"},
+        body: JSON.stringify({ status:"cancelled", updated_at:new Date().toISOString() })
+      });
+      return new Response(JSON.stringify({ ok:true }), { headers:{...CORS,"Content-Type":"application/json"} });
+    }
+    return null;
+  }
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
+
+    // ── OpenADR routes ────────────────────────────────────────────────────────
+    if (url.pathname.startsWith("/openadr/")) {
+      const oadrRes = await handleOpenADRRoute(url.pathname, body, env);
+      if (oadrRes) return oadrRes;
+    }
 
     const url  = new URL(request.url);
     const path = url.pathname;
