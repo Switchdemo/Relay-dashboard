@@ -490,6 +490,7 @@
   .scada-source-status.error    { background:var(--red); }
   .scada-hier-node { padding:4px 8px;border-radius:4px;font-size:11px;background:var(--surface2);border:0.5px solid var(--border);display:inline-block;margin:2px; }
 
+  .outage-util-card.no-map-card { cursor:default; opacity:0.85; }
   /* ── EV Charging CSMS ── */
   .ev-charger-card { border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:14px;background:var(--surface);margin-bottom:8px; }
   .ev-charger-header { display:flex;align-items:center;gap:10px;margin-bottom:8px; }
@@ -3352,8 +3353,9 @@
         <!-- Add utility form -->
         <div id="add-utility-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px;border:0.5px solid var(--border-md);">
           <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;font-family:monospace;">Add Utility</div>
-          <!-- State selector drives utility list -->
-          <div style="display:grid;grid-template-columns:120px 1fr;gap:10px;margin-bottom:12px;align-items:end;">
+
+          <!-- Row 1: State + known utility picker -->
+          <div style="display:grid;grid-template-columns:110px 1fr;gap:10px;margin-bottom:10px;align-items:end;">
             <div>
               <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">State</label>
               <select id="new-util-state" onchange="populateUtilityByState(this.value)" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
@@ -3374,25 +3376,51 @@
               </select>
             </div>
             <div>
-              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Utility</label>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Known Utility (optional — auto-fills fields below)</label>
               <select id="new-util-preset" onchange="applyUtilityPreset()" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
-                <option value="">-- Select state first --</option>
+                <option value="">-- Select state first, or enter custom below --</option>
               </select>
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+
+          <!-- Row 2: Name + Type -->
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:10px;">
             <div>
-              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">County / Area (optional)</label>
-              <input type="text" id="new-util-county" placeholder="e.g. Oklahoma County" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;" />
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Utility Name <span style="color:var(--red);">*</span></label>
+              <input type="text" id="new-util-name" placeholder="e.g. Cimarron Electric Cooperative" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;" />
             </div>
             <div>
-              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">ODIN Utility ID (auto-filled if known)</label>
-              <input type="text" id="new-util-odin-id" placeholder="Optional — leave blank" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;font-family:monospace;" />
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Utility Type</label>
+              <select id="new-util-type" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="iou">IOU — Investor Owned</option>
+                <option value="muni">Municipal Utility</option>
+                <option value="coop">Electric Cooperative</option>
+                <option value="pud">PUD / Public Utility District</option>
+                <option value="federal">Federal (TVA, BPA, etc.)</option>
+                <option value="other">Other</option>
+              </select>
             </div>
           </div>
-          <div style="margin-bottom:12px;">
-            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Outage Map URL (auto-filled)</label>
-            <input type="url" id="new-util-map-url" placeholder="Select a utility above to auto-fill" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;" />
+
+          <!-- Row 3: County + ODIN ID -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">County / Service Area (optional)</label>
+              <input type="text" id="new-util-county" placeholder="e.g. Canadian County" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;" />
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">ODIN Utility ID (optional — auto-filled if known)</label>
+              <input type="text" id="new-util-odin-id" placeholder="Leave blank if unknown" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;font-family:monospace;" />
+            </div>
+          </div>
+
+          <!-- Row 4: Map URL — clearly optional -->
+          <div style="margin-bottom:6px;">
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Outage Map URL <span style="font-weight:400;">(optional — leave blank if none exists)</span></label>
+            <input type="url" id="new-util-map-url" placeholder="https://outagemap.utility.com/ — leave blank for munis/coops without a public map" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;" />
+          </div>
+          <div style="font-size:11px;color:var(--text-hint);margin-bottom:12px;">
+            If no outage map URL is available the utility will still be tracked — the map link will show "Not available" and may be added later.
           </div>
           <div style="display:flex;gap:8px;justify-content:flex-end;">
             <button onclick="toggleAddUtility()" style="padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-secondary);">Cancel</button>
@@ -15004,12 +15032,16 @@ function toggleAddUtility() {
       if (detectedState) populateUtilityByState(detectedState);
     }
     if (presetEl) presetEl.selectedIndex = 0;
+    const nameEl   = document.getElementById("new-util-name");
     const countyEl = document.getElementById("new-util-county");
     const mapEl    = document.getElementById("new-util-map-url");
     const odinEl   = document.getElementById("new-util-odin-id");
+    const typeEl   = document.getElementById("new-util-type");
+    if (nameEl)   nameEl.value   = "";
     if (countyEl) countyEl.value = "";
     if (mapEl)    mapEl.value    = "";
     if (odinEl)   odinEl.value   = "";
+    if (typeEl)   typeEl.selectedIndex = 0;
   }
 }
 
@@ -15043,10 +15075,27 @@ function applyUtilityPreset() {
   const u     = utils[idx];
   if (!u) return;
 
+  const nameEl = document.getElementById("new-util-name");
   const mapEl  = document.getElementById("new-util-map-url");
   const odinEl = document.getElementById("new-util-odin-id");
-  if (mapEl)  mapEl.value  = u.mapUrl || "";
-  if (odinEl) odinEl.value = u.odinId || "";
+  if (nameEl) nameEl.value = u.name  || "";
+  if (mapEl)  mapEl.value  = u.mapUrl|| "";
+  if (odinEl) odinEl.value = u.odinId|| "";
+
+  // Auto-select type based on name patterns
+  const typeEl = document.getElementById("new-util-type");
+  if (typeEl) {
+    const nm = u.name.toLowerCase();
+    typeEl.value = nm.includes("cooperative") || nm.includes("co-op") || nm.includes("coop") || nm.includes("electric co")
+      ? "coop"
+      : nm.includes("municipal") || nm.includes("city of") || nm.includes("muni")
+      ? "muni"
+      : nm.includes("pud") || nm.includes("public utility district")
+      ? "pud"
+      : nm.includes("tva") || nm.includes("bpa") || nm.includes("federal")
+      ? "federal"
+      : "iou";
+  }
 }
 
 async function saveUtilityConfig() {
@@ -15054,30 +15103,33 @@ async function saveUtilityConfig() {
   const selEl    = document.getElementById("new-util-preset");
   const state    = stateEl?.value?.trim().toUpperCase();
   const selIdx   = parseInt(selEl?.value);
+  const nameEl   = document.getElementById("new-util-name");
   const county   = document.getElementById("new-util-county")?.value?.trim();
   const mapUrl   = document.getElementById("new-util-map-url")?.value?.trim();
   const odinId   = document.getElementById("new-util-odin-id")?.value?.trim();
+  const utilType = document.getElementById("new-util-type")?.value || "iou";
 
   if (!state) { setStatus("error", "Please select a state."); return; }
 
-  // Get utility name from UTILITY_DB or fallback to custom
-  const utils = UTILITY_DB[state] || [];
-  const util  = !isNaN(selIdx) && utils[selIdx] ? utils[selIdx] : null;
-  const name  = util?.name || (selEl?.options[selEl.selectedIndex]?.text?.replace(/^--.*--$/, "").trim()) || "";
-
+  // Name: from the explicit name field (required), auto-filled by preset or manual entry
+  const name = nameEl?.value?.trim();
   if (!name) {
-    setStatus("error", "Please select a utility from the list.");
+    setStatus("error", "Utility name is required. Enter the utility name or select from the known list.");
     return;
   }
 
-  const finalMapUrl = mapUrl || util?.mapUrl || "";
-  const finalOdinId = odinId || util?.odinId || "";
+  // Supplement with DB entry if a preset was selected
+  const utils      = UTILITY_DB[state] || [];
+  const util       = !isNaN(selIdx) && utils[selIdx] ? utils[selIdx] : null;
+  const finalMapUrl= mapUrl || util?.mapUrl || "";   // empty string = no map
+  const finalOdinId= odinId || util?.odinId || "";
 
   const record = {
     utility_name: name,
+    utility_type: utilType,
     county:       county || state,
     state,
-    map_url:      finalMapUrl || null,
+    map_url:      finalMapUrl || null,   // null = no public outage map
     odin_id:      finalOdinId || null,
     enabled:      true,
     added_at:     new Date().toISOString()
@@ -15110,7 +15162,7 @@ async function saveUtilityConfig() {
     // Fall back to localStorage
     try {
       const existing = JSON.parse(localStorage.getItem(OUTAGE_CONFIG_KEY) || "[]");
-      const newEntry = { ...record, id: Date.now() };
+      const newEntry = { ...record, id: `local_${Date.now()}` };
       existing.push(newEntry);
       localStorage.setItem(OUTAGE_CONFIG_KEY, JSON.stringify(existing));
       console.log("Utility saved to localStorage (Supabase table may not exist yet)");
@@ -15161,7 +15213,20 @@ function renderUtilityList() {
     list.innerHTML = '<div class="sched-empty">No utilities configured. Click + Add Utility to begin.</div>';
     return;
   }
+
+  const TYPE_LABELS = {
+    iou:"IOU", muni:"Municipal", coop:"Co-op", pud:"PUD", federal:"Federal", other:"Other"
+  };
+  const TYPE_COLORS = {
+    iou:"var(--blue-dark)", muni:"var(--green-dark)", coop:"#7b4f9e",
+    pud:"var(--amber)", federal:"#c0392b", other:"var(--text-secondary)"
+  };
+
   list.innerHTML = configuredUtilities.map(u => {
+    const utilType  = u.utility_type || "iou";
+    const typeLabel = TYPE_LABELS[utilType] || utilType;
+    const typeColor = TYPE_COLORS[utilType] || "var(--text-secondary)";
+    const hasMap    = !!u.map_url;
     const count   = u._outageCount;
     const total   = u._customersTotal;
     const pct     = u._pctOut;
@@ -15171,33 +15236,52 @@ function renderUtilityList() {
       ? `<span class="outage-count-badge ${badgeClass}">${count.toLocaleString()} out${pct ? ` (${pct}%)` : ""}</span>`
       : `<span class="outage-count-badge" style="background:var(--surface2);color:var(--text-hint);">Loading...</span>`;
 
-    return `<div class="outage-util-card" onclick="openOutageMap('${u.map_url || ""}','${u.utility_name}')">
+    return `<div class="outage-util-card${!u.map_url ? ' no-map-card' : ''}" onclick="${u.map_url ? `openOutageMap('${u.map_url}','${u.utility_name}')` : ''}">
       <div class="outage-util-icon">&#9889;</div>
       <div class="outage-util-info">
-        <div class="outage-util-name">${u.utility_name}</div>
+        <div class="outage-util-name">
+          ${u.utility_name}
+          <span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:8px;border:0.5px solid ${typeColor};color:${typeColor};background:${typeColor}18;margin-left:6px;">${typeLabel}</span>
+        </div>
         <div class="outage-util-meta">${u.county || ""} &bull; ${u.state} ${age != null ? `&bull; Updated ${age < 2 ? "just now" : age + " min ago"}` : ""}</div>
-        ${u.map_url ? `<div style="font-size:10px;color:var(--blue-dark);margin-top:2px;">&#128279; Click to open outage map</div>` : ""}
+        ${u.map_url
+          ? `<div style="font-size:10px;color:var(--blue-dark);margin-top:2px;">&#128279; Click to open outage map</div>`
+          : `<div style="font-size:10px;color:var(--text-hint);margin-top:2px;">&#128683; No public outage map — data tracking only</div>`
+        }
       </div>
       ${badge}
-      <button onclick="event.stopPropagation();removeUtility(${u.id})" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;flex-shrink:0;">Remove</button>
+      <button onclick="event.stopPropagation();removeUtility('${u.id}')" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;flex-shrink:0;">Remove</button>
     </div>`;
   }).join("");
 }
 
 function openOutageMap(url, name) {
-  if (!url) { setStatus("error", `No outage map URL configured for ${name}.`); return; }
+  if (!url) return; // card is not clickable when no map URL
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
 async function removeUtility(id) {
   if (!confirm("Remove this utility from outage tracking?")) return;
+
+  // Remove from Supabase (numeric IDs)
+  if (!String(id).startsWith("local_")) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/utility_outage_config?id=eq.${id}`, {
+        method: "DELETE",
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+      });
+    } catch(e) { console.warn("removeUtility Supabase:", e.message); }
+  }
+
+  // Always remove from localStorage (catches both local-only and belt-and-suspenders)
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/utility_outage_config?id=eq.${id}`, {
-      method: "DELETE",
-      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
-    });
-    await loadConfiguredUtilities();
-  } catch(e) { console.error("removeUtility:", e); }
+    const key    = OUTAGE_CONFIG_KEY;
+    const stored = JSON.parse(localStorage.getItem(key) || "[]");
+    const filtered = stored.filter(u => String(u.id) !== String(id));
+    localStorage.setItem(key, JSON.stringify(filtered));
+  } catch(e) { console.warn("removeUtility localStorage:", e.message); }
+
+  await loadConfiguredUtilities();
 }
 
 // ── Outage Data Refresh ────────────────────────────────────────────────────────
@@ -18997,96 +19081,4 @@ const HELP_CONTENT = {
           <tbody>
             <tr><td>Relay Control</td><td>Manual 4-relay control per device with real-time status.</td></tr>
             <tr><td>Event Scheduler</td><td>Date/time based scheduling with duty cycle strategy selection.</td></tr>
-            <tr><td>Device Groups</td><td>Group-based bulk command delivery.</td></tr>
-            <tr><td>Fleet Health</td><td>Signal strength, voltage, firmware monitoring.</td></tr>
-            <tr><td>Data & History</td><td>Device readings, charts, and historical data logs.</td></tr>
-            <tr><td>User Authentication</td><td>Role-based access with optional 2FA.</td></tr>
-            <tr><td>Weather Display</td><td>Current conditions and forecast in dashboard header.</td></tr>
-            <tr><td>Energy Monitor</td><td>Power consumption tracking and monitoring sessions.</td></tr>
-          </tbody>
-        </table>
-      </div>`
-  },
-
-  glossary: {
-    title: "Glossary",
-    html: `
-      <div class="help-section">
-        <table class="help-table">
-          <thead><tr><th>Term</th><th>Definition</th></tr></thead>
-          <tbody>
-            <tr><td>BAS</td><td>Building Automation System. Controls HVAC and other systems via preprogrammed sequences triggered by discrete inputs.</td></tr>
-            <tr><td>Bubble-Up</td><td>The interval at which a field device proactively reports status to Notehub. Configurable per device in Device Settings.</td></tr>
-            <tr><td>DI</td><td>Distributed Intelligence. Control mode where the device has more autonomy in executing cycling behavior.</td></tr>
-            <tr><td>DLC</td><td>Direct Load Control. Platform directly manages relay on/off timing.</td></tr>
-            <tr><td>Duty Cycle</td><td>The ratio of ON time to total cycle time. 50% duty cycle = relay energized half the time.</td></tr>
-            <tr><td>LC Hex</td><td>Load Control hexadecimal command string. 26 characters encoding mode, strategy, relays, reps, and scheduled time.</td></tr>
-            <tr><td>Notecard</td><td>Blues Wireless cellular module embedded in field switch devices.</td></tr>
-            <tr><td>Notehub</td><td>Blues Wireless cloud platform routing messages between Notecards and the Cloudflare Worker.</td></tr>
-            <tr><td>OpenADR</td><td>Open Automated Demand Response. Standard protocol for utility-to-customer load control communication.</td></tr>
-            <tr><td>Relay</td><td>An electrically operated switch. Each device has 4 independently controllable relays (R1–R4).</td></tr>
-            <tr><td>Restore</td><td>LC command using Strategy 61 that returns all relays to pre-event state.</td></tr>
-            <tr><td>RLS</td><td>Row Level Security. Supabase access control. Must be disabled on all LCP tables for the anon key to work.</td></tr>
-            <tr><td>Schedule Queue</td><td>Supabase table logging all scheduled and fired events with full status lifecycle tracking.</td></tr>
-            <tr><td>VEN</td><td>Virtual End Node. This platform's role in OpenADR — receives and executes utility signals.</td></tr>
-            <tr><td>VTN</td><td>Virtual Top Node. The utility system that sends demand response dispatch signals to VENs.</td></tr>
-          </tbody>
-        </table>
-      </div>`
-  }
-};
-
-function openPrefsModal() {
-  document.getElementById("prefs-overlay").classList.add("active");
-}
-function closePrefsModal(e) {
-  if (e && e.target !== document.getElementById("prefs-overlay")) return;
-  document.getElementById("prefs-overlay").classList.remove("active");
-}
-
-function openHelp(section) {
-  section = section || 'scheduling';
-  showHelpSection(section);
-  document.getElementById('help-modal').classList.add('active');
-}
-
-function closeHelpModal(e) {
-  if (e && e.target !== document.getElementById('help-modal')) return;
-  document.getElementById('help-modal').classList.remove('active');
-}
-
-function showHelpSection(key) {
-  const data = HELP_CONTENT[key];
-  if (!data) return;
-
-  // Update modal title
-  const titleEl = document.getElementById('help-modal-title');
-  if (titleEl) titleEl.textContent = 'Help: ' + data.title;
-
-  // Update modal body
-  const bodyEl = document.getElementById('help-modal-body');
-  if (bodyEl) bodyEl.innerHTML = data.html;
-
-  // Update nav buttons in modal
-  document.querySelectorAll('#help-nav .help-nav-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.getAttribute('onclick').includes("'" + key + "'"));
-  });
-
-  // Also update tab body if help tab is open
-  showHelpTab(key);
-}
-
-function showHelpTab(key) {
-  const data = HELP_CONTENT[key];
-  if (!data) return;
-  const tabBody = document.getElementById('help-tab-body');
-  if (tabBody) {
-    tabBody.innerHTML = '<div class="help-modal-body" style="padding:0;">' + data.html + '</div>';
-  }
-}
-
-// Init help tab with scheduling content when navigated to
-
-</script>
-</body>
-</html>
+            <tr><td
