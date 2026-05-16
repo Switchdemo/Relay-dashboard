@@ -4051,7 +4051,7 @@
 
         <!-- Enroll / Add form -->
         <div id="ev-dev-enroll-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:16px;margin-bottom:14px;border:0.5px solid var(--border-md);">
-          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;font-family:monospace;">Add EV Charger Asset</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;font-family:monospace;" id="ev-dev-form-title">Add EV Charger Asset</div>
 
           <!-- Integration type selector -->
           <div style="margin-bottom:14px;">
@@ -4306,7 +4306,7 @@
 
           <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
             <button onclick="toggleEVDevEnrollForm()" style="padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-secondary);">Cancel</button>
-            <button onclick="saveEVDevAsset()" style="padding:7px 24px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save Asset</button>
+            <button onclick="saveEVDevAsset()" id="ev-dev-save-btn" style="padding:7px 24px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save Asset</button>
           </div>
         </div>
 
@@ -4371,7 +4371,7 @@
 
         <!-- Enroll form -->
         <div id="batt-enroll-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:16px;margin-bottom:14px;border:0.5px solid var(--border-md);">
-          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;font-family:monospace;">Add Battery Storage Asset</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;font-family:monospace;" id="batt-form-title">Add Battery Storage Asset</div>
 
           <!-- Integration type -->
           <div style="margin-bottom:14px;">
@@ -4662,7 +4662,7 @@
 
           <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
             <button onclick="toggleBatteryEnrollForm()" style="padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-secondary);">Cancel</button>
-            <button onclick="saveBatteryAsset()" style="padding:7px 24px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save Battery Asset</button>
+            <button onclick="saveBatteryAsset()" id="batt-save-btn" style="padding:7px 24px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save Battery Asset</button>
           </div>
         </div>
 
@@ -4735,7 +4735,7 @@
 
         <!-- Enroll form -->
         <div id="gen-enroll-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:16px;margin-bottom:14px;border:0.5px solid var(--border-md);">
-          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;font-family:monospace;">Add Generator Asset</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;font-family:monospace;" id="gen-form-title">Add Generator Asset</div>
 
           <!-- Integration type selector -->
           <div style="margin-bottom:14px;">
@@ -5000,7 +5000,7 @@
 
           <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
             <button onclick="toggleGenEnrollForm()" style="padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-secondary);">Cancel</button>
-            <button onclick="saveGeneratorAsset()" style="padding:7px 24px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save Generator Asset</button>
+            <button onclick="saveGeneratorAsset()" id="gen-save-btn" style="padding:7px 24px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save Generator Asset</button>
           </div>
         </div>
 
@@ -14853,133 +14853,3453 @@ function confirmSuggestedEvent(ruleId) {
 
 // ── Outage Tracker ────────────────────────────────────────────────────────────
 
-// ── Utility database keyed by state — major IOUs and co-ops ─────────────────
-const UTILITY_DB = {
-  AL: [{ name:"Alabama Power",              mapUrl:"https://www.alabamapower.com/outages/view-outages.html" },
-       { name:"PowerSouth Energy Coop",     mapUrl:"https://powersouth.com/outage-center/" }],
-  AK: [{ name:"Chugach Electric Association",mapUrl:"https://www.chugachelectric.com/outages" },
-       { name:"Golden Valley Electric",     mapUrl:"https://gvea.com/outages/" }],
-  AZ: [{ name:"Arizona Public Service (APS)",mapUrl:"https://www.aps.com/en/outage/outage-information/outage-center" },
-       { name:"Salt River Project (SRP)",   mapUrl:"https://www.srpnet.com/electric/outages" },
-       { name:"Tucson Electric Power",      mapUrl:"https://www.tucsonelectric.com/outages" }],
-  AR: [{ name:"Entergy Arkansas",           mapUrl:"https://www.entergy-arkansas.com/outages/" },
-       { name:"Arkansas Electric Co-op",    mapUrl:"https://aeci.org/outage-map/" }],
-  CA: [{ name:"Pacific Gas & Electric (PG&E)",mapUrl:"https://pgealerts.alerts.pge.com/outagecenter/" },
-       { name:"Southern California Edison", mapUrl:"https://outage.sce.com/wps/portal/home" },
-       { name:"San Diego Gas & Electric",   mapUrl:"https://sdge.com/outages" },
-       { name:"LADWP",                      mapUrl:"https://ladwp.com/ladwp/faces/ladwp/outage/outagemap" }],
-  CO: [{ name:"Xcel Energy Colorado",       mapUrl:"https://www.xcelenergy.com/outages_and_renewables/power_outages" },
-       { name:"Black Hills Energy",         mapUrl:"https://www.blackhillsenergy.com/outages-and-safety/report-an-electric-outage" }],
-  CT: [{ name:"Eversource Connecticut",     mapUrl:"https://www.eversource.com/content/ct-c/residential/outages-emergencies/report-power-outage/outage-map" },
-       { name:"United Illuminating (Avangrid)",mapUrl:"https://ui.com/outage/outage-map" }],
-  DE: [{ name:"Delmarva Power",             mapUrl:"https://www.delmarva.com/outages/reportoranoutage/outagemap.aspx" }],
-  FL: [{ name:"Florida Power & Light (FPL)",mapUrl:"https://www.fpl.com/outage/outage-map.html" },
-       { name:"Duke Energy Florida",        mapUrl:"https://outagemap.duke-energy.com/#/current-storm/fl" },
-       { name:"Tampa Electric (TECO)",      mapUrl:"https://www.tampaelectric.com/residential/customerservice/outages/outagemap/" },
-       { name:"Florida Public Utilities",   mapUrl:"https://www.fpuc.com/my-home/outages-and-emergencies/" }],
-  GA: [{ name:"Georgia Power",             mapUrl:"https://outagemap.georgiapower.com/" },
-       { name:"Flint Energies",            mapUrl:"https://www.flintenergies.com/outage-center" }],
-  HI: [{ name:"Hawaiian Electric (HECO)",   mapUrl:"https://www.hawaiianelectric.com/billing-and-payment/rates-and-regulations/request-forms/outage-map" }],
-  ID: [{ name:"Idaho Power",               mapUrl:"https://idahopower.com/outages/outage-map/" },
-       { name:"Rocky Mountain Power",      mapUrl:"https://www.rockymountainpower.net/outages.html" }],
-  IL: [{ name:"ComEd (Exelon)",            mapUrl:"https://outagemap.comed.com/" },
-       { name:"Ameren Illinois",           mapUrl:"https://www.ameren.com/illinois/outage/outage-map" }],
-  IN: [{ name:"AES Indiana",               mapUrl:"https://outage.aes.com/outage-center/outage-map?region=Indiana" },
-       { name:"Duke Energy Indiana",       mapUrl:"https://outagemap.duke-energy.com/#/current-storm/in" },
-       { name:"Indiana Michigan Power",    mapUrl:"https://www.indianamichiganpower.com/info/outages/outagemap.aspx" }],
-  IA: [{ name:"MidAmerican Energy",        mapUrl:"https://www.midamericanenergy.com/outage" },
-       { name:"Alliant Energy (Iowa)",     mapUrl:"https://www.alliantenergy.com/ResidentialCustomers/OutageCenter/OutageMap" }],
-  KS: [{ name:"Evergy Kansas",             mapUrl:"https://www.evergy.com/manage-account/outage-center/outage-map" },
-       { name:"Westar Energy",             mapUrl:"https://www.westarenergy.com/outages" }],
-  KY: [{ name:"Kentucky Utilities (LG&E)", mapUrl:"https://lge-ku.com/outage-center/outage-map" },
-       { name:"Duke Energy Kentucky",      mapUrl:"https://outagemap.duke-energy.com/#/current-storm/ky" }],
-  LA: [{ name:"Entergy Louisiana",         mapUrl:"https://www.entergy-louisiana.com/outages/" },
-       { name:"Cleco Power",               mapUrl:"https://www.cleco.com/my-home/outage-center/outage-map" }],
-  ME: [{ name:"Central Maine Power",       mapUrl:"https://outagemap.cmpco.com/" },
-       { name:"Versant Power",             mapUrl:"https://versantpower.com/outages/" }],
-  MD: [{ name:"BGE (Exelon)",              mapUrl:"https://outage.bge.com/map/" },
-       { name:"Pepco (Exelon)",            mapUrl:"https://outage.pepco.com/map/" },
-       { name:"Delmarva Power",            mapUrl:"https://www.delmarva.com/outages/reportoranoutage/outagemap.aspx" }],
-  MA: [{ name:"Eversource Massachusetts",  mapUrl:"https://www.eversource.com/content/ema-c/residential/outages-emergencies/report-power-outage/outage-map" },
-       { name:"National Grid Massachusetts",mapUrl:"https://www.nationalgridus.com/MA-Home/Outages/Outage-Map" }],
-  MI: [{ name:"DTE Energy",                mapUrl:"https://newlook.dteenergy.com/wps/wcm/connect/dte-web/quicklinks/electric-outage-map" },
-       { name:"Consumers Energy",          mapUrl:"https://www.consumersenergy.com/outagemap" }],
-  MN: [{ name:"Xcel Energy Minnesota",     mapUrl:"https://www.xcelenergy.com/outages_and_renewables/power_outages" },
-       { name:"Minnesota Power",           mapUrl:"https://www.mnpower.com/CustomerService/OutageMap" },
-       { name:"Great River Energy",        mapUrl:"https://www.greatriverenergy.com/outages" }],
-  MS: [{ name:"Entergy Mississippi",       mapUrl:"https://www.entergy-mississippi.com/outages/" },
-       { name:"Mississippi Power",         mapUrl:"https://www.mississippipower.com/outages" }],
-  MO: [{ name:"Ameren Missouri",           mapUrl:"https://www.ameren.com/missouri/outage/outage-map" },
-       { name:"Evergy Missouri",           mapUrl:"https://www.evergy.com/manage-account/outage-center/outage-map" }],
-  MT: [{ name:"NorthWestern Energy",       mapUrl:"https://www.northwesternenergy.com/outage-center" },
-       { name:"Montana-Dakota Utilities",  mapUrl:"https://www.montana-dakota.com/electric/outage-center" }],
-  NE: [{ name:"OPPD",                      mapUrl:"https://outage.oppd.com/" },
-       { name:"Lincoln Electric System",   mapUrl:"https://les.com/electric-services/outage" },
-       { name:"Nebraska Public Power",     mapUrl:"https://www.nppd.com/safety-and-outages/outage-map/" }],
-  NV: [{ name:"NV Energy",                 mapUrl:"https://www.nvenergy.com/account-services/manage-my-service/outage-center" }],
-  NH: [{ name:"Eversource New Hampshire",  mapUrl:"https://www.eversource.com/content/nh/residential/outages-emergencies/report-power-outage/outage-map" },
-       { name:"Unitil",                    mapUrl:"https://unitil.com/outage-center/outage-map" }],
-  NJ: [{ name:"PSE&G",                     mapUrl:"https://nj.pseg.com/home/customer-support/poweroutages/power-outage-map.aspx" },
-       { name:"JCP&L (FirstEnergy)",       mapUrl:"https://firstenergycorp.com/outages_help/check_outage_status/outage_map.html" },
-       { name:"Atlantic City Electric",    mapUrl:"https://www.atlanticcityelectric.com/outages/reportoranoutage/outagemap.aspx" }],
-  NM: [{ name:"PNM Resources",             mapUrl:"https://www.pnm.com/outages" },
-       { name:"El Paso Electric",          mapUrl:"https://www.epelectric.com/outage-map" }],
-  NY: [{ name:"Con Edison",                mapUrl:"https://conedison.com/en/outages-and-emergencies/outagemap/" },
-       { name:"National Grid NY",          mapUrl:"https://www.nationalgridus.com/NY-Home/Outages/Outage-Map" },
-       { name:"Central Hudson",            mapUrl:"https://www.centralhudson.com/outage/view-current-outages/" },
-       { name:"PSEG Long Island",          mapUrl:"https://www.psegliny.com/outage" }],
-  NC: [{ name:"Duke Energy Carolinas",     mapUrl:"https://outagemap.duke-energy.com/#/current-storm/carolinas" },
-       { name:"Duke Energy Progress",      mapUrl:"https://outagemap.duke-energy.com/#/current-storm/progress" },
-       { name:"Dominion Energy NC",        mapUrl:"https://www.dominionenergy.com/outage/outage-map" }],
-  ND: [{ name:"Montana-Dakota Utilities",  mapUrl:"https://www.montana-dakota.com/electric/outage-center" },
-       { name:"Xcel Energy ND",            mapUrl:"https://www.xcelenergy.com/outages_and_renewables/power_outages" }],
-  OH: [{ name:"AEP Ohio",                  mapUrl:"https://www.aepohio.com/info/outages/outagemap.aspx" },
-       { name:"FirstEnergy Ohio",          mapUrl:"https://firstenergycorp.com/outages_help/check_outage_status/outage_map.html" },
-       { name:"Duke Energy Ohio",          mapUrl:"https://outagemap.duke-energy.com/#/current-storm/oh" },
-       { name:"AES Ohio (DP&L)",           mapUrl:"https://outage.aes.com/outage-center/outage-map?region=Ohio" }],
-  OK: [{ name:"Oklahoma Gas & Electric (OG&E)", mapUrl:"https://outagemap.oge.com/", odinId:"617" },
-       { name:"Public Service Oklahoma (PSO)",  mapUrl:"https://www.psoklahoma.com/outage/outage-map/", odinId:"618" },
-       { name:"Oklahoma Electric Cooperative",  mapUrl:"https://okcoop.org/outage-map/" }],
-  OR: [{ name:"Pacific Power",             mapUrl:"https://www.pacificpower.net/outages-safety/outage-center/outage-map.html" },
-       { name:"Portland General Electric", mapUrl:"https://www.portlandgeneral.com/outage" },
-       { name:"Eugene Water & Electric",   mapUrl:"https://www.eweb.org/outages" }],
-  PA: [{ name:"PECO (Exelon)",             mapUrl:"https://www.peco.com/safety-and-outages/check-outage-status/outage-map" },
-       { name:"PPL Electric Utilities",    mapUrl:"https://www.pplweb.com/for-your-home/outage-center/view-outages-map" },
-       { name:"West Penn Power (FirstEnergy)",mapUrl:"https://firstenergycorp.com/outages_help/check_outage_status/outage_map.html" },
-       { name:"Duquesne Light",            mapUrl:"https://www.duquesnelight.com/outages-safety/report-view-outage" }],
-  RI: [{ name:"National Grid Rhode Island",mapUrl:"https://www.nationalgridus.com/RI-Home/Outages/Outage-Map" }],
-  SC: [{ name:"Duke Energy SC",            mapUrl:"https://outagemap.duke-energy.com/#/current-storm/carolinas" },
-       { name:"Dominion Energy SC",        mapUrl:"https://www.dominionenergy.com/outage/outage-map" },
-       { name:"Santee Cooper",             mapUrl:"https://outagemap.santeecooper.com/" }],
-  SD: [{ name:"Xcel Energy SD",            mapUrl:"https://www.xcelenergy.com/outages_and_renewables/power_outages" },
-       { name:"Montana-Dakota Utilities",  mapUrl:"https://www.montana-dakota.com/electric/outage-center" },
-       { name:"Black Hills Energy SD",     mapUrl:"https://www.blackhillsenergy.com/outages-and-safety/report-an-electric-outage" }],
-  TN: [{ name:"TVA / Memphis Light Gas",   mapUrl:"https://www.mlgw.com/service/outages" },
-       { name:"Nashville Electric Service",mapUrl:"https://nespower.com/outages" },
-       { name:"EPB Chattanooga",           mapUrl:"https://epb.com/outage-map/" }],
-  TX: [{ name:"Oncor Electric Delivery",   mapUrl:"https://stormcenter.oncor.com/", odinId:"376" },
-       { name:"AEP Texas Central",         mapUrl:"https://www.aeptexas.com/outage/" },
-       { name:"AEP Texas North",           mapUrl:"https://www.aeptexas.com/outage/" },
-       { name:"Texas New Mexico Power",    mapUrl:"https://tnmp.com/outages/" },
-       { name:"CenterPoint Energy",        mapUrl:"https://stormcenter.centerpointenergy.com/" },
-       { name:"Bluebonnet Electric Co-op", mapUrl:"https://www.bluebonnet.coop/outage-center/outage-map/" }],
-  UT: [{ name:"Rocky Mountain Power",      mapUrl:"https://www.rockymountainpower.net/outages.html" }],
-  VT: [{ name:"Green Mountain Power",      mapUrl:"https://gmpoutages.comed.com/" },
-       { name:"Burlington Electric",       mapUrl:"https://www.burlingtonelectric.com/outage" }],
-  VA: [{ name:"Dominion Energy Virginia",  mapUrl:"https://www.dominionenergy.com/outage/outage-map" },
-       { name:"Appalachian Power (AEP VA)",mapUrl:"https://www.appalachianpower.com/info/outages/outagemap.aspx" }],
-  WA: [{ name:"Puget Sound Energy (PSE)",  mapUrl:"https://pse.com/en/outage-map" },
-       { name:"Seattle City Light",        mapUrl:"https://www.seattle.gov/city-light/outages-and-emerencies/outage-map" },
-       { name:"Pacificorp / Pacific Power",mapUrl:"https://www.pacificpower.net/outages-safety/outage-center/outage-map.html" }],
-  WV: [{ name:"Appalachian Power (AEP WV)",mapUrl:"https://www.appalachianpower.com/info/outages/outagemap.aspx" },
-       { name:"Mountaineer Gas / Dominion",mapUrl:"https://www.dominionenergy.com/outage/outage-map" }],
-  WI: [{ name:"We Energies",               mapUrl:"https://www.we-energies.com/services/outages/outage_maps.htm" },
-       { name:"Alliant Energy Wisconsin",  mapUrl:"https://www.alliantenergy.com/ResidentialCustomers/OutageCenter/OutageMap" },
-       { name:"Madison Gas & Electric",    mapUrl:"https://www.mge.com/customers/power/outage/" }],
-  WY: [{ name:"Rocky Mountain Power",      mapUrl:"https://www.rockymountainpower.net/outages.html" },
-       { name:"Black Hills Energy WY",     mapUrl:"https://www.blackhillsenergy.com/outages-and-safety/report-an-electric-outage" }],
-  DC: [{ name:"Pepco DC",                  mapUrl:"https://outage.pepco.com/map/" }]
+const EIA_UTILITIES = {
+  "AL": [
+    {
+      "name": "Alabama Power",
+      "type": "iou"
+    },
+    {
+      "name": "PowerSouth Energy Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Joe Wheeler EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Cullman Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "North Alabama Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Coosa Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Tombigbee Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Wiregrass Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Tallapoosa River Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Dixie Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Huntsville Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Athens Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Florence Utilities",
+      "type": "muni"
+    }
+  ],
+  "AK": [
+    {
+      "name": "Chugach Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Golden Valley Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Matanuska Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Homer Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Kodiak Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Anchorage Municipal Light & Power",
+      "type": "muni"
+    },
+    {
+      "name": "Fairbanks Municipal Utilities",
+      "type": "muni"
+    }
+  ],
+  "AZ": [
+    {
+      "name": "Arizona Public Service (APS)",
+      "type": "iou"
+    },
+    {
+      "name": "Salt River Project (SRP)",
+      "type": "muni"
+    },
+    {
+      "name": "Tucson Electric Power",
+      "type": "iou"
+    },
+    {
+      "name": "UniSource Energy (UNS Electric)",
+      "type": "iou"
+    },
+    {
+      "name": "Navajo Tribal Utility Authority",
+      "type": "other"
+    },
+    {
+      "name": "Duncan Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Graham County Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Sulphur Springs Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Trico Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Mohave Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Mesa Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Safford City",
+      "type": "muni"
+    }
+  ],
+  "AR": [
+    {
+      "name": "Entergy Arkansas",
+      "type": "iou"
+    },
+    {
+      "name": "Arkansas Electric Cooperative Corporation",
+      "type": "coop"
+    },
+    {
+      "name": "Arkansas Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Carroll Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "C & L Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Clay County Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Craighead Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "First Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Mississippi County Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Ouachita Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Petit Jean Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Rich Mountain Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Conway Corporation",
+      "type": "muni"
+    },
+    {
+      "name": "Paragould Light Water & Cable",
+      "type": "muni"
+    }
+  ],
+  "CA": [
+    {
+      "name": "Pacific Gas & Electric (PG&E)",
+      "type": "iou"
+    },
+    {
+      "name": "Southern California Edison",
+      "type": "iou"
+    },
+    {
+      "name": "San Diego Gas & Electric",
+      "type": "iou"
+    },
+    {
+      "name": "LADWP",
+      "type": "muni"
+    },
+    {
+      "name": "Sacramento Municipal Utility District (SMUD)",
+      "type": "muni"
+    },
+    {
+      "name": "Imperial Irrigation District",
+      "type": "muni"
+    },
+    {
+      "name": "Turlock Irrigation District",
+      "type": "muni"
+    },
+    {
+      "name": "Modesto Irrigation District",
+      "type": "muni"
+    },
+    {
+      "name": "Lodi Electric",
+      "type": "muni"
+    },
+    {
+      "name": "Burbank Water & Power",
+      "type": "muni"
+    },
+    {
+      "name": "Glendale Water & Power",
+      "type": "muni"
+    },
+    {
+      "name": "Pasadena Water & Power",
+      "type": "muni"
+    },
+    {
+      "name": "Trinity Public Utilities District",
+      "type": "pud"
+    },
+    {
+      "name": "Plumas-Sierra Rural Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "PG&E Bay Area Community Energy (BACE)",
+      "type": "other"
+    }
+  ],
+  "CO": [
+    {
+      "name": "Xcel Energy Colorado",
+      "type": "iou"
+    },
+    {
+      "name": "Black Hills Energy",
+      "type": "iou"
+    },
+    {
+      "name": "La Plata Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "United Power",
+      "type": "coop"
+    },
+    {
+      "name": "Poudre Valley REA",
+      "type": "coop"
+    },
+    {
+      "name": "Delta-Montrose Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Mountain Parks Electric",
+      "type": "coop"
+    },
+    {
+      "name": "Gunnison County Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Highline Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "K.C. Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "San Isabel Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Southeast Colorado Power Association",
+      "type": "coop"
+    },
+    {
+      "name": "Intermountain REA",
+      "type": "coop"
+    },
+    {
+      "name": "Holy Cross Energy",
+      "type": "coop"
+    },
+    {
+      "name": "Yampa Valley Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Colorado Springs Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Fort Collins Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Longmont Power & Communications",
+      "type": "muni"
+    }
+  ],
+  "CT": [
+    {
+      "name": "Eversource Connecticut",
+      "type": "iou"
+    },
+    {
+      "name": "United Illuminating (Avangrid)",
+      "type": "iou"
+    }
+  ],
+  "DC": [
+    {
+      "name": "Pepco DC",
+      "type": "iou"
+    }
+  ],
+  "DE": [
+    {
+      "name": "Delmarva Power",
+      "type": "iou"
+    },
+    {
+      "name": "Delaware Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Milford City",
+      "type": "muni"
+    }
+  ],
+  "FL": [
+    {
+      "name": "Florida Power & Light (FPL)",
+      "type": "iou"
+    },
+    {
+      "name": "Duke Energy Florida",
+      "type": "iou"
+    },
+    {
+      "name": "Tampa Electric (TECO)",
+      "type": "iou"
+    },
+    {
+      "name": "Florida Public Utilities (FPU)",
+      "type": "iou"
+    },
+    {
+      "name": "Gulf Power (now FPL)",
+      "type": "iou"
+    },
+    {
+      "name": "Clay Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Choctawhatchee Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Central Florida Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Talquin Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Suwannee Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Peace River Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Withlacoochee River Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Lakeland Electric",
+      "type": "muni"
+    },
+    {
+      "name": "Orlando Utilities Commission (OUC)",
+      "type": "muni"
+    },
+    {
+      "name": "Gainesville Regional Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Kissimmee Utility Authority",
+      "type": "muni"
+    },
+    {
+      "name": "JEA (Jacksonville)",
+      "type": "muni"
+    },
+    {
+      "name": "Homestead City",
+      "type": "muni"
+    }
+  ],
+  "GA": [
+    {
+      "name": "Georgia Power",
+      "type": "iou"
+    },
+    {
+      "name": "Jackson EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Cobb EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Walton EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Snapping Shoals EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Sawnee EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Coweta-Fayette EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Diverse Power",
+      "type": "coop"
+    },
+    {
+      "name": "Flint Energies",
+      "type": "coop"
+    },
+    {
+      "name": "Carroll EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Greystone Power Corporation",
+      "type": "coop"
+    },
+    {
+      "name": "Altamaha EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Mitchell EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Colquitt EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Satilla REMC",
+      "type": "coop"
+    },
+    {
+      "name": "Slash Pine EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Planters EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Excelsior EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Jefferson Energy Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Sumter EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Rayle EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Pataula EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Washington EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Amicalola EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Habersham EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Tri-County EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Withlacoochee EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Okefenoke REMC",
+      "type": "coop"
+    },
+    {
+      "name": "Hart EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Irwin EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Lamar EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Middle Georgia EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Oconee EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Pineland Telephone",
+      "type": "coop"
+    },
+    {
+      "name": "Sandersville City",
+      "type": "muni"
+    }
+  ],
+  "HI": [
+    {
+      "name": "Hawaiian Electric (HECO)",
+      "type": "iou"
+    },
+    {
+      "name": "Maui Electric (MECO)",
+      "type": "iou"
+    },
+    {
+      "name": "Hawaii Electric Light (HELCO)",
+      "type": "iou"
+    },
+    {
+      "name": "Kauai Island Utility Cooperative (KIUC)",
+      "type": "coop"
+    }
+  ],
+  "ID": [
+    {
+      "name": "Idaho Power",
+      "type": "iou"
+    },
+    {
+      "name": "Rocky Mountain Power (PacifiCorp)",
+      "type": "iou"
+    },
+    {
+      "name": "Avista Utilities",
+      "type": "iou"
+    },
+    {
+      "name": "Fall River Rural Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Clearwater Power",
+      "type": "coop"
+    },
+    {
+      "name": "Inland Power & Light",
+      "type": "coop"
+    },
+    {
+      "name": "Lost River Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Raft River Rural Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Salmon River Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "South Side Electric Lines",
+      "type": "coop"
+    },
+    {
+      "name": "Boise City",
+      "type": "muni"
+    },
+    {
+      "name": "Idaho Falls Power",
+      "type": "muni"
+    }
+  ],
+  "IL": [
+    {
+      "name": "ComEd (Exelon)",
+      "type": "iou"
+    },
+    {
+      "name": "Ameren Illinois",
+      "type": "iou"
+    },
+    {
+      "name": "MidAmerican Energy (Illinois)",
+      "type": "iou"
+    },
+    {
+      "name": "Tri-County Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Corn Belt Energy Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Egyptian Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Jo-Carroll Energy",
+      "type": "coop"
+    },
+    {
+      "name": "Menard Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Norris Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Rural Electric Convenience Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "South Central Illinois REC",
+      "type": "coop"
+    },
+    {
+      "name": "Southwestern Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Western Illinois Electrical Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "City Water Light & Power (Springfield)",
+      "type": "muni"
+    },
+    {
+      "name": "Heartland Energy Solutions",
+      "type": "muni"
+    }
+  ],
+  "IN": [
+    {
+      "name": "AES Indiana",
+      "type": "iou"
+    },
+    {
+      "name": "Duke Energy Indiana",
+      "type": "iou"
+    },
+    {
+      "name": "Indiana Michigan Power (AEP)",
+      "type": "iou"
+    },
+    {
+      "name": "Northern Indiana Public Service (NIPSCO)",
+      "type": "iou"
+    },
+    {
+      "name": "Boone County REMC",
+      "type": "coop"
+    },
+    {
+      "name": "Bartholomew County REMC",
+      "type": "coop"
+    },
+    {
+      "name": "Carroll White REMC",
+      "type": "coop"
+    },
+    {
+      "name": "Daviess-Martin County REMC",
+      "type": "coop"
+    },
+    {
+      "name": "Decatur County REMC",
+      "type": "coop"
+    },
+    {
+      "name": "Dubois REC",
+      "type": "coop"
+    },
+    {
+      "name": "Henry County REMC",
+      "type": "coop"
+    },
+    {
+      "name": "Hoosier Energy REC",
+      "type": "coop"
+    },
+    {
+      "name": "Jackson County REMC",
+      "type": "coop"
+    },
+    {
+      "name": "Kankakee Valley REMC",
+      "type": "coop"
+    },
+    {
+      "name": "Lagrange County REMC",
+      "type": "coop"
+    },
+    {
+      "name": "Owen County REMC",
+      "type": "coop"
+    },
+    {
+      "name": "Parke County REMC",
+      "type": "coop"
+    },
+    {
+      "name": "Pioneer REC",
+      "type": "coop"
+    },
+    {
+      "name": "Southwestern Indiana REC",
+      "type": "coop"
+    },
+    {
+      "name": "Utilities District of Western Indiana REMC",
+      "type": "coop"
+    },
+    {
+      "name": "Wabash Valley Power Alliance",
+      "type": "coop"
+    },
+    {
+      "name": "Whitewater Valley REMC",
+      "type": "coop"
+    },
+    {
+      "name": "Indianapolis Power & Light (IPL)",
+      "type": "iou"
+    },
+    {
+      "name": "Jasper Board of Public Works",
+      "type": "muni"
+    }
+  ],
+  "IA": [
+    {
+      "name": "MidAmerican Energy",
+      "type": "iou"
+    },
+    {
+      "name": "Alliant Energy (Interstate Power)",
+      "type": "iou"
+    },
+    {
+      "name": "Black Hills Energy (Iowa)",
+      "type": "iou"
+    },
+    {
+      "name": "Butler County REC",
+      "type": "coop"
+    },
+    {
+      "name": "Central Iowa Power Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Corn Belt Power Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Eastern Iowa Light & Power Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Farmers Electric Cooperative (Iowa)",
+      "type": "coop"
+    },
+    {
+      "name": "Grundy County REC",
+      "type": "coop"
+    },
+    {
+      "name": "Hawkeye REC",
+      "type": "coop"
+    },
+    {
+      "name": "Iowa Lakes Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Linn County REC",
+      "type": "coop"
+    },
+    {
+      "name": "Maquoketa Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "North Western Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Pella Municipal Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Cedar Falls Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Independence Light & Power",
+      "type": "muni"
+    }
+  ],
+  "KS": [
+    {
+      "name": "Evergy Kansas Central",
+      "type": "iou"
+    },
+    {
+      "name": "Evergy Metro (Kansas City)",
+      "type": "iou"
+    },
+    {
+      "name": "Empire District Electric",
+      "type": "iou"
+    },
+    {
+      "name": "Kansas Electric Power Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Lane-Scott Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Prairie Land Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Rolling Hills Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Sunflower Electric Power Corporation",
+      "type": "coop"
+    },
+    {
+      "name": "Victory Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Western Cooperative Electric",
+      "type": "coop"
+    },
+    {
+      "name": "Wheatland Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Midwest Energy",
+      "type": "coop"
+    },
+    {
+      "name": "Pioneer Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Twin Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Caney Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Heartland Rural Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Kansas City Board of Public Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Chanute City",
+      "type": "muni"
+    }
+  ],
+  "KY": [
+    {
+      "name": "Kentucky Utilities / LG&E",
+      "type": "iou"
+    },
+    {
+      "name": "Duke Energy Kentucky",
+      "type": "iou"
+    },
+    {
+      "name": "Big Sandy RECC",
+      "type": "coop"
+    },
+    {
+      "name": "Blue Grass Energy Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Clark Energy Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Cumberland Valley Electric",
+      "type": "coop"
+    },
+    {
+      "name": "Delta Natural Gas",
+      "type": "iou"
+    },
+    {
+      "name": "Farmers RECC",
+      "type": "coop"
+    },
+    {
+      "name": "Fleming-Mason Energy Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Grayson RECC",
+      "type": "coop"
+    },
+    {
+      "name": "Inter-County Energy Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Jackson Energy Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Kenergy Corp",
+      "type": "coop"
+    },
+    {
+      "name": "Licking Valley RECC",
+      "type": "coop"
+    },
+    {
+      "name": "Meade County RECC",
+      "type": "coop"
+    },
+    {
+      "name": "Nolin RECC",
+      "type": "coop"
+    },
+    {
+      "name": "Owen Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Pennyrile Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Salt River Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Shelby Energy Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "South Kentucky RECC",
+      "type": "coop"
+    },
+    {
+      "name": "Taylor County RECC",
+      "type": "coop"
+    },
+    {
+      "name": "Tri-County Electric Cooperative (KY)",
+      "type": "coop"
+    },
+    {
+      "name": "West Kentucky RECC",
+      "type": "coop"
+    },
+    {
+      "name": "Paducah Power System",
+      "type": "muni"
+    },
+    {
+      "name": "Glasgow Electric Plant Board",
+      "type": "muni"
+    }
+  ],
+  "LA": [
+    {
+      "name": "Entergy Louisiana",
+      "type": "iou"
+    },
+    {
+      "name": "Cleco Power",
+      "type": "iou"
+    },
+    {
+      "name": "Beauregard Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Cajun Electric Power Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Concordia Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Jeff Davis Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "South Louisiana Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "SLEMCO",
+      "type": "coop"
+    },
+    {
+      "name": "Southwest Louisiana Electric Membership",
+      "type": "coop"
+    },
+    {
+      "name": "Valley Electric Membership Corporation",
+      "type": "coop"
+    },
+    {
+      "name": "Dixie Electric Membership Corporation",
+      "type": "coop"
+    },
+    {
+      "name": "Demco",
+      "type": "coop"
+    },
+    {
+      "name": "Benton Electric",
+      "type": "coop"
+    },
+    {
+      "name": "Baton Rouge Water & Power",
+      "type": "muni"
+    },
+    {
+      "name": "Lafayette Utilities System",
+      "type": "muni"
+    },
+    {
+      "name": "Natchitoches City",
+      "type": "muni"
+    }
+  ],
+  "ME": [
+    {
+      "name": "Central Maine Power (Avangrid)",
+      "type": "iou"
+    },
+    {
+      "name": "Versant Power (Emera Maine)",
+      "type": "iou"
+    },
+    {
+      "name": "Bangor Hydro-Electric",
+      "type": "iou"
+    },
+    {
+      "name": "Eastern Maine Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Fox Islands Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Houlton Water Company",
+      "type": "muni"
+    }
+  ],
+  "MD": [
+    {
+      "name": "BGE (Exelon)",
+      "type": "iou"
+    },
+    {
+      "name": "Pepco (Exelon)",
+      "type": "iou"
+    },
+    {
+      "name": "Delmarva Power",
+      "type": "iou"
+    },
+    {
+      "name": "Potomac Edison (FirstEnergy)",
+      "type": "iou"
+    },
+    {
+      "name": "Choptank Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Southern Maryland Electric Cooperative (SMECO)",
+      "type": "coop"
+    },
+    {
+      "name": "Easton Utilities",
+      "type": "muni"
+    }
+  ],
+  "MA": [
+    {
+      "name": "Eversource Massachusetts",
+      "type": "iou"
+    },
+    {
+      "name": "National Grid Massachusetts",
+      "type": "iou"
+    },
+    {
+      "name": "Unitil (Massachusetts)",
+      "type": "iou"
+    },
+    {
+      "name": "Reading Municipal Light Department",
+      "type": "muni"
+    },
+    {
+      "name": "Braintree Electric Light Department",
+      "type": "muni"
+    },
+    {
+      "name": "Concord Municipal Light Plant",
+      "type": "muni"
+    },
+    {
+      "name": "Marblehead Municipal Light Department",
+      "type": "muni"
+    },
+    {
+      "name": "Middleborough Gas & Electric",
+      "type": "muni"
+    },
+    {
+      "name": "Norwood Light Department",
+      "type": "muni"
+    },
+    {
+      "name": "Shrewsbury Electric & Cable Operations",
+      "type": "muni"
+    },
+    {
+      "name": "Taunton Municipal Lighting Plant",
+      "type": "muni"
+    },
+    {
+      "name": "Westfield Gas & Electric",
+      "type": "muni"
+    }
+  ],
+  "MI": [
+    {
+      "name": "DTE Energy",
+      "type": "iou"
+    },
+    {
+      "name": "Consumers Energy",
+      "type": "iou"
+    },
+    {
+      "name": "Indiana Michigan Power",
+      "type": "iou"
+    },
+    {
+      "name": "Alpena Power Company",
+      "type": "iou"
+    },
+    {
+      "name": "Cherryland Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Cloverland Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Great Lakes Energy Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "HomeWorks Tri-County Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Midwest Energy Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Ontonagon County REA",
+      "type": "coop"
+    },
+    {
+      "name": "Thumb Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Top O' Michigan Electric Company",
+      "type": "coop"
+    },
+    {
+      "name": "Upper Peninsula Power Company",
+      "type": "iou"
+    },
+    {
+      "name": "Traverse City Light & Power",
+      "type": "muni"
+    },
+    {
+      "name": "Coldwater Board of Public Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Lansing Board of Water & Light",
+      "type": "muni"
+    },
+    {
+      "name": "Holland Board of Public Works",
+      "type": "muni"
+    }
+  ],
+  "MN": [
+    {
+      "name": "Xcel Energy Minnesota",
+      "type": "iou"
+    },
+    {
+      "name": "Minnesota Power",
+      "type": "iou"
+    },
+    {
+      "name": "Otter Tail Power",
+      "type": "iou"
+    },
+    {
+      "name": "Connexus Energy",
+      "type": "coop"
+    },
+    {
+      "name": "Dakota Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Dairyland Power Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "East Central Energy",
+      "type": "coop"
+    },
+    {
+      "name": "Great River Energy",
+      "type": "coop"
+    },
+    {
+      "name": "Itasca-Mantrap Cooperative Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Lake Country Power",
+      "type": "coop"
+    },
+    {
+      "name": "Meeker Cooperative Light & Power",
+      "type": "coop"
+    },
+    {
+      "name": "Minnesota Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "North Central Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Runestone Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Stearns Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Tri-County Electric Cooperative (MN)",
+      "type": "coop"
+    },
+    {
+      "name": "Wright-Hennepin Cooperative Electric",
+      "type": "coop"
+    },
+    {
+      "name": "Minnkota Power Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Rochester Public Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Marshall Municipal Utilities",
+      "type": "muni"
+    }
+  ],
+  "MS": [
+    {
+      "name": "Entergy Mississippi",
+      "type": "iou"
+    },
+    {
+      "name": "Mississippi Power",
+      "type": "iou"
+    },
+    {
+      "name": "Cooperative Energy",
+      "type": "coop"
+    },
+    {
+      "name": "Delta Electric Power Association",
+      "type": "coop"
+    },
+    {
+      "name": "Dixie Electric Power Association",
+      "type": "coop"
+    },
+    {
+      "name": "Four County Electric Power Association",
+      "type": "coop"
+    },
+    {
+      "name": "Gulf Coast Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Home Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Magnolia Electric Power Association",
+      "type": "coop"
+    },
+    {
+      "name": "Mississippi Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "North East Mississippi Electric Power Association",
+      "type": "coop"
+    },
+    {
+      "name": "Pearl River Valley Electric Power Association",
+      "type": "coop"
+    },
+    {
+      "name": "Prentiss County Electric Power Association",
+      "type": "coop"
+    },
+    {
+      "name": "Southern Pine Electric Power Association",
+      "type": "coop"
+    },
+    {
+      "name": "Southwest Mississippi Electric Power Association",
+      "type": "coop"
+    },
+    {
+      "name": "Tallahatchie Valley Electric Power Association",
+      "type": "coop"
+    },
+    {
+      "name": "Tippah Electric Power Association",
+      "type": "coop"
+    },
+    {
+      "name": "Tombigbee Electric Power Association",
+      "type": "coop"
+    },
+    {
+      "name": "Twin County Electric Power Association",
+      "type": "coop"
+    },
+    {
+      "name": "Yazoo Valley Electric Power Association",
+      "type": "coop"
+    },
+    {
+      "name": "City of Starkville",
+      "type": "muni"
+    },
+    {
+      "name": "City of Greenwood",
+      "type": "muni"
+    }
+  ],
+  "MO": [
+    {
+      "name": "Ameren Missouri",
+      "type": "iou"
+    },
+    {
+      "name": "Evergy Missouri (KCP&L)",
+      "type": "iou"
+    },
+    {
+      "name": "Empire District Electric",
+      "type": "iou"
+    },
+    {
+      "name": "Associated Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Barry Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Black River Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Boone Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Callaway Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Central Missouri Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Consolidated Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Co-Mo Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Cuivre River Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Farmers Electric Cooperative (Missouri)",
+      "type": "coop"
+    },
+    {
+      "name": "Gascosage Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Howard Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Laclede Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Lewis County Rural Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Macon Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Maries-Osage Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "New-Mac Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "N.W. Electric Power Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Ozark Border Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Pemiscot-Dunklin Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Platte-Clay Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "SEMO Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Southwest Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Three Rivers Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Webster Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "White River Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "WMCO Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Missouri Joint Municipal Electric Utility Commission",
+      "type": "muni"
+    },
+    {
+      "name": "Columbia Water & Light",
+      "type": "muni"
+    },
+    {
+      "name": "Independence Power & Light",
+      "type": "muni"
+    },
+    {
+      "name": "Kirksville City",
+      "type": "muni"
+    },
+    {
+      "name": "Lebanon City",
+      "type": "muni"
+    },
+    {
+      "name": "Rolla Municipal Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Springfield City Utilities",
+      "type": "muni"
+    }
+  ],
+  "MT": [
+    {
+      "name": "NorthWestern Energy",
+      "type": "iou"
+    },
+    {
+      "name": "Montana-Dakota Utilities",
+      "type": "iou"
+    },
+    {
+      "name": "Flathead Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Lincoln Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Mid-Yellowstone Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Missoula Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Ravalli County Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Tongue River Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Valley Electric Cooperative (Montana)",
+      "type": "coop"
+    },
+    {
+      "name": "Vigilante Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Western Montana Electric G&T Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Yellowstone Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Butte-Silver Bow Local Government",
+      "type": "muni"
+    }
+  ],
+  "NE": [
+    {
+      "name": "OPPD",
+      "type": "muni"
+    },
+    {
+      "name": "Lincoln Electric System",
+      "type": "muni"
+    },
+    {
+      "name": "Nebraska Public Power District",
+      "type": "muni"
+    },
+    {
+      "name": "Norris Public Power District",
+      "type": "muni"
+    },
+    {
+      "name": "Loup River Public Power District",
+      "type": "muni"
+    },
+    {
+      "name": "Nebraska City Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Fremont Department of Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Grand Island Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Hastings Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Kearney Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Norfolk Public Power District",
+      "type": "muni"
+    },
+    {
+      "name": "North Platte City",
+      "type": "muni"
+    },
+    {
+      "name": "Dawson Public Power District",
+      "type": "muni"
+    },
+    {
+      "name": "Cuming County PPD",
+      "type": "muni"
+    },
+    {
+      "name": "Butler Public Power District",
+      "type": "muni"
+    },
+    {
+      "name": "Seward County PPD",
+      "type": "muni"
+    }
+  ],
+  "NV": [
+    {
+      "name": "NV Energy (NPC / SPPC)",
+      "type": "iou"
+    },
+    {
+      "name": "Valley Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Wells Rural Electric Company",
+      "type": "coop"
+    },
+    {
+      "name": "Mt. Wheeler Power",
+      "type": "coop"
+    },
+    {
+      "name": "City of Boulder City Electric",
+      "type": "muni"
+    }
+  ],
+  "NH": [
+    {
+      "name": "Eversource New Hampshire",
+      "type": "iou"
+    },
+    {
+      "name": "Unitil New Hampshire",
+      "type": "iou"
+    },
+    {
+      "name": "Liberty Utilities (Granite State Electric)",
+      "type": "iou"
+    },
+    {
+      "name": "New Hampshire Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Concord Municipal Electric",
+      "type": "muni"
+    }
+  ],
+  "NJ": [
+    {
+      "name": "PSE&G",
+      "type": "iou"
+    },
+    {
+      "name": "JCP&L (FirstEnergy)",
+      "type": "iou"
+    },
+    {
+      "name": "Atlantic City Electric (Exelon)",
+      "type": "iou"
+    },
+    {
+      "name": "Rockland Electric (Orange & Rockland)",
+      "type": "iou"
+    },
+    {
+      "name": "Seaside Heights Electric",
+      "type": "muni"
+    }
+  ],
+  "NM": [
+    {
+      "name": "PNM Resources",
+      "type": "iou"
+    },
+    {
+      "name": "El Paso Electric",
+      "type": "iou"
+    },
+    {
+      "name": "Southwestern Public Service (Xcel)",
+      "type": "iou"
+    },
+    {
+      "name": "Kit Carson Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Continental Divide Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Farmer's Electric Cooperative (NM)",
+      "type": "coop"
+    },
+    {
+      "name": "Mora-San Miguel Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Jemez Mountains Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Otero County Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Roosevelt County Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Socorro Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Tri-State G&T Association",
+      "type": "coop"
+    },
+    {
+      "name": "Central Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Lea County Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Columbus Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Lordsburg Municipal",
+      "type": "muni"
+    }
+  ],
+  "NY": [
+    {
+      "name": "Con Edison",
+      "type": "iou"
+    },
+    {
+      "name": "National Grid New York",
+      "type": "iou"
+    },
+    {
+      "name": "Central Hudson Gas & Electric",
+      "type": "iou"
+    },
+    {
+      "name": "PSEG Long Island",
+      "type": "iou"
+    },
+    {
+      "name": "Orange & Rockland Utilities",
+      "type": "iou"
+    },
+    {
+      "name": "New York State Electric & Gas (NYSEG)",
+      "type": "iou"
+    },
+    {
+      "name": "Rochester Gas & Electric",
+      "type": "iou"
+    },
+    {
+      "name": "New York Power Authority",
+      "type": "muni"
+    },
+    {
+      "name": "Long Island Power Authority",
+      "type": "muni"
+    },
+    {
+      "name": "Jamestown Board of Public Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Massena Electric Department",
+      "type": "muni"
+    },
+    {
+      "name": "Plattsburgh Municipal Lighting Dept",
+      "type": "muni"
+    }
+  ],
+  "NC": [
+    {
+      "name": "Duke Energy Carolinas",
+      "type": "iou"
+    },
+    {
+      "name": "Duke Energy Progress",
+      "type": "iou"
+    },
+    {
+      "name": "Dominion Energy NC",
+      "type": "iou"
+    },
+    {
+      "name": "Blue Ridge Electric Membership Corporation",
+      "type": "coop"
+    },
+    {
+      "name": "Brunswick Electric Membership Corporation",
+      "type": "coop"
+    },
+    {
+      "name": "Cape Hatteras Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Carteret-Craven Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Central Electric Membership Corporation",
+      "type": "coop"
+    },
+    {
+      "name": "Edgecombe-Martin County EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Four Oaks Power Company",
+      "type": "coop"
+    },
+    {
+      "name": "French Broad EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Halifax Electric Membership Corporation",
+      "type": "coop"
+    },
+    {
+      "name": "Haywood EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Jones-Onslow EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Lumbee River EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Piedmont Electric Membership Corporation",
+      "type": "coop"
+    },
+    {
+      "name": "Randolph EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Roanoke Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "South River EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Surry-Yadkin EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Tideland EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Tri-County EMC (NC)",
+      "type": "coop"
+    },
+    {
+      "name": "Union Power Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Wake Electric Membership Corporation",
+      "type": "coop"
+    },
+    {
+      "name": "Wilson Energy",
+      "type": "muni"
+    },
+    {
+      "name": "Greenville Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Rocky Mount City",
+      "type": "muni"
+    }
+  ],
+  "ND": [
+    {
+      "name": "Montana-Dakota Utilities",
+      "type": "iou"
+    },
+    {
+      "name": "Xcel Energy (North Dakota)",
+      "type": "iou"
+    },
+    {
+      "name": "Basin Electric Power Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Capital Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Cass County Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Consolidated Telephone Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "KEM Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "McLean Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Mor-Gran-Sou Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Mountrail-Williams Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Nodak Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "North Central Electric Cooperative (ND)",
+      "type": "coop"
+    },
+    {
+      "name": "Roughrider Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Slope Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "West Plains Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Dickinson City",
+      "type": "muni"
+    },
+    {
+      "name": "Minot City",
+      "type": "muni"
+    }
+  ],
+  "OH": [
+    {
+      "name": "AEP Ohio",
+      "type": "iou"
+    },
+    {
+      "name": "FirstEnergy Ohio (Ohio Edison, CEI, Toledo Edison)",
+      "type": "iou"
+    },
+    {
+      "name": "Duke Energy Ohio",
+      "type": "iou"
+    },
+    {
+      "name": "AES Ohio (DP&L)",
+      "type": "iou"
+    },
+    {
+      "name": "Buckeye Power",
+      "type": "coop"
+    },
+    {
+      "name": "Adams Rural Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Consolidated Electric Cooperative (OH)",
+      "type": "coop"
+    },
+    {
+      "name": "Firelands Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Guernsey-Muskingum Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Holmes-Wayne Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Licking Rural Electrification",
+      "type": "coop"
+    },
+    {
+      "name": "Lorain-Medina Rural Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "North Central Electric Cooperative (OH)",
+      "type": "coop"
+    },
+    {
+      "name": "Ohio's Electric Cooperatives",
+      "type": "coop"
+    },
+    {
+      "name": "Pioneer Rural Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "South Central Power Company",
+      "type": "coop"
+    },
+    {
+      "name": "Tri-County Rural Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Union Rural Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Paulding Putnam Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Carroll Electric Cooperative (OH)",
+      "type": "coop"
+    },
+    {
+      "name": "Ohio Valley Electric Corporation",
+      "type": "other"
+    },
+    {
+      "name": "Cleveland Public Power",
+      "type": "muni"
+    },
+    {
+      "name": "Hamilton City",
+      "type": "muni"
+    }
+  ],
+  "OK": [
+    {
+      "name": "Oklahoma Gas & Electric (OG&E)",
+      "type": "iou"
+    },
+    {
+      "name": "Public Service Oklahoma (PSO/AEP)",
+      "type": "iou"
+    },
+    {
+      "name": "Western Farmers Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Oklahoma Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Canadian Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Choctaw Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Cimarron Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Cotton Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Cookson Hills Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Eastern Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Harmon Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Indian Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Kay Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Kiamichi Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Lake Region Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Northeastern Oklahoma Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Northwestern Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Ozark Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "People's Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Red River Valley REA",
+      "type": "coop"
+    },
+    {
+      "name": "Southwestern Electric Power (SWEPCO/AEP)",
+      "type": "iou"
+    },
+    {
+      "name": "Verdigris Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Oklahoma Association of Electric Cooperatives",
+      "type": "coop"
+    },
+    {
+      "name": "Edmond Electric",
+      "type": "muni"
+    },
+    {
+      "name": "Stillwater Utilities Authority",
+      "type": "muni"
+    },
+    {
+      "name": "Lawton City Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Pryor City Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Claremore City",
+      "type": "muni"
+    }
+  ],
+  "OR": [
+    {
+      "name": "Pacific Power (PacifiCorp)",
+      "type": "iou"
+    },
+    {
+      "name": "Portland General Electric",
+      "type": "iou"
+    },
+    {
+      "name": "Avista Utilities (Oregon)",
+      "type": "iou"
+    },
+    {
+      "name": "Idaho Power (Oregon)",
+      "type": "iou"
+    },
+    {
+      "name": "Central Electric Cooperative (Oregon)",
+      "type": "coop"
+    },
+    {
+      "name": "Coos-Curry Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Consumers Power",
+      "type": "coop"
+    },
+    {
+      "name": "Columbia Basin Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Columbia River PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Wasco Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Umatilla Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "East Oregon Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Eugene Water & Electric Board",
+      "type": "muni"
+    },
+    {
+      "name": "Emerald PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Central Lincoln PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Tillamook PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Bandon Electric",
+      "type": "muni"
+    },
+    {
+      "name": "McMinnville Water & Light",
+      "type": "muni"
+    },
+    {
+      "name": "Forest Grove City",
+      "type": "muni"
+    }
+  ],
+  "PA": [
+    {
+      "name": "PECO Energy (Exelon)",
+      "type": "iou"
+    },
+    {
+      "name": "PPL Electric Utilities",
+      "type": "iou"
+    },
+    {
+      "name": "West Penn Power (FirstEnergy)",
+      "type": "iou"
+    },
+    {
+      "name": "Penn Power (FirstEnergy)",
+      "type": "iou"
+    },
+    {
+      "name": "Duquesne Light",
+      "type": "iou"
+    },
+    {
+      "name": "Wellsboro Electric Company",
+      "type": "iou"
+    },
+    {
+      "name": "Adams Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Bedford Rural Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Claverack Rural Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "New Enterprise Rural Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Northwestern Rural Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Palmerton Telephone Company",
+      "type": "coop"
+    },
+    {
+      "name": "Penn Lines Rural Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Pike Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "REA Energy Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Sullivan County Rural Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Susquehanna Electric Company",
+      "type": "coop"
+    },
+    {
+      "name": "UGI Utilities",
+      "type": "iou"
+    }
+  ],
+  "RI": [
+    {
+      "name": "National Grid Rhode Island",
+      "type": "iou"
+    },
+    {
+      "name": "Pascoag Utility District",
+      "type": "muni"
+    }
+  ],
+  "SC": [
+    {
+      "name": "Duke Energy South Carolina",
+      "type": "iou"
+    },
+    {
+      "name": "Dominion Energy South Carolina",
+      "type": "iou"
+    },
+    {
+      "name": "Santee Cooper",
+      "type": "muni"
+    },
+    {
+      "name": "Blue Ridge Electric Cooperative (SC)",
+      "type": "coop"
+    },
+    {
+      "name": "Broad River Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Coastal Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Edisto Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Fairfield Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Four Corners Rural Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Horry Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Laurens Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Little River Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Lynches River Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Mid-Carolina Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Newberry Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Palmetto Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "PeeDee Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Santee Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Tri-County Electric Cooperative (SC)",
+      "type": "coop"
+    },
+    {
+      "name": "York Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Rock Hill Utilities",
+      "type": "muni"
+    }
+  ],
+  "SD": [
+    {
+      "name": "Xcel Energy South Dakota",
+      "type": "iou"
+    },
+    {
+      "name": "Montana-Dakota Utilities (SD)",
+      "type": "iou"
+    },
+    {
+      "name": "Black Hills Energy (SD)",
+      "type": "iou"
+    },
+    {
+      "name": "H-D Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Lake Region Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Moreau-Grand Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "North Central Electric Cooperative (SD)",
+      "type": "coop"
+    },
+    {
+      "name": "Oahe Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Rushmore Electric Power Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Sioux Valley Energy",
+      "type": "coop"
+    },
+    {
+      "name": "Whetstone Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Cam Wal Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "FEM Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Grand Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Southeastern Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "West Central Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Watertown City",
+      "type": "muni"
+    },
+    {
+      "name": "Brookings Municipal Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Huron City",
+      "type": "muni"
+    }
+  ],
+  "TN": [
+    {
+      "name": "Tennessee Valley Authority (TVA)",
+      "type": "federal"
+    },
+    {
+      "name": "Memphis Light Gas & Water",
+      "type": "muni"
+    },
+    {
+      "name": "Nashville Electric Service",
+      "type": "muni"
+    },
+    {
+      "name": "EPB Chattanooga",
+      "type": "muni"
+    },
+    {
+      "name": "Knoxville Utilities Board",
+      "type": "muni"
+    },
+    {
+      "name": "Murfreesboro Electric Department",
+      "type": "muni"
+    },
+    {
+      "name": "Jackson Energy Authority",
+      "type": "muni"
+    },
+    {
+      "name": "Clarksville City",
+      "type": "muni"
+    },
+    {
+      "name": "Cookeville City",
+      "type": "muni"
+    },
+    {
+      "name": "Johnson City Power Board",
+      "type": "muni"
+    },
+    {
+      "name": "Kingsport Power (AEP)",
+      "type": "iou"
+    },
+    {
+      "name": "Appalachian Power (Tennessee)",
+      "type": "iou"
+    },
+    {
+      "name": "Mountain Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Pickwick Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Tennessee Electric Cooperative Association",
+      "type": "coop"
+    },
+    {
+      "name": "Cumberland Electric Membership Corporation",
+      "type": "coop"
+    },
+    {
+      "name": "Duck River Electric Membership Corporation",
+      "type": "coop"
+    },
+    {
+      "name": "Fort Loudoun Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Gibson Electric Membership Corporation",
+      "type": "coop"
+    },
+    {
+      "name": "Holston Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Meriwether Lewis Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Middle Tennessee EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Peoples Electric Cooperative (TN)",
+      "type": "coop"
+    },
+    {
+      "name": "Sequachee Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Southwest Tennessee EMC",
+      "type": "coop"
+    },
+    {
+      "name": "Volunteer Energy Cooperative",
+      "type": "coop"
+    }
+  ],
+  "TX": [
+    {
+      "name": "Oncor Electric Delivery",
+      "type": "iou"
+    },
+    {
+      "name": "AEP Texas Central",
+      "type": "iou"
+    },
+    {
+      "name": "AEP Texas North",
+      "type": "iou"
+    },
+    {
+      "name": "Texas New Mexico Power (TNMP)",
+      "type": "iou"
+    },
+    {
+      "name": "CenterPoint Energy",
+      "type": "iou"
+    },
+    {
+      "name": "Southwestern Public Service (Xcel)",
+      "type": "iou"
+    },
+    {
+      "name": "Southwestern Electric Power (SWEPCO)",
+      "type": "iou"
+    },
+    {
+      "name": "Entergy Texas",
+      "type": "iou"
+    },
+    {
+      "name": "Bluebonnet Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Brazos Electric Power Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "CoServ Electric",
+      "type": "coop"
+    },
+    {
+      "name": "Denton County Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Farmers Electric Cooperative (TX)",
+      "type": "coop"
+    },
+    {
+      "name": "Golden Spread Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Guadalupe Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Hilco Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Houston County Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Lamar County Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Lighthouse Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Lyntegar Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Magic Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "McCulloch Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Medina Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Mid-South Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Navarro County Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Northeast Texas Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Nueces Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Pedernales Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Randolph-Metrocom Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Rayburn Country Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Rusk County Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Sam Houston Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Swisher Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Taylor Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Tri-County Electric Cooperative (TX)",
+      "type": "coop"
+    },
+    {
+      "name": "Trinity Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "United Electric Cooperative Services",
+      "type": "coop"
+    },
+    {
+      "name": "Victoria County Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Wise Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Wood County Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Austin Energy",
+      "type": "muni"
+    },
+    {
+      "name": "San Antonio CPS Energy",
+      "type": "muni"
+    },
+    {
+      "name": "Garland Power & Light",
+      "type": "muni"
+    },
+    {
+      "name": "Denton Municipal Electric",
+      "type": "muni"
+    },
+    {
+      "name": "Lubbock Power & Light",
+      "type": "muni"
+    },
+    {
+      "name": "Brownsville Public Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Greenville Electric",
+      "type": "muni"
+    },
+    {
+      "name": "Brenham Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Kerrville Public Utility Board",
+      "type": "muni"
+    },
+    {
+      "name": "New Braunfels Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Seguin City",
+      "type": "muni"
+    },
+    {
+      "name": "Weatherford City",
+      "type": "muni"
+    }
+  ],
+  "UT": [
+    {
+      "name": "Rocky Mountain Power (PacifiCorp)",
+      "type": "iou"
+    },
+    {
+      "name": "Dixie Power",
+      "type": "coop"
+    },
+    {
+      "name": "Moon Lake Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Bridgerland Electric",
+      "type": "coop"
+    },
+    {
+      "name": "Price City",
+      "type": "muni"
+    },
+    {
+      "name": "Logan City",
+      "type": "muni"
+    },
+    {
+      "name": "St. George City",
+      "type": "muni"
+    }
+  ],
+  "VT": [
+    {
+      "name": "Green Mountain Power",
+      "type": "iou"
+    },
+    {
+      "name": "Burlington Electric Department",
+      "type": "muni"
+    },
+    {
+      "name": "Stowe Electric Department",
+      "type": "muni"
+    },
+    {
+      "name": "Village of Hyde Park",
+      "type": "muni"
+    },
+    {
+      "name": "Village of Johnson",
+      "type": "muni"
+    },
+    {
+      "name": "Village of Ludlow",
+      "type": "muni"
+    },
+    {
+      "name": "Village of Morrisville",
+      "type": "muni"
+    },
+    {
+      "name": "Village of Northfield",
+      "type": "muni"
+    },
+    {
+      "name": "Village of Orleans",
+      "type": "muni"
+    },
+    {
+      "name": "Village of Swanton",
+      "type": "muni"
+    },
+    {
+      "name": "Village of Barton",
+      "type": "muni"
+    }
+  ],
+  "VA": [
+    {
+      "name": "Dominion Energy Virginia",
+      "type": "iou"
+    },
+    {
+      "name": "Appalachian Power (AEP Virginia)",
+      "type": "iou"
+    },
+    {
+      "name": "A&N Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "BARC Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Central Virginia Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Community Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Craig-Botetourt Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Mecklenburg Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Northern Neck Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Northern Virginia Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Old Dominion Power",
+      "type": "iou"
+    },
+    {
+      "name": "Prince George Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Rappahannock Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Shenandoah Valley Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Southside Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Virginia's Cooperative Electric (VEC)",
+      "type": "coop"
+    },
+    {
+      "name": "Harrisonburg Electric Commission",
+      "type": "muni"
+    },
+    {
+      "name": "Bedford City",
+      "type": "muni"
+    }
+  ],
+  "WA": [
+    {
+      "name": "Puget Sound Energy",
+      "type": "iou"
+    },
+    {
+      "name": "Pacific Power (Washington)",
+      "type": "iou"
+    },
+    {
+      "name": "Avista Utilities (Washington)",
+      "type": "iou"
+    },
+    {
+      "name": "Seattle City Light",
+      "type": "muni"
+    },
+    {
+      "name": "Tacoma Public Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Snohomish County PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Clark PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Grant County PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Chelan County PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Douglas County PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Benton County PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Franklin County PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Cowlitz County PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Grays Harbor PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Lewis County PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Mason County PUD 1",
+      "type": "pud"
+    },
+    {
+      "name": "Mason County PUD 3",
+      "type": "pud"
+    },
+    {
+      "name": "Pacific County PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Skamania County PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Wahkiakum County PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Ferry County PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Okanogan County PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Klickitat County PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Peninsula Light Company",
+      "type": "coop"
+    },
+    {
+      "name": "Inland Power & Light (WA)",
+      "type": "coop"
+    },
+    {
+      "name": "Orcas Power & Light Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Modern Electric Water Company",
+      "type": "coop"
+    },
+    {
+      "name": "Asotin County PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Pend Oreille County PUD",
+      "type": "pud"
+    },
+    {
+      "name": "Richland City",
+      "type": "muni"
+    }
+  ],
+  "WV": [
+    {
+      "name": "Appalachian Power (AEP WV)",
+      "type": "iou"
+    },
+    {
+      "name": "Mountaineer Gas",
+      "type": "iou"
+    },
+    {
+      "name": "Harrison Rural Electrification Association",
+      "type": "coop"
+    },
+    {
+      "name": "Monongalia Power",
+      "type": "coop"
+    },
+    {
+      "name": "Pocahontas County REA",
+      "type": "coop"
+    },
+    {
+      "name": "Ritchie County Rural Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Tygarts Valley Rural Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Wayne County REC",
+      "type": "coop"
+    },
+    {
+      "name": "Wirt County Rural Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Philippi City",
+      "type": "muni"
+    }
+  ],
+  "WI": [
+    {
+      "name": "We Energies",
+      "type": "iou"
+    },
+    {
+      "name": "Alliant Energy (Wisconsin Power & Light)",
+      "type": "iou"
+    },
+    {
+      "name": "Madison Gas & Electric",
+      "type": "iou"
+    },
+    {
+      "name": "Xcel Energy (NSP Wisconsin)",
+      "type": "iou"
+    },
+    {
+      "name": "WPS Group (Wisconsin Public Service)",
+      "type": "iou"
+    },
+    {
+      "name": "Dairyland Power Cooperative (WI)",
+      "type": "coop"
+    },
+    {
+      "name": "Barron Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Bayfield Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Buffalo Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Clark Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Dunn Energy Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Eau Claire Energy Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Jackson Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Jump River Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Polk-Burnett Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Price Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Richland Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Riverland Energy Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Scenic Rivers Energy Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Taylor Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Tri-County Electric Cooperative (WI)",
+      "type": "coop"
+    },
+    {
+      "name": "Vernon Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Wisconsin Electric Cooperative Association",
+      "type": "coop"
+    },
+    {
+      "name": "Westby City",
+      "type": "muni"
+    },
+    {
+      "name": "Cedarburg Light & Water",
+      "type": "muni"
+    },
+    {
+      "name": "Kaukauna Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Manitowoc Public Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "New London Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Plymouth Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Stoughton Utilities",
+      "type": "muni"
+    },
+    {
+      "name": "Two Rivers Water & Light",
+      "type": "muni"
+    }
+  ],
+  "WY": [
+    {
+      "name": "Rocky Mountain Power (PacifiCorp)",
+      "type": "iou"
+    },
+    {
+      "name": "Black Hills Energy WY",
+      "type": "iou"
+    },
+    {
+      "name": "Montana-Dakota Utilities (WY)",
+      "type": "iou"
+    },
+    {
+      "name": "Bridger Valley Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Carbon Power & Light",
+      "type": "coop"
+    },
+    {
+      "name": "High West Energy",
+      "type": "coop"
+    },
+    {
+      "name": "Lower Valley Energy",
+      "type": "coop"
+    },
+    {
+      "name": "Powder River Energy Corporation",
+      "type": "coop"
+    },
+    {
+      "name": "Sheridan Electric Cooperative",
+      "type": "coop"
+    },
+    {
+      "name": "Tri-County Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Wheatland Rural Electric Association",
+      "type": "coop"
+    },
+    {
+      "name": "Cheyenne City",
+      "type": "muni"
+    },
+    {
+      "name": "Gillette City",
+      "type": "muni"
+    }
+  ]
 };
+
+// Legacy alias for backward compatibility
+const UTILITY_DB = EIA_UTILITIES;
 
 // Legacy — kept for backward compatibility
 const UTILITY_PRESETS = {};
@@ -14998,11 +18318,18 @@ async function initOutageTracker() {
     const state = detectSiteState();
     const list  = document.getElementById("outage-utility-list");
     if (list && state) {
-      const utils = UTILITY_DB[state] || [];
+      const utils = EIA_UTILITIES[state] || [];
+      const iouCount  = utils.filter(u => u.type === "iou").length;
+      const coopCount = utils.filter(u => u.type === "coop").length;
+      const muniCount = utils.filter(u => u.type === "muni").length;
+      const pudCount  = utils.filter(u => u.type === "pud").length;
       list.innerHTML = `<div style="font-size:12px;color:var(--text-hint);padding:10px 0;">
-        &#128205; Detected state: <strong>${state}</strong> — ${utils.length} utilit${utils.length!==1?"ies":"y"} available.
-        Click <strong>+ Add Utility</strong> to select one.
-        ${utils.map(u => `<div style="margin-top:6px;font-size:11px;color:var(--text-secondary);">&#9889; ${u.name}</div>`).join("")}
+        &#128205; Detected state: <strong>${state}</strong> — <strong>${utils.length}</strong> utilities on record.
+        ${iouCount  ? `<span style="margin-right:8px;">&#9679; ${iouCount} IOU${iouCount!==1?"s":""}</span>` : ""}
+        ${coopCount ? `<span style="margin-right:8px;">&#9679; ${coopCount} Co-op${coopCount!==1?"s":""}</span>` : ""}
+        ${muniCount ? `<span style="margin-right:8px;">&#9679; ${muniCount} Muni${muniCount!==1?"s":""}</span>` : ""}
+        ${pudCount  ? `<span style="margin-right:8px;">&#9679; ${pudCount} PUD${pudCount!==1?"s":""}</span>` : ""}
+        <br/>Click <strong>+ Add Utility</strong> to select one, or enter a utility not in the list manually.
       </div>`;
     }
   }
@@ -15057,11 +18384,36 @@ function detectSiteState() {
 function populateUtilityByState(state) {
   const sel = document.getElementById("new-util-preset");
   if (!sel || !state) return;
-  const utils = UTILITY_DB[state.toUpperCase()] || [];
-  sel.innerHTML = utils.length
-    ? `<option value="">-- Select utility --</option>` +
-      utils.map((u, i) => `<option value="${i}">${u.name}</option>`).join("")
-    : `<option value="">No utilities found for ${state}</option>`;
+  const utils = (EIA_UTILITIES[state.toUpperCase()] || [])
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  if (!utils.length) {
+    sel.innerHTML = `<option value="">No utilities on record for ${state} — enter manually below</option>`;
+    return;
+  }
+
+  const TYPE_LABELS = { iou:"IOU", muni:"Muni", coop:"Co-op", pud:"PUD", federal:"Federal", other:"Other" };
+
+  // Group by type for optgroups
+  const groups = {};
+  const ORDER  = ["iou","muni","coop","pud","federal","other"];
+  utils.forEach((u, i) => {
+    const t = u.type || "other";
+    if (!groups[t]) groups[t] = [];
+    groups[t].push({ u, i: (EIA_UTILITIES[state.toUpperCase()] || []).indexOf(u) });
+  });
+
+  let html = `<option value="">-- Select utility (${utils.length} found) --</option>`;
+  ORDER.forEach(t => {
+    if (!groups[t]?.length) return;
+    html += `<optgroup label="${TYPE_LABELS[t] || t} (${groups[t].length})">`;
+    html += groups[t].map(({ u, i }) =>
+      `<option value="${i}">${u.name}</option>`
+    ).join("");
+    html += `</optgroup>`;
+  });
+  sel.innerHTML = html;
 }
 
 function applyUtilityPreset() {
@@ -15082,20 +18434,9 @@ function applyUtilityPreset() {
   if (mapEl)  mapEl.value  = u.mapUrl|| "";
   if (odinEl) odinEl.value = u.odinId|| "";
 
-  // Auto-select type based on name patterns
+  // Set type directly from EIA_UTILITIES data
   const typeEl = document.getElementById("new-util-type");
-  if (typeEl) {
-    const nm = u.name.toLowerCase();
-    typeEl.value = nm.includes("cooperative") || nm.includes("co-op") || nm.includes("coop") || nm.includes("electric co")
-      ? "coop"
-      : nm.includes("municipal") || nm.includes("city of") || nm.includes("muni")
-      ? "muni"
-      : nm.includes("pud") || nm.includes("public utility district")
-      ? "pud"
-      : nm.includes("tva") || nm.includes("bpa") || nm.includes("federal")
-      ? "federal"
-      : "iou";
-  }
+  if (typeEl && u.type) typeEl.value = u.type;
 }
 
 async function saveUtilityConfig() {
@@ -16729,7 +20070,12 @@ function toggleEVDevEnrollForm() {
   form.style.display = isOpen ? "none" : "block";
   if (!isOpen) {
     // Reset
+    evDevEditingId = null;
     evDevSelectedInteg = null;
+    const titleEl = document.getElementById("ev-dev-form-title");
+    if (titleEl) titleEl.textContent = "Add EV Charger Asset";
+    const btnEl = document.getElementById("ev-dev-save-btn");
+    if (btnEl) btnEl.textContent = "Save Asset";
     document.querySelectorAll(".ev-integ-opt").forEach(b => {
       b.style.borderColor = "var(--border-md)";
       b.style.background  = "var(--surface)";
@@ -16764,6 +20110,69 @@ function selectEVInteg(integ, el) {
 }
 
 // ── Save Asset ─────────────────────────────────────────────────────────────────
+function editEVDevAsset(stationId) {
+  const asset = evDevAssets.find(a => a.station_id === stationId);
+  if (!asset) return;
+  evDevEditingId = stationId;
+
+  // Open form
+  const form = document.getElementById("ev-dev-enroll-form");
+  if (form) form.style.display = "block";
+  const title = document.getElementById("ev-dev-form-title");
+  if (title) title.textContent = "Edit EV Charger Asset";
+  const btn = document.getElementById("ev-dev-save-btn");
+  if (btn) btn.textContent = "Update Asset";
+
+  // Populate common fields
+  const integ = asset.integ_config?.type || asset.integration || "ocpp201";
+  document.getElementById("ev-dev-station-id").value = asset.station_id || "";
+  document.getElementById("ev-dev-name").value        = asset.name || "";
+  document.getElementById("ev-dev-location").value    = asset.location || "";
+  document.getElementById("ev-dev-max-kw").value      = asset.max_kw || "7.2";
+  document.getElementById("ev-dev-connectors").value  = asset.connectors || "1";
+  document.getElementById("ev-dev-dr").value          = asset.dr_enrolled ? "true" : "false";
+  const makeEl = document.getElementById("ev-dev-make");
+  if (makeEl) makeEl.value = asset.make || "";
+
+  // Select integration type
+  const integEl = document.querySelector(`.ev-integ-opt[data-integ="${integ}"]`);
+  selectEVInteg(integ, integEl);
+
+  // Populate integration-specific fields
+  const cfg = asset.integ_config || {};
+  if (integ === "chargepoint") {
+    document.getElementById("ev-cp-api-key").value    = cfg.api_key    || "";
+    document.getElementById("ev-cp-api-pass").value   = cfg.api_pass   || "";
+    document.getElementById("ev-cp-station-id").value = cfg.cp_station || "";
+  } else if (integ === "enelx") {
+    document.getElementById("ev-enelx-token").value        = cfg.api_token    || "";
+    document.getElementById("ev-enelx-device-token").value = cfg.device_token || "";
+  } else if (integ === "blink") {
+    document.getElementById("ev-blink-user").value       = cfg.username   || "";
+    document.getElementById("ev-blink-pass").value       = cfg.password   || "";
+    document.getElementById("ev-blink-charger-id").value = cfg.charger_id || "";
+  } else if (integ === "tesla") {
+    document.getElementById("ev-tesla-client-id").value     = cfg.client_id     || "";
+    document.getElementById("ev-tesla-client-secret").value = cfg.client_secret || "";
+    document.getElementById("ev-tesla-refresh-token").value = cfg.refresh_token || "";
+    document.getElementById("ev-tesla-region").value        = cfg.region        || "na";
+    document.getElementById("ev-tesla-vin").value           = cfg.vin           || "";
+    document.getElementById("ev-tesla-max-amps").value      = cfg.max_amps      || "48";
+  } else if (integ === "relay") {
+    document.getElementById("ev-relay-device").value = cfg.relay_uid || "";
+    document.getElementById("ev-relay-num").value    = cfg.relay_num || "1";
+  }
+
+  // Populate shed limits
+  const limits = asset.shed_limits || {};
+  document.getElementById("ev-dev-shed-emergency").value = limits.emergency ?? 0;
+  document.getElementById("ev-dev-shed-high").value      = limits.high      ?? 8;
+  document.getElementById("ev-dev-shed-medium").value    = limits.medium    ?? 16;
+  document.getElementById("ev-dev-shed-low").value       = limits.low       ?? 24;
+
+  form.scrollIntoView({ behavior:"smooth", block:"start" });
+}
+
 async function saveEVDevAsset() {
   if (!evDevSelectedInteg) { setStatus("error", "Select an integration type."); return; }
 
@@ -16832,20 +20241,21 @@ async function saveEVDevAsset() {
     enrolled_at:  new Date().toISOString()
   };
 
-  // Try Supabase, fall back to localStorage
+  // Try Supabase — PATCH if editing, POST if new
   let saved = false;
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/ev_chargers`, {
-      method:"POST",
+    const isEdit = !!evDevEditingId;
+    const url    = isEdit
+      ? `${SUPABASE_URL}/rest/v1/ev_chargers?station_id=eq.${encodeURIComponent(evDevEditingId)}`
+      : `${SUPABASE_URL}/rest/v1/ev_chargers`;
+    const res = await fetch(url, {
+      method: isEdit ? "PATCH" : "POST",
       headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
         "Content-Type":"application/json","Prefer":"return=representation"},
       body: JSON.stringify(record)
     });
     if (res.ok) saved = true;
-    else {
-      const err = await res.text();
-      console.warn("EV save Supabase:", res.status, err);
-    }
+    else console.warn("EV save Supabase:", res.status, await res.text());
   } catch(e) { console.warn("EV save:", e.message); }
 
   if (!saved) {
@@ -16856,7 +20266,12 @@ async function saveEVDevAsset() {
     localStorage.setItem(EV_DEV_KEY, JSON.stringify(filtered));
   }
 
-  setStatus("ready", `${name} saved as EV asset.`);
+  setStatus("ready", `${name} ${evDevEditingId ? "updated" : "saved"}.`);
+  evDevEditingId = null;
+  const title = document.getElementById("ev-dev-form-title");
+  if (title) title.textContent = "Add EV Charger Asset";
+  const btn = document.getElementById("ev-dev-save-btn");
+  if (btn) btn.textContent = "Save Asset";
   toggleEVDevEnrollForm();
   await refreshEVDevAssets();
 }
@@ -16947,8 +20362,12 @@ function renderEVDevAssets() {
           <button onclick="restoreEVSingle('${a.station_id}')"
             style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--green);background:var(--green-bg);color:var(--green-dark);font-size:10px;font-weight:600;cursor:pointer;">Restore</button>
         </div>` : ""}
-        <button onclick="removeEVDevAsset('${a.station_id}')"
-          style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">Remove</button>
+        <div style="display:flex;gap:4px;">
+          <button onclick="editEVDevAsset('${a.station_id}')"
+            style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--blue-dark);background:var(--blue-lt);color:var(--blue-dark);font-size:10px;cursor:pointer;">Edit</button>
+          <button onclick="removeEVDevAsset('${a.station_id}')"
+            style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">Remove</button>
+        </div>
       </div>
     </div>`;
   }).join("");
@@ -17258,7 +20677,8 @@ async function testTeslaConnection() {
 // ── Battery Storage Assets ────────────────────────────────────────────────────
 
 let batteryAssets      = [];
-let batteryLiveData    = {}; // { assetId: { soc, power_kw, mode, status } }
+let batteryLiveData    = {};
+let battEditingId      = null; // { assetId: { soc, power_kw, mode, status } }
 let battSelectedInteg  = null;
 let battRefreshTimer   = null;
 const BATT_STORAGE_KEY = "lcp_battery_assets_v1";
@@ -17286,7 +20706,12 @@ function toggleBatteryEnrollForm() {
   const isOpen = form.style.display !== "none";
   form.style.display = isOpen ? "none" : "block";
   if (!isOpen) {
+    battEditingId = null;
     battSelectedInteg = null;
+    const tEl = document.getElementById("batt-form-title");
+    if (tEl) tEl.textContent = "Add Battery Storage Asset";
+    const bEl = document.getElementById("batt-save-btn");
+    if (bEl) bEl.textContent = "Save Battery Asset";
     document.querySelectorAll(".batt-integ-opt").forEach(b => {
       b.style.borderColor = "var(--border-md)";
       b.style.background  = "var(--surface)";
@@ -17317,6 +20742,72 @@ function selectBattInteg(integ, el) {
 }
 
 // ── Save Asset ────────────────────────────────────────────────────────────────
+function editBatteryAsset(assetId) {
+  const asset = batteryAssets.find(a => a.asset_id === assetId);
+  if (!asset) return;
+  battEditingId = assetId;
+
+  const form = document.getElementById("batt-enroll-form");
+  if (form) form.style.display = "block";
+  const title = document.getElementById("batt-form-title");
+  if (title) title.textContent = "Edit Battery Asset";
+  const btn = document.getElementById("batt-save-btn");
+  if (btn) btn.textContent = "Update Battery Asset";
+
+  // Common fields
+  document.getElementById("batt-asset-id").value      = asset.asset_id    || "";
+  document.getElementById("batt-name").value           = asset.name        || "";
+  document.getElementById("batt-location").value       = asset.location    || "";
+  document.getElementById("batt-capacity-kwh").value   = asset.capacity_kwh|| "13.5";
+  document.getElementById("batt-max-kw").value         = asset.max_kw      || "7.6";
+  document.getElementById("batt-dr").value             = asset.dr_enrolled ? "true" : "false";
+  document.getElementById("batt-min-reserve").value    = asset.min_reserve  || "20";
+
+  // Integration type
+  const integ = asset.integ_config?.type || asset.integration;
+  const integEl = document.querySelector(`.batt-integ-opt[data-integ="${integ}"]`);
+  selectBattInteg(integ, integEl);
+
+  // Integration-specific fields
+  const cfg = asset.integ_config || {};
+  if (integ === "tesla_powerwall") {
+    document.getElementById("batt-tesla-client-id").value     = cfg.client_id     || "";
+    document.getElementById("batt-tesla-client-secret").value = cfg.client_secret || "";
+    document.getElementById("batt-tesla-refresh-token").value = cfg.refresh_token || "";
+    document.getElementById("batt-tesla-site-id").value       = cfg.site_id       || "";
+    document.getElementById("batt-tesla-region").value        = cfg.region        || "na";
+  } else if (integ === "enphase") {
+    document.getElementById("batt-enphase-api-key").value   = cfg.api_key   || "";
+    document.getElementById("batt-enphase-client-id").value = cfg.client_id || "";
+    document.getElementById("batt-enphase-system-id").value = cfg.system_id || "";
+    document.getElementById("batt-enphase-token").value     = cfg.token     || "";
+  } else if (integ === "solaredge") {
+    document.getElementById("batt-se-api-key").value = cfg.api_key || "";
+    document.getElementById("batt-se-site-id").value = cfg.site_id || "";
+  } else if (integ === "generac") {
+    document.getElementById("batt-generac-user").value      = cfg.username  || "";
+    document.getElementById("batt-generac-pass").value      = cfg.password  || "";
+    document.getElementById("batt-generac-device-id").value = cfg.device_id || "";
+  } else if (integ === "sonnen") {
+    document.getElementById("batt-sonnen-ip").value    = cfg.ip    || "";
+    document.getElementById("batt-sonnen-token").value = cfg.token || "";
+  } else if (integ === "victron") {
+    document.getElementById("batt-victron-token").value      = cfg.token      || "";
+    document.getElementById("batt-victron-install-id").value = cfg.install_id || "";
+    document.getElementById("batt-victron-instance").value   = cfg.instance   || "276";
+  } else if (integ === "local_rest") {
+    document.getElementById("batt-rest-url").value          = cfg.url          || "";
+    document.getElementById("batt-rest-token").value        = cfg.token        || "";
+    document.getElementById("batt-rest-shed-path").value    = cfg.shed_path    || "";
+    document.getElementById("batt-rest-restore-path").value = cfg.restore_path || "";
+  } else if (integ === "relay") {
+    document.getElementById("batt-relay-device").value = cfg.relay_uid || "";
+    document.getElementById("batt-relay-num").value    = cfg.relay_num || "1";
+  }
+
+  form.scrollIntoView({ behavior:"smooth", block:"start" });
+}
+
 async function saveBatteryAsset() {
   if (!battSelectedInteg) { setStatus("error", "Select an integration type."); return; }
   const assetId = document.getElementById("batt-asset-id")?.value?.trim().toUpperCase().replace(/\s+/g,"_");
@@ -17397,8 +20888,12 @@ async function saveBatteryAsset() {
   // Supabase → localStorage fallback
   let saved = false;
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/battery_assets`, {
-      method:"POST",
+    const isEdit = !!battEditingId;
+    const url    = isEdit
+      ? `${SUPABASE_URL}/rest/v1/battery_assets?asset_id=eq.${encodeURIComponent(battEditingId)}`
+      : `${SUPABASE_URL}/rest/v1/battery_assets`;
+    const res = await fetch(url, {
+      method: isEdit ? "PATCH" : "POST",
       headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
         "Content-Type":"application/json","Prefer":"return=representation"},
       body: JSON.stringify(record)
@@ -17409,11 +20904,17 @@ async function saveBatteryAsset() {
 
   if (!saved) {
     const existing = JSON.parse(localStorage.getItem(BATT_STORAGE_KEY) || "[]");
-    existing.push({ ...record, id:Date.now(), integ_config:integConfig });
-    localStorage.setItem(BATT_STORAGE_KEY, JSON.stringify(existing));
+    const filtered = existing.filter(a => a.asset_id !== assetId);
+    filtered.push({ ...record, id:Date.now(), integ_config:integConfig });
+    localStorage.setItem(BATT_STORAGE_KEY, JSON.stringify(filtered));
   }
 
-  setStatus("ready", `${name} saved as battery asset.`);
+  setStatus("ready", `${name} ${battEditingId ? "updated" : "saved"}.`);
+  battEditingId = null;
+  const tEl = document.getElementById("batt-form-title");
+  if (tEl) tEl.textContent = "Add Battery Storage Asset";
+  const bEl2 = document.getElementById("batt-save-btn");
+  if (bEl2) bEl2.textContent = "Save Battery Asset";
   toggleBatteryEnrollForm();
   await refreshBatteryAssets();
 }
@@ -17591,6 +21092,7 @@ function renderBatteryAssets() {
         <button onclick="dispatchBatteryDRSingle('${a.asset_id}','discharge')" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--green-dark);background:var(--green-bg);color:var(--green-dark);font-size:10px;font-weight:600;cursor:pointer;">Discharge</button>
         <button onclick="dispatchBatteryDRSingle('${a.asset_id}','hold')" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--blue-dark);background:var(--blue-lt);color:var(--blue-dark);font-size:10px;font-weight:600;cursor:pointer;">Hold</button>
         <button onclick="restoreBatterySingle('${a.asset_id}')" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--green);background:var(--green-bg);color:var(--green-dark);font-size:10px;cursor:pointer;">Restore</button>` : ""}
+        <button onclick="editBatteryAsset('${a.asset_id}')" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--blue-dark);background:var(--blue-lt);color:var(--blue-dark);font-size:10px;cursor:pointer;">Edit</button>
         <button onclick="removeBatteryAsset('${a.asset_id}')" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">Remove</button>
       </div>
     </div>`;
@@ -17825,7 +21327,8 @@ async function loadBatteryLog() {
 // ── Generator Assets ──────────────────────────────────────────────────────────
 
 let generatorAssets    = [];
-let generatorLiveData  = {}; // { assetId: { status, kw, runtime, alarms } }
+let generatorLiveData  = {};
+let genEditingId       = null; // { assetId: { status, kw, runtime, alarms } }
 let genSelectedInteg   = null;
 let genRefreshTimer    = null;
 const GEN_STORAGE_KEY  = "lcp_generator_assets_v1";
@@ -17852,7 +21355,12 @@ function toggleGenEnrollForm() {
   const isOpen = form.style.display !== "none";
   form.style.display = isOpen ? "none" : "block";
   if (!isOpen) {
+    genEditingId = null;
     genSelectedInteg = null;
+    const tEl2 = document.getElementById("gen-form-title");
+    if (tEl2) tEl2.textContent = "Add Generator Asset";
+    const bEl2 = document.getElementById("gen-save-btn");
+    if (bEl2) bEl2.textContent = "Save Generator Asset";
     document.querySelectorAll(".gen-integ-opt").forEach(b => {
       b.style.borderColor = "var(--border-md)";
       b.style.background  = "var(--surface)";
@@ -17879,6 +21387,63 @@ function selectGenInteg(integ, el) {
 }
 
 // ── Save Asset ────────────────────────────────────────────────────────────────
+function editGeneratorAsset(assetId) {
+  const asset = generatorAssets.find(a => a.asset_id === assetId);
+  if (!asset) return;
+  genEditingId = assetId;
+
+  const form = document.getElementById("gen-enroll-form");
+  if (form) form.style.display = "block";
+  const title = document.getElementById("gen-form-title");
+  if (title) title.textContent = "Edit Generator Asset";
+  const btn = document.getElementById("gen-save-btn");
+  if (btn) btn.textContent = "Update Generator Asset";
+
+  // Common fields
+  document.getElementById("gen-asset-id").value  = asset.asset_id || "";
+  document.getElementById("gen-name").value       = asset.name     || "";
+  document.getElementById("gen-location").value   = asset.location || "";
+  document.getElementById("gen-rated-kw").value   = asset.rated_kw || "22";
+  document.getElementById("gen-dr").value         = asset.dr_enrolled ? "true" : "false";
+  const makeEl     = document.getElementById("gen-make");
+  const fuelEl     = document.getElementById("gen-fuel");
+  const transferEl = document.getElementById("gen-transfer");
+  if (makeEl)     makeEl.value     = asset.make     || "";
+  if (fuelEl)     fuelEl.value     = asset.fuel     || "natural_gas";
+  if (transferEl) transferEl.value = asset.transfer || "auto";
+
+  // Integration type
+  const integ    = asset.integ_config?.type || asset.integration;
+  const integEl  = document.querySelector(`.gen-integ-opt[data-integ="${integ}"]`);
+  selectGenInteg(integ, integEl);
+
+  const cfg = asset.integ_config || {};
+  if (integ === "relay") {
+    document.getElementById("gen-relay-device").value = cfg.relay_uid || "";
+    document.getElementById("gen-relay-num").value    = cfg.relay_num || "1";
+    document.getElementById("gen-warmup").value       = cfg.warmup    || "30";
+    document.getElementById("gen-cooldown").value     = cfg.cooldown  || "60";
+  } else if (integ === "modbus") {
+    document.getElementById("gen-modbus-host").value       = cfg.host       || "";
+    document.getElementById("gen-modbus-port").value       = cfg.port       || "502";
+    document.getElementById("gen-modbus-unit").value       = cfg.unit       || "1";
+    document.getElementById("gen-modbus-controller").value = cfg.controller || "generic";
+    document.getElementById("gen-modbus-proxy").value      = cfg.proxy      || "";
+    document.getElementById("gen-modbus-token").value      = cfg.token      || "";
+  } else if (integ === "generac_ml") {
+    document.getElementById("gen-ml-user").value = cfg.username     || "";
+    document.getElementById("gen-ml-pass").value = cfg.password     || "";
+    document.getElementById("gen-ml-id").value   = cfg.generator_id || "";
+  } else if (integ === "snmp") {
+    document.getElementById("gen-snmp-url").value       = cfg.url       || "";
+    document.getElementById("gen-snmp-community").value = cfg.community || "public";
+    document.getElementById("gen-snmp-host").value      = cfg.host      || "";
+    document.getElementById("gen-snmp-version").value   = cfg.version   || "2c";
+  }
+
+  form.scrollIntoView({ behavior:"smooth", block:"start" });
+}
+
 async function saveGeneratorAsset() {
   if (!genSelectedInteg) { setStatus("error", "Select a control / integration method."); return; }
   const assetId = document.getElementById("gen-asset-id")?.value?.trim().toUpperCase().replace(/\s+/g,"_");
@@ -17942,8 +21507,12 @@ async function saveGeneratorAsset() {
 
   let saved = false;
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/generator_assets`, {
-      method:"POST",
+    const isEdit = !!genEditingId;
+    const url    = isEdit
+      ? `${SUPABASE_URL}/rest/v1/generator_assets?asset_id=eq.${encodeURIComponent(genEditingId)}`
+      : `${SUPABASE_URL}/rest/v1/generator_assets`;
+    const res = await fetch(url, {
+      method: isEdit ? "PATCH" : "POST",
       headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
         "Content-Type":"application/json","Prefer":"return=representation"},
       body: JSON.stringify(record)
@@ -17959,7 +21528,12 @@ async function saveGeneratorAsset() {
     localStorage.setItem(GEN_STORAGE_KEY, JSON.stringify(filtered));
   }
 
-  setStatus("ready", `${name} saved as generator asset.`);
+  setStatus("ready", `${name} ${genEditingId ? "updated" : "saved"}.`);
+  genEditingId = null;
+  const tEl = document.getElementById("gen-form-title");
+  if (tEl) tEl.textContent = "Add Generator Asset";
+  const bEl = document.getElementById("gen-save-btn");
+  if (bEl) bEl.textContent = "Save Generator Asset";
   toggleGenEnrollForm();
   await refreshGenerators();
 }
@@ -18098,6 +21672,8 @@ function renderGenerators() {
             <button onclick="stopGeneratorSingle('${a.asset_id}')"
               style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--red);background:var(--red-lt);color:var(--red);font-size:10px;font-weight:600;cursor:pointer;">&#9646;&#9646; Stop</button>
           </div>` : ""}
+          <button onclick="editGeneratorAsset('${a.asset_id}')"
+            style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--blue-dark);background:var(--blue-lt);color:var(--blue-dark);font-size:10px;cursor:pointer;">Edit</button>
           <button onclick="removeGeneratorAsset('${a.asset_id}')"
             style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--border-md);background:none;color:var(--text-hint);font-size:10px;cursor:pointer;">Remove</button>
         </div>
