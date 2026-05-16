@@ -4569,7 +4569,7 @@ function populateTargetSelector() {
   const sel = document.getElementById("sf-target");
   const placeholder = `<option value="" disabled selected>— Choose One —</option>`;
   if (type === "group") {
-    sel.innerHTML = placeholder + [1,2,3].map(n => `<option value="group_${n}">${groupNames[n] || "Group " + n}</option>`).join("");
+    sel.innerHTML = placeholder + Object.keys(groupNames).map(Number).sort((a,b)=>a-b).map(n => `<option value="group_${n}">${groupNames[n] || "Group " + n}</option>`).join("");
   } else {
     sel.innerHTML = placeholder + DEVICES.map(d => `<option value="${d.uid}">${d.name}</option>`).join("");
   }
