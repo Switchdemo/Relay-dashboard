@@ -466,6 +466,29 @@
   .outage-corr-row { display:grid;grid-template-columns:1fr 1fr;gap:16px; }
   @media(max-width:600px) { .outage-corr-row { grid-template-columns:1fr; } }
   .outage-stat-pill { display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;border:0.5px solid var(--border-md);background:var(--surface2); }
+
+  /* ── SCADA Data ── */
+  .scada-point-tile { background:var(--surface2);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px;text-align:center;min-width:120px; }
+  .scada-point-value { font-size:22px;font-weight:700;line-height:1;margin:6px 0 2px;color:var(--text-primary); }
+  .scada-point-label { font-size:10px;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;font-family:monospace; }
+  .scada-point-unit  { font-size:11px;color:var(--text-secondary);font-weight:400; }
+  .scada-point-age   { font-size:10px;color:var(--text-hint);margin-top:3px; }
+  .scada-point-tile.alarm  { border-color:var(--red);background:var(--red-lt); }
+  .scada-point-tile.warn   { border-color:var(--amber);background:var(--amber-bg); }
+  .scada-point-tile.normal { border-color:var(--green);background:var(--green-bg); }
+  .scada-alarm-row { display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:0.5px solid var(--border);font-size:12px; }
+  .scada-alarm-row:last-child { border-bottom:none; }
+  .scada-alarm-sev  { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
+  .scada-alarm-sev.critical { background:var(--red); }
+  .scada-alarm-sev.warning  { background:var(--amber); }
+  .scada-alarm-sev.info     { background:var(--blue-dark); }
+  .scada-proto-badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;font-family:monospace;background:var(--surface2);border:0.5px solid var(--border-md);color:var(--text-secondary); }
+  .scada-source-card { border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px 16px;display:flex;align-items:flex-start;gap:12px;background:var(--surface);margin-bottom:8px; }
+  .scada-source-status { width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:3px; }
+  .scada-source-status.active   { background:var(--green-dark); }
+  .scada-source-status.inactive { background:var(--border-md); }
+  .scada-source-status.error    { background:var(--red); }
+  .scada-hier-node { padding:4px 8px;border-radius:4px;font-size:11px;background:var(--surface2);border:0.5px solid var(--border);display:inline-block;margin:2px; }
 </style>
 </head>
 <body>
@@ -598,6 +621,7 @@
     <button class="sub-tab-btn" id="sub-monitor-energy" onclick="switchSub('monitor','monitor-energy',this)">Energy Monitor</button>
     <button class="sub-tab-btn" id="sub-monitor-feeds" onclick="switchSub('monitor','monitor-feeds',this)">Data Feeds</button>
     <button class="sub-tab-btn" id="sub-monitor-outage" onclick="switchSub('monitor','monitor-outage',this)">&#9889; Outage Tracker</button>
+    <button class="sub-tab-btn" id="sub-monitor-scada" onclick="switchSub('monitor','monitor-scada',this)">&#128268; SCADA Data</button>
   </div>
   <div class="sub-tabs" id="sub-tabs-admin" style="display:none;">
     <button class="sub-tab-btn active" id="sub-admin-users" onclick="switchSub('admin','admin-users',this)">User Management</button>
@@ -1519,6 +1543,8 @@
               <option value="tou_peak">Time-of-Use Peak Window</option>
               <option value="tou_offpeak">Time-of-Use Off-Peak Window</option>
             </optgroup>
+            <optgroup label="SCADA Points" id="rule-feed-scada-group">
+            </optgroup>
           </select>
           <select id="rule-operator" style="padding:8px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
             <option value="gt">&gt; Greater than</option>
@@ -1546,6 +1572,7 @@
               <optgroup label="Weather"><option value="nws_temp">Temperature (&#176;F)</option><option value="nws_humidity">Humidity (%)</option><option value="nws_heat_index">Heat Index (&#176;F)</option><option value="openmeteo_uv">UV Index</option></optgroup>
               <optgroup label="Grid Pricing"><option value="spp_lmp">SPP LMP ($/MWh)</option><option value="ercot_lmp">ERCOT LMP ($/MWh)</option></optgroup>
               <optgroup label="Time-Based"><option value="tou_peak">TOU Peak Window</option></optgroup>
+              <optgroup label="SCADA Points" id="rule-feed2-scada-group"></optgroup>
             </select>
             <select id="rule-operator2" style="padding:8px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
               <option value="gt">&gt; Greater than</option><option value="gte">&ge; &ge; or equal</option><option value="lt">&lt; Less than</option><option value="lte">&le; &le; or equal</option>
@@ -3213,6 +3240,374 @@
   </div>
 </div>
 
+
+<!-- ── MONITOR SCADA DATA TAB ── -->
+<div class="tab-pane" id="tab-monitor-scada">
+  <div class="scroll-content">
+    <div style="max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <!-- Live Telemetry Dashboard -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128268; Live SCADA Telemetry</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span id="scada-live-badge" style="display:none;font-size:10px;font-family:monospace;background:var(--green-bg);color:var(--green-dark);padding:2px 8px;border-radius:10px;border:0.5px solid var(--green);">&#9679; LIVE</span>
+            <button class="queue-refresh" onclick="refreshSCADADisplay()">Refresh</button>
+          </div>
+        </div>
+
+        <!-- Territory breadcrumb -->
+        <div id="scada-territory-breadcrumb" style="font-size:11px;color:var(--text-hint);margin-bottom:12px;display:none;">
+          <span class="scada-hier-node" id="scada-bc-territory"></span>
+          <span style="margin:0 4px;">›</span>
+          <span class="scada-hier-node" id="scada-bc-substation"></span>
+        </div>
+
+        <!-- Point type filter tabs -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">
+          <button class="scada-filter-btn active" data-type="all" onclick="filterSCADAPoints('all',this)"
+            style="padding:5px 12px;border-radius:20px;border:0.5px solid var(--green);background:var(--green-bg);color:var(--green-dark);font-size:11px;font-weight:600;cursor:pointer;">All</button>
+          <button class="scada-filter-btn" data-type="analog" onclick="filterSCADAPoints('analog',this)"
+            style="padding:5px 12px;border-radius:20px;border:0.5px solid var(--border-md);background:var(--surface2);color:var(--text-secondary);font-size:11px;font-weight:600;cursor:pointer;">Analog</button>
+          <button class="scada-filter-btn" data-type="status" onclick="filterSCADAPoints('status',this)"
+            style="padding:5px 12px;border-radius:20px;border:0.5px solid var(--border-md);background:var(--surface2);color:var(--text-secondary);font-size:11px;font-weight:600;cursor:pointer;">Status</button>
+          <button class="scada-filter-btn" data-type="count" onclick="filterSCADAPoints('count',this)"
+            style="padding:5px 12px;border-radius:20px;border:0.5px solid var(--border-md);background:var(--surface2);color:var(--text-secondary);font-size:11px;font-weight:600;cursor:pointer;">Count</button>
+          <button class="scada-filter-btn" data-type="alarm" onclick="filterSCADAPoints('alarm',this)"
+            style="padding:5px 12px;border-radius:20px;border:0.5px solid var(--border-md);background:var(--surface2);color:var(--text-secondary);font-size:11px;font-weight:600;cursor:pointer;">Alarms</button>
+          <button class="scada-filter-btn" data-type="derived" onclick="filterSCADAPoints('derived',this)"
+            style="padding:5px 12px;border-radius:20px;border:0.5px solid var(--border-md);background:var(--surface2);color:var(--text-secondary);font-size:11px;font-weight:600;cursor:pointer;">Derived</button>
+        </div>
+
+        <!-- Live point tiles grid -->
+        <div id="scada-points-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;">
+          <div style="grid-column:1/-1;"><div class="sched-empty">No SCADA data sources configured. Add a source below to begin receiving telemetry.</div></div>
+        </div>
+        <div id="scada-last-updated" style="font-size:10px;color:var(--text-hint);margin-top:8px;text-align:right;display:none;"></div>
+      </div>
+
+      <!-- Active Alarms -->
+      <div class="sched-card" id="scada-alarms-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128276; Active Alarms <span id="scada-alarm-count" style="font-family:monospace;font-size:12px;background:var(--red-lt);color:var(--red);padding:1px 8px;border-radius:10px;margin-left:6px;display:none;"></span></div>
+          <button class="queue-refresh" onclick="loadSCADAAlarms()">Refresh</button>
+        </div>
+        <div id="scada-alarm-list"><div class="sched-empty">No active alarms.</div></div>
+      </div>
+
+      <!-- Territory Hierarchy -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#127968; Service Territory</div>
+          <button class="queue-refresh" onclick="toggleSCADATerritoryForm()">+ Add Territory</button>
+        </div>
+        <div id="scada-territory-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px;border:0.5px solid var(--border-md);">
+          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;font-family:monospace;">Define Territory Hierarchy</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Service Territory Name</label>
+              <input type="text" id="scada-terr-name" placeholder="e.g. Western Oklahoma District" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Utility / Owner</label>
+              <input type="text" id="scada-terr-utility" placeholder="e.g. OG&E" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Substation(s)</label>
+              <input type="text" id="scada-terr-substations" placeholder="Comma separated" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Transmission Sectors</label>
+              <input type="text" id="scada-terr-transmission" placeholder="e.g. 115kV Line A, B" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Distribution Sectors</label>
+              <input type="text" id="scada-terr-distribution" placeholder="e.g. Feeder 1, 2, 3" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button onclick="toggleSCADATerritoryForm()" style="padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-secondary);">Cancel</button>
+            <button onclick="saveSCADATerritory()" style="padding:7px 20px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Save</button>
+          </div>
+        </div>
+        <div id="scada-territory-list"><div class="sched-empty">No territories defined.</div></div>
+      </div>
+
+      <!-- Data Sources -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128225; SCADA Data Sources</div>
+          <button class="queue-refresh" onclick="toggleSCADASourceForm()">+ Add Source</button>
+        </div>
+
+        <!-- Add source form -->
+        <div id="scada-source-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px;border:0.5px solid var(--border-md);">
+          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;font-family:monospace;">Configure Data Source</div>
+
+          <!-- Protocol selector -->
+          <div style="margin-bottom:12px;">
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:6px;">Protocol / Intake Method</label>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;" id="scada-proto-selector">
+              <div class="scada-proto-opt" data-proto="rest_poll" onclick="selectSCADAProto('rest_poll',this)"
+                style="padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;transition:all .15s;">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">REST / JSON</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Worker polls HTTPS endpoint on schedule</div>
+              </div>
+              <div class="scada-proto-opt" data-proto="webhook" onclick="selectSCADAProto('webhook',this)"
+                style="padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;transition:all .15s;">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Webhook / POST</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Source POSTs to /scada/ingest on Worker</div>
+              </div>
+              <div class="scada-proto-opt" data-proto="mqtt_ws" onclick="selectSCADAProto('mqtt_ws',this)"
+                style="padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;transition:all .15s;">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">MQTT / WebSocket</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Subscribe to MQTT broker over WSS</div>
+              </div>
+              <div class="scada-proto-opt" data-proto="opcua_rest" onclick="selectSCADAProto('opcua_rest',this)"
+                style="padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;transition:all .15s;">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">OPC-UA REST</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">OPC-UA via REST wrapper / proxy</div>
+              </div>
+              <div class="scada-proto-opt" data-proto="csv_upload" onclick="selectSCADAProto('csv_upload',this)"
+                style="padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;transition:all .15s;">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">CSV / File Upload</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Manual historical data import</div>
+              </div>
+              <div class="scada-proto-opt" data-proto="dnp3_gw" onclick="selectSCADAProto('dnp3_gw',this)"
+                style="padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;transition:all .15s;">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">DNP3 Gateway</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Via REST-to-DNP3 gateway service</div>
+              </div>
+              <div class="scada-proto-opt" data-proto="modbus_gw" onclick="selectSCADAProto('modbus_gw',this)"
+                style="padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;transition:all .15s;">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Modbus Gateway</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Via REST-to-Modbus gateway service</div>
+              </div>
+              <div class="scada-proto-opt" data-proto="iec61850_gw" onclick="selectSCADAProto('iec61850_gw',this)"
+                style="padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;transition:all .15s;">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">IEC 61850</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Via MMS/GOOSE REST gateway</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Common fields -->
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Source Name</label>
+              <input type="text" id="scada-src-name" placeholder="e.g. OG&E Substation Alpha" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Territory (optional)</label>
+              <select id="scada-src-territory" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="">-- None --</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Protocol-specific fields -->
+          <div id="scada-proto-rest" style="display:none;">
+            <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Endpoint URL</label>
+                <input type="url" id="scada-rest-url" placeholder="https://scada.utility.com/api/points" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Auth Type</label>
+                <select id="scada-rest-auth" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                  <option value="none">None</option>
+                  <option value="bearer">Bearer Token</option>
+                  <option value="basic">Basic Auth</option>
+                  <option value="apikey">API Key Header</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Poll Interval</label>
+                <select id="scada-rest-interval" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                  <option value="5">5 seconds</option>
+                  <option value="15">15 seconds</option>
+                  <option value="30">30 seconds</option>
+                  <option value="60">1 minute</option>
+                  <option value="300">5 minutes</option>
+                  <option value="900" selected>15 minutes (record)</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Auth Credential (stored as Worker secret)</label>
+              <input type="password" id="scada-rest-cred" placeholder="Token, password, or key value" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+          </div>
+
+          <div id="scada-proto-webhook" style="display:none;">
+            <div style="background:var(--ink);border-radius:var(--radius-sm);padding:12px 16px;">
+              <div style="font-size:10px;font-weight:600;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;font-family:monospace;">Webhook Endpoint</div>
+              <div style="font-size:12px;color:#a8e6cf;font-family:monospace;" id="scada-webhook-url">POST https://your-worker.workers.dev/scada/ingest</div>
+              <div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:8px;">Configure your SCADA system or gateway to POST JSON telemetry payloads to this URL. See payload format below.</div>
+            </div>
+            <div style="margin-top:10px;background:var(--surface2);border-radius:var(--radius-sm);padding:12px;font-size:11px;color:var(--text-secondary);font-family:monospace;line-height:1.8;">
+              Required payload format:<br/>
+              {"source":"source-name","timestamp":"2026-01-01T00:00:00Z","points":[<br/>
+              &nbsp;&nbsp;{"id":"point-id","name":"Voltage A-N","type":"analog","value":7620.4,"unit":"V","quality":"good"},<br/>
+              &nbsp;&nbsp;{"id":"breaker-1","name":"Breaker 1","type":"status","value":1,"unit":"","quality":"good"}<br/>
+              ]}
+            </div>
+          </div>
+
+          <div id="scada-proto-mqtt_ws" style="display:none;">
+            <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:10px;">
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Broker URL (WSS)</label>
+                <input type="url" id="scada-mqtt-url" placeholder="wss://broker.utility.com:8883" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Topic Filter</label>
+                <input type="text" id="scada-mqtt-topic" placeholder="utility/scada/#" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;font-family:monospace;"/>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Username</label>
+                <input type="text" id="scada-mqtt-user" placeholder="Optional" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Password</label>
+                <input type="password" id="scada-mqtt-pass" placeholder="Optional" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+              </div>
+            </div>
+          </div>
+
+          <div id="scada-proto-opcua_rest" style="display:none;">
+            <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:10px;">
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">OPC-UA REST Wrapper URL</label>
+                <input type="url" id="scada-opc-url" placeholder="https://opcrest.utility.com/api" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Node ID Filter</label>
+                <input type="text" id="scada-opc-nodes" placeholder="ns=2;i=1001" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;font-family:monospace;"/>
+              </div>
+            </div>
+          </div>
+
+          <div id="scada-proto-csv_upload" style="display:none;">
+            <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px 14px;">
+              <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">Upload a CSV file with SCADA historical data. Required columns: <code>timestamp, point_id, point_name, type, value, unit</code></div>
+              <input type="file" id="scada-csv-file" accept=".csv" style="font-size:12px;"/>
+              <button onclick="importSCADACSV()" style="margin-top:8px;padding:6px 14px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Import CSV</button>
+              <div id="scada-csv-status" style="font-size:11px;margin-top:6px;color:var(--text-hint);"></div>
+            </div>
+          </div>
+
+          <div id="scada-proto-dnp3_gw" style="display:none;">
+            <div style="background:var(--amber-bg);border:0.5px solid var(--amber);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);line-height:1.6;">
+              &#9888;&#65039; DNP3 requires a REST-to-DNP3 gateway running on your network (e.g. OpenDNP3, Triangle MicroWorks, Kepware).
+              Configure the gateway to expose a REST API, then use the REST / JSON source type above pointing to the gateway URL.
+            </div>
+          </div>
+
+          <div id="scada-proto-modbus_gw" style="display:none;">
+            <div style="background:var(--amber-bg);border:0.5px solid var(--amber);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);line-height:1.6;">
+              &#9888;&#65039; Modbus TCP/RTU requires a REST-to-Modbus gateway (e.g. Node-RED, ScadaBR, Kepware).
+              Configure the gateway to expose REST endpoints, then use REST / JSON source type above.
+            </div>
+          </div>
+
+          <div id="scada-proto-iec61850_gw" style="display:none;">
+            <div style="background:var(--amber-bg);border:0.5px solid var(--amber);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);line-height:1.6;">
+              &#9888;&#65039; IEC 61850 (MMS/GOOSE) requires a gateway with REST API (e.g. IEC 61850 SDK, libIEC61850 with REST wrapper).
+              Configure the gateway then use REST / JSON source type above pointing to the gateway URL.
+            </div>
+          </div>
+
+          <!-- Recording schedule -->
+          <div style="margin-top:12px;padding-top:12px;border-top:0.5px solid var(--border);">
+            <label style="font-size:10px;font-weight:600;color:var(--text-hint);display:block;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em;">Recording Schedule</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Record to Database Every</label>
+                <select id="scada-record-interval" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                  <option value="900" selected>15 minutes (standard)</option>
+                  <option value="300">5 minutes</option>
+                  <option value="60">1 minute</option>
+                  <option value="1800">30 minutes</option>
+                  <option value="3600">1 hour</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Retention Period</label>
+                <select id="scada-retention" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                  <option value="30">30 days</option>
+                  <option value="90" selected>90 days</option>
+                  <option value="180">6 months</option>
+                  <option value="365">1 year</option>
+                  <option value="0">Indefinite</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Record Point Types</label>
+                <select id="scada-record-types" multiple style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;height:70px;">
+                  <option value="analog" selected>Analog</option>
+                  <option value="status" selected>Status</option>
+                  <option value="count">Count</option>
+                  <option value="alarm" selected>Alarm</option>
+                  <option value="derived" selected>Derived</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+            <button onclick="toggleSCADASourceForm()" style="padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-secondary);">Cancel</button>
+            <button onclick="saveSCADASource()" style="padding:7px 20px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Save Source</button>
+          </div>
+        </div>
+
+        <div id="scada-source-list"><div class="sched-empty">No data sources configured.</div></div>
+      </div>
+
+      <!-- Data Point Map -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128202; Data Point Configuration</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select id="scada-point-source-filter" onchange="loadSCADAPointMap()" style="padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="">All Sources</option>
+            </select>
+            <button class="queue-refresh" onclick="showAddPointModal()">+ Add Point</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:10px;">Define data points to monitor, display, and record. Each point maps to a specific SCADA tag or API field.</div>
+        <div id="scada-point-map-list"><div class="sched-empty">No data points configured.</div></div>
+      </div>
+
+      <!-- Historical Trend -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128200; Historical Trend</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select id="scada-trend-point" onchange="loadSCADATrend()" style="padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="">-- Select Point --</option>
+            </select>
+            <select id="scada-trend-range" onchange="loadSCADATrend()" style="padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="24">24 hours</option>
+              <option value="72">3 days</option>
+              <option value="168">7 days</option>
+              <option value="720">30 days</option>
+            </select>
+            <button class="queue-refresh" onclick="loadSCADATrend()">Refresh</button>
+          </div>
+        </div>
+        <div id="scada-trend-meta" style="font-size:11px;color:var(--text-hint);margin-bottom:8px;"></div>
+        <div style="position:relative;height:260px;width:100%;"><canvas id="scada-trend-chart"></canvas></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- ── DRILL DOWN SIDE PANEL ── -->
 <div id="fh-drill-panel" style="position:fixed;top:0;right:-480px;width:480px;height:100vh;background:var(--surface);border-left:0.5px solid var(--border-md);z-index:1000;transition:right 0.3s ease;display:flex;flex-direction:column;box-shadow:-4px 0 20px rgba(0,0,0,0.15);">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:0.5px solid var(--border-md);">
@@ -3429,6 +3824,7 @@ function runTabInit(name) {
   if (name === "monitor-energy")   { injectEnergyMonitor(); }
   if (name === "monitor-feeds")    { initFeedCharts(); }
   if (name === "monitor-outage")   { initOutageTracker(); }
+  if (name === "monitor-scada")    { initSCADA(); }
 }
 
 function switchTab(name, btn) { switchMain(name, btn); }
@@ -10884,6 +11280,7 @@ function showAddRuleModal() {
   if (document.getElementById("rule-action-section")) document.getElementById("rule-action-section").style.display = "none";
   if (document.getElementById("rule-notify-cancel-row")) document.getElementById("rule-notify-cancel-row").style.display = "none";
   ["tier-alert","tier-suggest","tier-autopilot"].forEach(id => document.getElementById(id)?.classList.remove("selected"));
+  populateSCADARuleFeedOptions();
   document.getElementById("rule-modal").classList.add("active");
 }
 
@@ -11220,6 +11617,20 @@ async function collectFeedValues() {
     } catch(e) { console.warn("SPP LMP fetch:", e.message); }
   }
 
+  // ── SCADA live data → feedValues ─────────────────────────────────────────
+  // Any point in scadaLiveData gets registered as a feed value with key scada_{point_id}
+  if (typeof scadaLiveData !== "undefined") {
+    Object.entries(scadaLiveData).forEach(([pointId, live]) => {
+      if (live.value != null) {
+        feedValues[`scada_${pointId}`] = {
+          value:     live.value,
+          timestamp: live.timestamp || new Date().toISOString(),
+          unit:      live.unit || ""
+        };
+      }
+    });
+  }
+
   // Save to Supabase monitor_feed_readings
   for (const [key, fv] of Object.entries(feedValues)) {
     if (fv.value == null) continue;
@@ -11228,6 +11639,41 @@ async function collectFeedValues() {
         feed_key: key, value: fv.value, unit: fv.unit, recorded_at: new Date().toISOString()
       });
     } catch(e) {} // silent — table might not exist yet
+  }
+}
+
+function populateSCADARuleFeedOptions() {
+  // Populate SCADA optgroups in rule feed selectors from configured points
+  ["rule-feed-scada-group", "rule-feed2-scada-group"].forEach(groupId => {
+    const grp = document.getElementById(groupId);
+    if (!grp) return;
+    if (typeof scadaPoints !== "undefined" && scadaPoints.length) {
+      grp.innerHTML = scadaPoints.map(p =>
+        `<option value="scada_${p.point_id}">${p.name} (${p.type}${p.unit ? ", " + p.unit : ""})</option>`
+      ).join("");
+    } else {
+      grp.innerHTML = '<option disabled>No SCADA points configured</option>';
+    }
+  });
+
+  // Also inject SCADA points into FEED_DEFS so hints work
+  if (typeof scadaPoints !== "undefined") {
+    scadaPoints.forEach(p => {
+      const key = `scada_${p.point_id}`;
+      if (!FEED_DEFS[key]) {
+        FEED_DEFS[key] = {
+          label:           p.name,
+          unit:            p.unit || "",
+          icon:            p.type === "analog" ? "〰" : p.type === "status" ? "⊙" : p.type === "alarm" ? "🔔" : "∑",
+          interval:        15,
+          testUrl:         null,
+          auth:            "none",
+          typical:         `${p.type} point`,
+          typical_trigger: p.hi_limit || p.lo_limit || null,
+          description:     `SCADA ${p.type} point — ${p.name}${p.unit ? " (" + p.unit + ")" : ""}`
+        };
+      }
+    });
   }
 }
 
@@ -11557,6 +12003,29 @@ async function runFeedDiscoveryM() {
     &#127777;&#65039; Weather feeds (NWS temperature, humidity, UV) are always available — set location in the Weather tab to activate.
   </div>`;
 
+  // Add SCADA points section if any are configured
+  if (typeof scadaPoints !== "undefined" && scadaPoints.length) {
+    html += `<div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 8px;font-family:monospace;">SCADA Data Points (${scadaPoints.length})</div>`;
+    html += scadaPoints.map(p => {
+      const feedKey = `scada_${p.point_id}`;
+      const alreadyAdded = monitorFeeds.some(f => f.feed_key === feedKey);
+      return `<div class="feed-card">
+        <div class="feed-status-dot live"></div>
+        <div class="feed-info">
+          <div class="feed-name">${p.type === "analog" ? "〰" : p.type === "status" ? "⊙" : p.type === "alarm" ? "🔔" : "∑"} ${p.name}</div>
+          <div class="feed-meta">SCADA ${p.type} point &bull; Tag: <code style="font-size:10px;">${p.point_id}</code>${p.unit ? " &bull; Unit: " + p.unit : ""}</div>
+          <div class="feed-meta" style="margin-top:3px;"><span style="color:var(--green-dark);font-weight:600;">&#9679; Live — from SCADA source</span> &bull; Records every 15 min</div>
+        </div>
+        <div>
+          ${alreadyAdded
+            ? '<span style="font-size:11px;color:var(--green-dark);font-weight:600;">&#10003; Added</span>'
+            : `<button onclick="addFeedFromDiscovery('${feedKey}')" style="padding:5px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--green);background:var(--green-bg);color:var(--green-dark);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">+ Add Feed</button>`
+          }
+        </div>
+      </div>`;
+    }).join("");
+  }
+
   results.innerHTML = html;
 
   // Restore originals
@@ -11698,6 +12167,9 @@ async function initFeedCharts() {
     sel.appendChild(o);
   });
 
+  // Also ensure SCADA point FEED_DEFS are populated
+  populateSCADARuleFeedOptions();
+
   // Auto-select first feed
   if (monitorFeeds.length > 0) {
     sel.value = monitorFeeds[0].feed_key;
@@ -11725,9 +12197,18 @@ async function loadFeedChart() {
   if (metaEl) metaEl.textContent = "Loading...";
 
   try {
-    const rows = await supabaseGet(
-      `monitor_feed_readings?feed_key=eq.${encodeURIComponent(feedKey)}&recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=2000`
-    );
+    // For SCADA feeds pull from scada_readings table, otherwise monitor_feed_readings
+    let rows;
+    if (feedKey.startsWith("scada_")) {
+      const pointId = feedKey.replace("scada_", "");
+      rows = await supabaseGet(
+        `scada_readings?point_id=eq.${encodeURIComponent(pointId)}&recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=2000`
+      );
+    } else {
+      rows = await supabaseGet(
+        `monitor_feed_readings?feed_key=eq.${encodeURIComponent(feedKey)}&recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=2000`
+      );
+    }
 
     if (!Array.isArray(rows) || !rows.length) {
       if (metaEl) metaEl.textContent = `No data for "${def.label}" in the last ${rangeHrs} hours. Data is collected every 5 minutes during monitor cycles.`;
@@ -12214,8 +12695,16 @@ async function refreshSummaryFeeds() {
       return { feed: f, latest };
     }));
 
-    // Also check live feedValues for any that are more recent
+    // Also check live feedValues and scadaLiveData for any that are more recent
     results.forEach(r => {
+      // Check scadaLiveData directly for SCADA feeds
+      if (r.feed.feed_key.startsWith("scada_")) {
+        const pointId = r.feed.feed_key.replace("scada_", "");
+        const scadaLive = typeof scadaLiveData !== "undefined" ? scadaLiveData[pointId] : null;
+        if (scadaLive && scadaLive.value != null) {
+          r.latest = { value: scadaLive.value, unit: scadaLive.unit, recorded_at: scadaLive.timestamp };
+        }
+      }
       const live = feedValues[r.feed.feed_key];
       if (live && live.value != null) {
         const liveAge    = live.timestamp ? Date.now() - new Date(live.timestamp).getTime() : 9999999;
@@ -13148,6 +13637,641 @@ async function loadCorrelationChart() {
   } catch(e) {
     console.error("loadCorrelationChart:", e);
     if (statsEl) statsEl.innerHTML = `<span style="color:var(--red);font-size:12px;">Error: ${e.message}</span>`;
+  }
+}
+
+
+
+// ── SCADA Data System ─────────────────────────────────────────────────────────
+
+let scadaSources      = [];   // configured data sources
+let scadaPoints       = [];   // configured data points
+let scadaTerritories  = [];   // territory hierarchy
+let scadaLiveData     = {};   // { pointId: { value, timestamp, quality, unit } }
+let scadaPoller       = null;
+let scadaTrendChart   = null;
+let selectedSCADAProto = null;
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function initSCADA() {
+  // Update webhook URL with actual worker URL
+  const whu = document.getElementById("scada-webhook-url");
+  if (whu) whu.textContent = `POST ${PROXY_URL}scada/ingest`;
+
+  await loadSCADATerritories();
+  await loadSCADASources();
+  await loadSCADAPointMap();
+  await refreshSCADADisplay();
+  await loadSCADAAlarms();
+
+  if (!scadaPoller) {
+    // Poll REST sources every 30 seconds for live display
+    // Record to DB on 15-minute boundary
+    scadaPoller = setInterval(async () => {
+      await pollSCADAREST();
+      await refreshSCADADisplay();
+      const now = new Date();
+      if (now.getMinutes() % 15 === 0 && now.getSeconds() < 35) {
+        await recordSCADASnapshot();
+      }
+    }, 30000);
+  }
+}
+
+// ── Protocol Selection ────────────────────────────────────────────────────────
+function selectSCADAProto(proto, el) {
+  selectedSCADAProto = proto;
+  document.querySelectorAll(".scada-proto-opt").forEach(b => {
+    b.style.borderColor = "var(--border-md)";
+    b.style.background  = "var(--surface)";
+  });
+  if (el) { el.style.borderColor = "var(--green)"; el.style.background = "var(--green-bg)"; }
+
+  // Show relevant config panel
+  ["rest","webhook","mqtt_ws","opcua_rest","csv_upload","dnp3_gw","modbus_gw","iec61850_gw"].forEach(p => {
+    const panel = document.getElementById(`scada-proto-${p}`);
+    if (panel) panel.style.display = "none";
+  });
+  const active = document.getElementById(`scada-proto-${proto}`);
+  if (active) active.style.display = "block";
+}
+
+function toggleSCADASourceForm() {
+  const form = document.getElementById("scada-source-form");
+  if (!form) return;
+  form.style.display = form.style.display === "none" ? "block" : "none";
+  if (form.style.display === "block") populateSCADATerritorySelect();
+}
+
+function toggleSCADATerritoryForm() {
+  const form = document.getElementById("scada-territory-form");
+  if (!form) return;
+  form.style.display = form.style.display === "none" ? "block" : "none";
+}
+
+// ── Territory ─────────────────────────────────────────────────────────────────
+async function saveSCADATerritory() {
+  const name         = document.getElementById("scada-terr-name")?.value?.trim();
+  const utility      = document.getElementById("scada-terr-utility")?.value?.trim();
+  const substations  = document.getElementById("scada-terr-substations")?.value?.trim();
+  const transmission = document.getElementById("scada-terr-transmission")?.value?.trim();
+  const distribution = document.getElementById("scada-terr-distribution")?.value?.trim();
+  if (!name) { setStatus("error", "Territory name required."); return; }
+
+  const record = {
+    name, utility: utility||null,
+    substations:  substations  ? substations.split(",").map(s=>s.trim())  : [],
+    transmission: transmission ? transmission.split(",").map(s=>s.trim()) : [],
+    distribution: distribution ? distribution.split(",").map(s=>s.trim()) : [],
+    created_at: new Date().toISOString()
+  };
+
+  try {
+    await supabasePost("scada_territories", record);
+    setStatus("ready", `Territory "${name}" saved.`);
+    toggleSCADATerritoryForm();
+    await loadSCADATerritories();
+  } catch(e) { setStatus("error", "Failed to save territory: " + e.message); }
+}
+
+async function loadSCADATerritories() {
+  const list = document.getElementById("scada-territory-list");
+  try {
+    const rows = await supabaseGet("scada_territories?order=created_at.asc");
+    scadaTerritories = Array.isArray(rows) ? rows : [];
+  } catch(e) { scadaTerritories = []; }
+
+  if (!list) return;
+  if (!scadaTerritories.length) {
+    list.innerHTML = '<div class="sched-empty">No territories defined. Define your service territory hierarchy to organize SCADA data points.</div>';
+    return;
+  }
+
+  list.innerHTML = scadaTerritories.map(t => `
+    <div style="padding:12px 14px;border:0.5px solid var(--border-md);border-radius:var(--radius-sm);margin-bottom:8px;background:var(--surface);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div>
+          <span style="font-size:13px;font-weight:600;color:var(--text-primary);">&#127968; ${t.name}</span>
+          ${t.utility ? `<span style="font-size:11px;color:var(--text-hint);margin-left:8px;">${t.utility}</span>` : ""}
+        </div>
+        <button onclick="deleteSCADATerritory(${t.id})" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">Remove</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        ${(t.substations||[]).map(s=>`<span class="scada-hier-node" title="Substation">🔌 ${s}</span>`).join("")}
+        ${(t.transmission||[]).map(s=>`<span class="scada-hier-node" title="Transmission">⚡ ${s}</span>`).join("")}
+        ${(t.distribution||[]).map(s=>`<span class="scada-hier-node" title="Distribution">🔆 ${s}</span>`).join("")}
+      </div>
+    </div>`).join("");
+}
+
+function populateSCADATerritorySelect() {
+  const sel = document.getElementById("scada-src-territory");
+  if (!sel) return;
+  sel.innerHTML = '<option value="">-- None --</option>' +
+    scadaTerritories.map(t => `<option value="${t.id}">${t.name}</option>`).join("");
+}
+
+async function deleteSCADATerritory(id) {
+  if (!confirm("Remove this territory?")) return;
+  await fetch(`${SUPABASE_URL}/rest/v1/scada_territories?id=eq.${id}`, {
+    method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+  });
+  await loadSCADATerritories();
+}
+
+// ── Sources ───────────────────────────────────────────────────────────────────
+async function saveSCADASource() {
+  if (!selectedSCADAProto) { setStatus("error", "Select a protocol/intake method."); return; }
+  const name = document.getElementById("scada-src-name")?.value?.trim();
+  if (!name) { setStatus("error", "Source name required."); return; }
+
+  const protoConfig = {};
+  if (selectedSCADAProto === "rest_poll") {
+    protoConfig.url      = document.getElementById("scada-rest-url")?.value?.trim();
+    protoConfig.auth     = document.getElementById("scada-rest-auth")?.value;
+    protoConfig.interval = parseInt(document.getElementById("scada-rest-interval")?.value || "900");
+    if (!protoConfig.url) { setStatus("error", "Endpoint URL required."); return; }
+  }
+  if (selectedSCADAProto === "mqtt_ws") {
+    protoConfig.url   = document.getElementById("scada-mqtt-url")?.value?.trim();
+    protoConfig.topic = document.getElementById("scada-mqtt-topic")?.value?.trim();
+    if (!protoConfig.url) { setStatus("error", "Broker URL required."); return; }
+  }
+  if (selectedSCADAProto === "opcua_rest") {
+    protoConfig.url   = document.getElementById("scada-opc-url")?.value?.trim();
+    protoConfig.nodes = document.getElementById("scada-opc-nodes")?.value?.trim();
+  }
+
+  const record = {
+    name,
+    protocol:        selectedSCADAProto,
+    territory_id:    document.getElementById("scada-src-territory")?.value || null,
+    config:          JSON.stringify(protoConfig),
+    record_interval: parseInt(document.getElementById("scada-record-interval")?.value || "900"),
+    retention_days:  parseInt(document.getElementById("scada-retention")?.value || "90"),
+    record_types:    Array.from(document.getElementById("scada-record-types")?.selectedOptions || []).map(o => o.value),
+    enabled:         true,
+    status:          "configured",
+    created_at:      new Date().toISOString()
+  };
+
+  try {
+    await supabasePost("scada_sources", record);
+    setStatus("ready", `SCADA source "${name}" saved.`);
+    toggleSCADASourceForm();
+    await loadSCADASources();
+  } catch(e) { setStatus("error", "Failed to save source: " + e.message); }
+}
+
+async function loadSCADASources() {
+  const list = document.getElementById("scada-source-list");
+  const filter = document.getElementById("scada-point-source-filter");
+  try {
+    const rows = await supabaseGet("scada_sources?enabled=eq.true&order=created_at.asc");
+    scadaSources = Array.isArray(rows) ? rows : [];
+  } catch(e) { scadaSources = []; }
+
+  if (filter) {
+    filter.innerHTML = '<option value="">All Sources</option>' +
+      scadaSources.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
+  }
+
+  if (!list) return;
+  if (!scadaSources.length) {
+    list.innerHTML = '<div class="sched-empty">No data sources configured.</div>';
+    return;
+  }
+
+  const PROTO_LABELS = {
+    rest_poll:"REST/JSON", webhook:"Webhook/POST", mqtt_ws:"MQTT/WS",
+    opcua_rest:"OPC-UA REST", csv_upload:"CSV Upload",
+    dnp3_gw:"DNP3 Gateway", modbus_gw:"Modbus Gateway", iec61850_gw:"IEC 61850"
+  };
+
+  list.innerHTML = scadaSources.map(s => {
+    const cfg = (() => { try { return JSON.parse(s.config||"{}"); } catch(e) { return {}; } })();
+    const territory = scadaTerritories.find(t => t.id == s.territory_id);
+    return `<div class="scada-source-card">
+      <div class="scada-source-status ${s.status === "active" ? "active" : s.status === "error" ? "error" : "inactive"}"></div>
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <span style="font-size:13px;font-weight:600;color:var(--text-primary);">${s.name}</span>
+          <span class="scada-proto-badge">${PROTO_LABELS[s.protocol]||s.protocol}</span>
+          ${territory ? `<span style="font-size:10px;color:var(--text-hint);">&#127968; ${territory.name}</span>` : ""}
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);">
+          ${cfg.url ? `&#128279; ${cfg.url} &bull; ` : ""}
+          Record every ${Math.round((s.record_interval||900)/60)} min &bull; Keep ${s.retention_days||90} days
+        </div>
+        ${s.protocol === "webhook" ? `<div style="font-size:10px;color:var(--text-hint);margin-top:3px;font-family:monospace;">POST ${PROXY_URL}scada/ingest</div>` : ""}
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        <button onclick="testSCADASource(${s.id})" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:10px;cursor:pointer;">Test</button>
+        <button onclick="removeSCADASource(${s.id})" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">Remove</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function testSCADASource(id) {
+  const src = scadaSources.find(s => s.id === id);
+  if (!src) return;
+  setStatus("ready", `Testing connection to ${src.name}...`);
+  try {
+    const cfg = JSON.parse(src.config || "{}");
+    if (src.protocol === "rest_poll" && cfg.url) {
+      const res = await fetch(PROXY_URL + "scada/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: cfg.url, auth: cfg.auth })
+      });
+      const data = await res.json();
+      setStatus("ready", `${src.name}: ${data.ok ? "✅ Connected" : "⚠️ " + (data.error||data.status)}`);
+    } else if (src.protocol === "webhook") {
+      setStatus("ready", `${src.name}: Webhook — waiting for incoming POST to ${PROXY_URL}scada/ingest`);
+    } else {
+      setStatus("ready", `${src.name}: Test not available for ${src.protocol} sources`);
+    }
+  } catch(e) { setStatus("error", `Test failed: ${e.message}`); }
+}
+
+async function removeSCADASource(id) {
+  if (!confirm("Remove this SCADA source? Associated data points will be orphaned.")) return;
+  await fetch(`${SUPABASE_URL}/rest/v1/scada_sources?id=eq.${id}`, {
+    method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+  });
+  await loadSCADASources();
+}
+
+// ── Data Points ───────────────────────────────────────────────────────────────
+function showAddPointModal() {
+  // Simple inline prompt for now — full modal can be added if needed
+  const srcId = document.getElementById("scada-point-source-filter")?.value;
+  const id    = prompt("Point ID / Tag Name (e.g. SUB1_VOLT_AN):");
+  if (!id) return;
+  const name  = prompt("Display Name (e.g. Substation 1 Voltage A-N):");
+  if (!name) return;
+  const type  = prompt("Point Type: analog / status / count / alarm / derived", "analog");
+  const unit  = prompt("Unit (e.g. kV, A, MW, %):", "");
+
+  addSCADAPoint({ source_id: srcId||null, point_id: id, name, type: type||"analog", unit: unit||"", lo_limit: null, hi_limit: null, enabled: true });
+}
+
+async function addSCADAPoint(point) {
+  try {
+    await supabasePost("scada_points", { ...point, created_at: new Date().toISOString() });
+
+    // Auto-register as a monitor feed so it appears in the rules engine
+    const feedKey = `scada_${point.point_id}`;
+    const existing = await supabaseGet(`monitor_feeds?feed_key=eq.${encodeURIComponent(feedKey)}&limit=1`).catch(() => []);
+    if (!Array.isArray(existing) || !existing.length) {
+      const src = scadaSources.find(s => s.id == point.source_id);
+      await supabasePost("monitor_feeds", {
+        feed_key:         feedKey,
+        label:            point.name,
+        unit:             point.unit || "",
+        interval_minutes: 15,
+        auth_required:    false,
+        endpoint_url:     null,
+        enabled:          true,
+        added_at:         new Date().toISOString()
+      }).catch(e => console.warn("SCADA feed registration:", e.message));
+    }
+
+    await loadSCADAPointMap();
+    await populateSCADATrendSelector();
+    setStatus("ready", `Point "${point.name}" added and registered as monitor feed.`);
+  } catch(e) { setStatus("error", "Failed to add point: " + e.message); }
+}
+
+async function loadSCADAPointMap() {
+  const list  = document.getElementById("scada-point-map-list");
+  const srcId = document.getElementById("scada-point-source-filter")?.value;
+  try {
+    const q = srcId ? `scada_points?source_id=eq.${srcId}&order=type.asc,name.asc` : "scada_points?order=type.asc,name.asc";
+    const rows = await supabaseGet(q);
+    scadaPoints = Array.isArray(rows) ? rows : [];
+  } catch(e) { scadaPoints = []; }
+
+  if (!list) return;
+  if (!scadaPoints.length) {
+    list.innerHTML = '<div class="sched-empty">No data points configured. Click + Add Point to define a SCADA tag to monitor.</div>';
+    return;
+  }
+
+  const typeColors = { analog:"var(--blue-dark)", status:"var(--green-dark)", count:"var(--amber)", alarm:"var(--red)", derived:"var(--ink-3)" };
+  const typeIcons  = { analog:"〰", status:"⊙", count:"#", alarm:"🔔", derived:"∑" };
+
+  list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:11px;">
+    <thead><tr>
+      <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Type</th>
+      <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Tag / Point ID</th>
+      <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Display Name</th>
+      <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Current Value</th>
+      <th style="text-align:center;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Quality</th>
+      <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);"></th>
+    </tr></thead>
+    <tbody>${scadaPoints.map(p => {
+      const live = scadaLiveData[p.point_id];
+      const val  = live?.value != null ? `${live.value} ${p.unit||""}` : "—";
+      const qual = live?.quality || "—";
+      const qualColor = qual === "good" ? "var(--green-dark)" : qual === "bad" ? "var(--red)" : "var(--text-hint)";
+      return `<tr>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);">
+          <span style="font-size:11px;font-weight:700;color:${typeColors[p.type]||"var(--text-primary)"};">${typeIcons[p.type]||"?"} ${p.type}</span>
+        </td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-family:monospace;font-size:10px;color:var(--text-secondary);">${p.point_id}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-weight:600;">${p.name}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;font-family:monospace;font-weight:700;">${val}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:center;color:${qualColor};font-size:10px;">${qual}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;">
+          <button onclick="removeSCADAPoint(${p.id})" style="padding:2px 7px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">✕</button>
+        </td>
+      </tr>`;
+    }).join("")}</tbody></table>`;
+
+  await populateSCADATrendSelector();
+}
+
+async function removeSCADAPoint(id) {
+  if (!confirm("Remove this data point?")) return;
+  await fetch(`${SUPABASE_URL}/rest/v1/scada_points?id=eq.${id}`, {
+    method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+  });
+  await loadSCADAPointMap();
+}
+
+// ── Live Display ──────────────────────────────────────────────────────────────
+async function refreshSCADADisplay() {
+  const grid = document.getElementById("scada-points-grid");
+  const updEl = document.getElementById("scada-last-updated");
+  const badge = document.getElementById("scada-live-badge");
+
+  if (!scadaPoints.length) return;
+
+  // Get latest readings from DB for each point
+  const since = new Date(Date.now() - 20 * 60 * 1000).toISOString(); // last 20 min
+  try {
+    const rows = await supabaseGet(
+      `scada_readings?recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.desc&limit=500`
+    );
+    if (Array.isArray(rows)) {
+      rows.forEach(r => {
+        if (!scadaLiveData[r.point_id] || new Date(r.recorded_at) > new Date(scadaLiveData[r.point_id].timestamp)) {
+          scadaLiveData[r.point_id] = { value:r.value, timestamp:r.recorded_at, quality:r.quality||"good", unit:r.unit||"" };
+        }
+      });
+    }
+  } catch(e) {}
+
+  if (!grid) return;
+
+  const activeType = document.querySelector(".scada-filter-btn.active")?.dataset?.type || "all";
+  const filtered   = activeType === "all" ? scadaPoints : scadaPoints.filter(p => p.type === activeType);
+
+  if (!filtered.length) {
+    grid.innerHTML = `<div style="grid-column:1/-1;"><div class="sched-empty">No ${activeType} points configured.</div></div>`;
+    return;
+  }
+
+  const typeColors = { analog:"#1d5fa8", status:"#1a5f4a", count:"#b45309", alarm:"#c0392b", derived:"#555" };
+
+  grid.innerHTML = filtered.map(p => {
+    const live  = scadaLiveData[p.point_id];
+    const val   = live?.value != null ? live.value : null;
+    const unit  = p.unit || live?.unit || "";
+    const qual  = live?.quality || "unknown";
+    const age   = live?.timestamp ? Math.round((Date.now() - new Date(live.timestamp).getTime()) / 60000) : null;
+    const alarm = p.type === "alarm" && val === 1;
+    const warn  = p.hi_limit && val > p.hi_limit;
+    const tileClass = alarm ? "scada-point-tile alarm" : warn ? "scada-point-tile warn" : val != null ? "scada-point-tile normal" : "scada-point-tile";
+    const color = typeColors[p.type] || "var(--text-primary)";
+
+    return `<div class="${tileClass}">
+      <div class="scada-point-label">${p.name}</div>
+      <div class="scada-point-value" style="color:${val!=null?color:"var(--text-hint)"};">
+        ${val != null ? val : "—"}${val != null && unit ? `<span class="scada-point-unit"> ${unit}</span>` : ""}
+      </div>
+      <div class="scada-point-age">${age == null ? "No data" : age < 2 ? "Just now" : `${age}m ago`}</div>
+    </div>`;
+  }).join("");
+
+  if (badge) badge.style.display = Object.keys(scadaLiveData).length > 0 ? "inline-block" : "none";
+  if (updEl) { updEl.textContent = `Last refreshed: ${new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}`; updEl.style.display = "block"; }
+}
+
+function filterSCADAPoints(type, btn) {
+  document.querySelectorAll(".scada-filter-btn").forEach(b => {
+    b.style.borderColor = "var(--border-md)";
+    b.style.background  = "var(--surface2)";
+    b.style.color       = "var(--text-secondary)";
+  });
+  if (btn) { btn.style.borderColor = "var(--green)"; btn.style.background = "var(--green-bg)"; btn.style.color = "var(--green-dark)"; }
+  refreshSCADADisplay();
+}
+
+// ── Alarms ────────────────────────────────────────────────────────────────────
+async function loadSCADAAlarms() {
+  const list  = document.getElementById("scada-alarm-list");
+  const count = document.getElementById("scada-alarm-count");
+  if (!list) return;
+  try {
+    const rows = await supabaseGet(
+      "scada_readings?type=eq.alarm&value=eq.1&order=recorded_at.desc&limit=50"
+    );
+    const alarms = Array.isArray(rows) ? rows : [];
+    if (count) { count.textContent = alarms.length; count.style.display = alarms.length ? "inline" : "none"; }
+    if (!alarms.length) { list.innerHTML = '<div class="sched-empty">&#10003; No active alarms.</div>'; return; }
+    list.innerHTML = alarms.map(a => `
+      <div class="scada-alarm-row">
+        <div class="scada-alarm-sev critical"></div>
+        <div style="flex:1;">
+          <span style="font-weight:600;">${a.point_name||a.point_id}</span>
+          <span style="font-size:10px;color:var(--text-hint);margin-left:8px;">${a.source_name||""}</span>
+        </div>
+        <div style="font-size:10px;color:var(--text-hint);font-family:monospace;">${new Date(a.recorded_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</div>
+      </div>`).join("");
+  } catch(e) { list.innerHTML = '<div class="sched-empty">Error loading alarms.</div>'; }
+}
+
+// ── REST Polling ──────────────────────────────────────────────────────────────
+async function pollSCADAREST() {
+  const restSources = scadaSources.filter(s => s.protocol === "rest_poll" && s.enabled);
+  for (const src of restSources) {
+    try {
+      const cfg = JSON.parse(src.config || "{}");
+      if (!cfg.url) continue;
+      const res = await fetch(PROXY_URL + "scada/poll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: cfg.url, auth: cfg.auth, source_id: src.id, source_name: src.name })
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data.points) {
+        data.points.forEach(p => {
+          scadaLiveData[p.id] = { value:p.value, timestamp:p.timestamp||new Date().toISOString(), quality:p.quality||"good", unit:p.unit||"" };
+        });
+        // Update source status
+        await fetch(`${SUPABASE_URL}/rest/v1/scada_sources?id=eq.${src.id}`, {
+          method:"PATCH",
+          headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json","Prefer":"return=minimal"},
+          body:JSON.stringify({status:"active",last_poll:new Date().toISOString()})
+        });
+      }
+    } catch(e) { console.warn(`SCADA REST poll ${src.name}:`, e.message); }
+  }
+}
+
+// ── 15-minute Snapshot Recording ─────────────────────────────────────────────
+async function recordSCADASnapshot() {
+  const now = new Date().toISOString();
+  const records = [];
+  for (const p of scadaPoints) {
+    const live = scadaLiveData[p.point_id];
+    if (!live || live.value == null) continue;
+    const src = scadaSources.find(s => s.id == p.source_id);
+    if (!src) continue;
+    const recordTypes = src.record_types || ["analog","alarm","status","derived"];
+    if (!recordTypes.includes(p.type)) continue;
+
+    records.push({
+      source_id:   p.source_id,
+      source_name: src.name,
+      point_id:    p.point_id,
+      point_name:  p.name,
+      type:        p.type,
+      value:       live.value,
+      unit:        p.unit || live.unit || "",
+      quality:     live.quality || "good",
+      recorded_at: now
+    });
+  }
+  if (!records.length) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/scada_readings`, {
+      method:"POST",
+      headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json","Prefer":"return=minimal"},
+      body:JSON.stringify(records)
+    });
+    console.log(`SCADA snapshot: recorded ${records.length} points at ${now}`);
+  } catch(e) { console.warn("SCADA snapshot error:", e); }
+}
+
+// ── CSV Import ────────────────────────────────────────────────────────────────
+async function importSCADACSV() {
+  const file   = document.getElementById("scada-csv-file")?.files?.[0];
+  const status = document.getElementById("scada-csv-status");
+  if (!file) { if (status) status.textContent = "Select a CSV file first."; return; }
+  if (status) status.textContent = "Reading file...";
+
+  const text = await file.text();
+  const lines = text.trim().split("\n");
+  const headers = lines[0].split(",").map(h => h.trim().toLowerCase().replace(/"/g,""));
+  const records = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(",").map(c => c.trim().replace(/^"|"$/g,""));
+    const row = {};
+    headers.forEach((h, idx) => { row[h] = cols[idx] || ""; });
+    if (!row.timestamp || !row.value) continue;
+    records.push({
+      source_id:   null,
+      source_name: "CSV Import",
+      point_id:    row.point_id || row.tag || `csv_${i}`,
+      point_name:  row.point_name || row.name || row.point_id || `Point ${i}`,
+      type:        row.type || "analog",
+      value:       parseFloat(row.value),
+      unit:        row.unit || "",
+      quality:     row.quality || "good",
+      recorded_at: new Date(row.timestamp).toISOString()
+    });
+  }
+
+  if (!records.length) { if (status) status.textContent = "No valid records found in CSV."; return; }
+  if (status) status.textContent = `Importing ${records.length} records...`;
+
+  try {
+    // Batch in chunks of 500
+    const chunks = [];
+    for (let i = 0; i < records.length; i += 500) chunks.push(records.slice(i, i+500));
+    for (const chunk of chunks) {
+      await fetch(`${SUPABASE_URL}/rest/v1/scada_readings`, {
+        method:"POST",
+        headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json","Prefer":"return=minimal"},
+        body:JSON.stringify(chunk)
+      });
+    }
+    if (status) status.textContent = `✅ Imported ${records.length} records successfully.`;
+    await refreshSCADADisplay();
+  } catch(e) { if (status) status.textContent = `Error: ${e.message}`; }
+}
+
+// ── Trend Chart ───────────────────────────────────────────────────────────────
+async function populateSCADATrendSelector() {
+  const sel = document.getElementById("scada-trend-point");
+  if (!sel) return;
+  sel.innerHTML = '<option value="">-- Select Point --</option>' +
+    scadaPoints.map(p => `<option value="${p.point_id}">${p.name} (${p.type})</option>`).join("");
+}
+
+async function loadSCADATrend() {
+  const pointId  = document.getElementById("scada-trend-point")?.value;
+  const rangeHrs = parseInt(document.getElementById("scada-trend-range")?.value || "24");
+  const metaEl   = document.getElementById("scada-trend-meta");
+  const ctx      = document.getElementById("scada-trend-chart");
+  if (!ctx || !pointId) return;
+
+  const since = new Date(Date.now() - rangeHrs * 60 * 60 * 1000).toISOString();
+  if (metaEl) metaEl.textContent = "Loading...";
+
+  try {
+    const rows = await supabaseGet(
+      `scada_readings?point_id=eq.${encodeURIComponent(pointId)}&recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=2000`
+    );
+    const point = scadaPoints.find(p => p.point_id === pointId);
+
+    if (!Array.isArray(rows) || !rows.length) {
+      if (metaEl) metaEl.textContent = "No recorded data for this point in the selected range.";
+      if (scadaTrendChart) { scadaTrendChart.destroy(); scadaTrendChart = null; }
+      return;
+    }
+
+    const labels = rows.map(r => {
+      const d = new Date(r.recorded_at);
+      return rangeHrs <= 24 ? d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) : d.toLocaleDateString([],{month:"short",day:"numeric",hour:"2-digit"});
+    });
+    const data = rows.map(r => r.value);
+    const unit = point?.unit || rows[0]?.unit || "";
+    const min  = Math.min(...data);
+    const max  = Math.max(...data);
+    const avg  = (data.reduce((a,b)=>a+b,0)/data.length).toFixed(2);
+
+    if (metaEl) metaEl.innerHTML = `<strong>${point?.name||pointId}</strong> &bull; Latest: ${data[data.length-1]} ${unit} &bull; Min: ${min} &bull; Max: ${max} &bull; Avg: ${avg} &bull; ${rows.length} readings`;
+
+    const typeColors = { analog:"#1d5fa8", status:"#1a5f4a", count:"#b45309", alarm:"#c0392b", derived:"#555" };
+    const color = typeColors[point?.type] || "#1a5f4a";
+
+    if (scadaTrendChart) { scadaTrendChart.destroy(); scadaTrendChart = null; }
+    scadaTrendChart = new Chart(ctx, {
+      type: point?.type === "status" || point?.type === "alarm" ? "bar" : "line",
+      data: {
+        labels,
+        datasets: [{ label:`${point?.name||pointId} (${unit})`, data, borderColor:color, backgroundColor:color+"22", borderWidth:2, pointRadius:rows.length>100?0:3, tension:0.3, fill:true }]
+      },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>`${c.parsed.y} ${unit}` } } },
+        scales:{
+          x:{ ticks:{maxTicksLimit:10,font:{size:10},color:"#888780"},grid:{color:"rgba(0,0,0,0.05)"} },
+          y:{ ticks:{font:{size:10},color:"#888780"},grid:{color:"rgba(0,0,0,0.05)"},title:{display:!!unit,text:unit,font:{size:10},color:"#888780"} }
+        }
+      }
+    });
+    if (chartInstances) chartInstances["scada-trend-chart"] = scadaTrendChart;
+
+  } catch(e) {
+    if (metaEl) metaEl.innerHTML = `<span style="color:var(--red);">Error: ${e.message}</span>`;
   }
 }
 
