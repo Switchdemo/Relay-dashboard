@@ -2461,6 +2461,70 @@
               style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
           </div>
         </div>
+        <!-- Authentication Section -->
+        <div style="margin-top:14px;padding-top:14px;border-top:0.5px solid var(--border);">
+          <div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;font-family:monospace;margin-bottom:10px;">Authentication</div>
+
+          <!-- Auth mode selector -->
+          <div style="display:flex;gap:8px;margin-bottom:12px;" id="oadr-auth-mode-row">
+            <button class="oadr-auth-btn active" data-mode="none"    onclick="selectOADRAuthMode('none',this)"   style="padding:6px 12px;border-radius:20px;border:1.5px solid var(--green);background:var(--green-bg);color:var(--green-dark);font-size:11px;font-weight:600;cursor:pointer;">Registration ID Only</button>
+            <button class="oadr-auth-btn"        data-mode="apikey"  onclick="selectOADRAuthMode('apikey',this)" style="padding:6px 12px;border-radius:20px;border:1.5px solid var(--border-md);background:var(--surface2);color:var(--text-secondary);font-size:11px;font-weight:600;cursor:pointer;">API Key</button>
+            <button class="oadr-auth-btn"        data-mode="mtls"    onclick="selectOADRAuthMode('mtls',this)"   style="padding:6px 12px;border-radius:20px;border:1.5px solid var(--border-md);background:var(--surface2);color:var(--text-secondary);font-size:11px;font-weight:600;cursor:pointer;">&#128274; mTLS Certificate</button>
+          </div>
+
+          <!-- API Key panel -->
+          <div id="oadr-auth-apikey" style="display:none;">
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;">API Key / Bearer Token</label>
+            <input type="password" id="oadr-api-key" placeholder="Bearer token or API key from utility"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;" />
+            <div style="font-size:11px;color:var(--text-hint);margin-top:4px;">Sent as <code>Authorization: Bearer &lt;key&gt;</code> header on all outbound VTN requests.</div>
+          </div>
+
+          <!-- mTLS panel -->
+          <div id="oadr-auth-mtls" style="display:none;">
+            <div style="background:var(--surface2);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
+              <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:8px;">&#128274; mTLS Certificate Status</div>
+              <div id="oadr-mtls-status-row" style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                <div id="oadr-mtls-indicator" style="width:10px;height:10px;border-radius:50%;background:var(--border-md);flex-shrink:0;"></div>
+                <div id="oadr-mtls-status-text" style="font-size:12px;color:var(--text-secondary);">No certificate configured</div>
+              </div>
+
+              <!-- Certificate ID field -->
+              <div style="margin-bottom:10px;">
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;">Cloudflare Certificate ID</label>
+                <div style="display:flex;gap:8px;">
+                  <input type="text" id="oadr-mtls-cert-id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                    style="flex:1;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;font-family:monospace;" />
+                  <button class="queue-refresh" onclick="verifyMTLSCert()">Verify</button>
+                </div>
+                <div id="oadr-mtls-cert-status" style="font-size:11px;margin-top:4px;color:var(--text-hint);"></div>
+              </div>
+
+              <!-- Upload instructions -->
+              <div style="background:var(--ink);border-radius:var(--radius-sm);padding:12px 14px;">
+                <div style="font-size:10px;font-weight:600;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;font-family:monospace;">How to Upload Your Certificate</div>
+                <div style="font-size:11px;color:rgba(255,255,255,.7);line-height:1.8;font-family:monospace;">
+                  <div style="margin-bottom:6px;color:rgba(255,255,255,.4);"># 1. Convert .p12 to PEM (if needed)</div>
+                  <div style="color:#a8e6cf;margin-bottom:10px;">openssl pkcs12 -in utility_cert.p12 -clcerts -nokeys -out cert.pem<br/>openssl pkcs12 -in utility_cert.p12 -nocerts -nodes -out key.pem</div>
+                  <div style="margin-bottom:6px;color:rgba(255,255,255,.4);"># 2. Upload to Cloudflare</div>
+                  <div style="color:#a8e6cf;margin-bottom:10px;">npx wrangler mtls-certificate upload \<br/>&nbsp;&nbsp;--cert cert.pem --key key.pem \<br/>&nbsp;&nbsp;--name vtn-cert</div>
+                  <div style="margin-bottom:6px;color:rgba(255,255,255,.4);"># 3. Copy the Certificate ID from output, paste above</div>
+                  <div style="margin-bottom:6px;color:rgba(255,255,255,.4);"># 4. Add to wrangler.toml (see Program Builder)</div>
+                  <div style="color:#a8e6cf;">[[mtls_certificates]]<br/>binding = "VTN_CERT"<br/>certificate_id = "&lt;your-cert-id&gt;"</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- CA Certificate for VTN server verification -->
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;">VTN CA Certificate (optional)</label>
+              <textarea id="oadr-vtn-ca-cert" rows="3" placeholder="-----BEGIN CERTIFICATE-----&#10;Paste VTN server CA certificate here if self-signed...&#10;-----END CERTIFICATE-----"
+                style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;font-family:monospace;resize:vertical;"></textarea>
+              <div style="font-size:11px;color:var(--text-hint);margin-top:3px;">Only needed if the VTN uses a self-signed or private CA certificate.</div>
+            </div>
+          </div>
+        </div>
+
         <div id="oadr-config-status" style="font-size:11px;margin-top:8px;display:none;"></div>
       </div>
 
@@ -8509,6 +8573,13 @@ async function initOpenADRConfig() {
       set("oadr-vtn-url",   oadrVTNConfig.vtn_url);
       set("oadr-transport", oadrVTNConfig.transport);
       set("oadr-reg-id",    oadrVTNConfig.registration_id);
+      set("oadr-api-key",   oadrVTNConfig.api_key);
+      set("oadr-mtls-cert-id", oadrVTNConfig.mtls_cert_id);
+      if (oadrVTNConfig.vtn_ca_cert) set("oadr-vtn-ca-cert", oadrVTNConfig.vtn_ca_cert);
+      // Restore auth mode
+      if (oadrVTNConfig.auth_mode) selectOADRAuthMode(oadrVTNConfig.auth_mode, null, true);
+      // Show cert status if configured
+      if (oadrVTNConfig.mtls_cert_id) updateMTLSStatus(oadrVTNConfig.mtls_cert_id);
     }
   } catch(e) { console.error("initOpenADRConfig:", e); }
 
@@ -8548,12 +8619,17 @@ function renderMappingTable() {
 }
 
 async function saveVTNConfig() {
+  const authMode = document.querySelector(".oadr-auth-btn.active")?.dataset?.mode || "none";
   const config = {
     vtn_id:          document.getElementById("oadr-vtn-id")?.value?.trim(),
     ven_id:          document.getElementById("oadr-ven-id")?.value?.trim(),
     vtn_url:         document.getElementById("oadr-vtn-url")?.value?.trim(),
     transport:       document.getElementById("oadr-transport")?.value,
     registration_id: document.getElementById("oadr-reg-id")?.value?.trim(),
+    auth_mode:       authMode,
+    api_key:         authMode === "apikey" ? document.getElementById("oadr-api-key")?.value?.trim() : null,
+    mtls_cert_id:    authMode === "mtls"   ? document.getElementById("oadr-mtls-cert-id")?.value?.trim() : null,
+    vtn_ca_cert:     authMode === "mtls"   ? document.getElementById("oadr-vtn-ca-cert")?.value?.trim() : null,
     status:          "registered",
     updated_at:      new Date().toISOString()
   };
@@ -11673,6 +11749,118 @@ async function loadFeedRules(feedKey) {
   } catch(e) {
     list.innerHTML = `<div class="sched-empty">Error loading rules: ${e.message}</div>`;
   }
+}
+
+
+
+// ── OpenADR mTLS & Auth ───────────────────────────────────────────────────────
+
+function selectOADRAuthMode(mode, btn, silent = false) {
+  // Update button styles
+  document.querySelectorAll(".oadr-auth-btn").forEach(b => {
+    b.style.borderColor = "var(--border-md)";
+    b.style.background  = "var(--surface2)";
+    b.style.color       = "var(--text-secondary)";
+    b.classList.remove("active");
+  });
+  if (btn) {
+    btn.style.borderColor = "var(--green)";
+    btn.style.background  = "var(--green-bg)";
+    btn.style.color       = "var(--green-dark)";
+    btn.classList.add("active");
+  } else {
+    // Find by data-mode
+    const target = document.querySelector(`.oadr-auth-btn[data-mode="${mode}"]`);
+    if (target) {
+      target.style.borderColor = "var(--green)";
+      target.style.background  = "var(--green-bg)";
+      target.style.color       = "var(--green-dark)";
+      target.classList.add("active");
+    }
+  }
+
+  // Show/hide auth panels
+  const panels = { none: null, apikey: "oadr-auth-apikey", mtls: "oadr-auth-mtls" };
+  Object.values(panels).filter(Boolean).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+  if (mode !== "none" && panels[mode]) {
+    const el = document.getElementById(panels[mode]);
+    if (el) el.style.display = "block";
+  }
+}
+
+function updateMTLSStatus(certId) {
+  const indicator = document.getElementById("oadr-mtls-indicator");
+  const statusText = document.getElementById("oadr-mtls-status-text");
+  if (!certId) {
+    if (indicator) indicator.style.background = "var(--border-md)";
+    if (statusText) statusText.textContent = "No certificate configured";
+    return;
+  }
+  if (indicator) indicator.style.background = "var(--green-dark)";
+  if (statusText) statusText.innerHTML = `&#10003; Certificate configured &bull; ID: <code style="font-family:monospace;font-size:10px;">${certId.substring(0,8)}...</code>`;
+}
+
+async function verifyMTLSCert() {
+  const certId  = document.getElementById("oadr-mtls-cert-id")?.value?.trim();
+  const statusEl = document.getElementById("oadr-mtls-cert-status");
+  if (!certId) { if (statusEl) { statusEl.textContent = "Enter a Certificate ID first."; statusEl.style.color = "var(--red)"; } return; }
+  if (statusEl) { statusEl.textContent = "Verifying via Worker..."; statusEl.style.color = "var(--text-hint)"; }
+
+  try {
+    // Ask the Worker to verify the cert ID is configured
+    const res = await fetch(PROXY_URL + "openadr/mtls-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cert_id: certId })
+    });
+    const data = await res.json();
+    if (data.configured) {
+      if (statusEl) { statusEl.textContent = "✅ Certificate binding active in Worker — mTLS ready."; statusEl.style.color = "var(--green-dark)"; }
+      updateMTLSStatus(certId);
+    } else {
+      if (statusEl) { statusEl.innerHTML = "⚠️ Certificate ID saved but Worker binding not yet active.<br/>Add the mtls_certificates binding to wrangler.toml and redeploy (see instructions above)."; statusEl.style.color = "var(--amber)"; }
+    }
+  } catch(e) {
+    // Worker might not have the route yet — still save the cert ID
+    if (statusEl) { statusEl.innerHTML = `Certificate ID saved. Worker mTLS route not yet deployed — redeploy worker.js with the mtls_certificates binding to activate.<br/><span style="color:var(--text-hint);">Error: ${e.message}</span>`; statusEl.style.color = "var(--amber)"; }
+    updateMTLSStatus(certId);
+  }
+}
+
+async function testVTNConnection() {
+  const vtnUrl  = document.getElementById("oadr-vtn-url")?.value?.trim();
+  const statusEl = document.getElementById("oadr-config-status");
+  if (!vtnUrl) {
+    if (statusEl) { statusEl.textContent = "Enter a VTN URL first."; statusEl.style.color = "var(--red)"; statusEl.style.display = "block"; }
+    return;
+  }
+  if (statusEl) { statusEl.textContent = "Testing connection via Worker..."; statusEl.style.color = "var(--text-hint)"; statusEl.style.display = "block"; }
+
+  try {
+    const authMode = document.querySelector(".oadr-auth-btn.active")?.dataset?.mode || "none";
+    const res = await fetch(PROXY_URL + "openadr/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        vtn_url:   vtnUrl,
+        auth_mode: authMode,
+        api_key:   authMode === "apikey" ? document.getElementById("oadr-api-key")?.value?.trim() : null,
+        use_mtls:  authMode === "mtls"
+      })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      if (statusEl) { statusEl.textContent = `✅ Connection successful — ${data.status} ${data.message||""}`; statusEl.style.color = "var(--green-dark)"; }
+    } else {
+      if (statusEl) { statusEl.textContent = `⚠️ Connection failed: ${data.error||data.status||"Unknown error"}`; statusEl.style.color = "var(--amber)"; }
+    }
+  } catch(e) {
+    if (statusEl) { statusEl.textContent = `Error: ${e.message}`; statusEl.style.color = "var(--red)"; }
+  }
+  setTimeout(() => { if (statusEl) statusEl.style.display = "none"; }, 6000);
 }
 
 
