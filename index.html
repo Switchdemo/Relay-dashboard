@@ -667,6 +667,7 @@
     <button class="sub-tab-btn" id="sub-groups" onclick="switchSub('devices','groups',this)">Groups</button>
     <button class="sub-tab-btn" id="sub-map" onclick="switchSub('devices','map',this)">Device Location</button>
     <button class="sub-tab-btn" id="sub-settings" onclick="switchSub('devices','settings',this)">Device Settings</button>
+    <button class="sub-tab-btn" id="sub-ev-chargers" onclick="switchSub('devices','ev-chargers',this)">&#128268; EV Chargers</button>
   </div>
   <div class="status-bar">
     <div class="dot ready" id="dot"></div>
@@ -3818,6 +3819,269 @@
   </div>
 </div>
 
+
+<!-- ── EV CHARGERS DEVICE TAB ── -->
+<div class="tab-pane" id="tab-ev-chargers">
+  <div class="scroll-content">
+    <div style="max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <!-- Asset Overview -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128268; EV Charger Assets</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span id="ev-dev-status" style="font-size:11px;font-family:monospace;padding:2px 8px;border-radius:10px;background:var(--surface2);color:var(--text-hint);">Loading...</span>
+            <button class="queue-refresh" onclick="refreshEVDevAssets()">Refresh</button>
+            <button onclick="toggleEVDevEnrollForm()" style="padding:6px 14px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">+ Add Charger</button>
+          </div>
+        </div>
+
+        <!-- Fleet summary tiles -->
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:14px;" id="ev-dev-fleet-tiles">
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="ev-dev-total">—</div><div class="ev-meter-lbl">Total</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="ev-dev-online" style="color:var(--green-dark);">—</div><div class="ev-meter-lbl">Online</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="ev-dev-charging" style="color:var(--blue-dark);">—</div><div class="ev-meter-lbl">Charging</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="ev-dev-kw" style="color:var(--text-primary);">—</div><div class="ev-meter-lbl">Total kW</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="ev-dev-dr">—</div><div class="ev-meter-lbl">DR Enrolled</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="ev-dev-shed" style="color:var(--red);">—</div><div class="ev-meter-lbl">Shed Active</div></div>
+        </div>
+
+        <!-- Enroll / Add form -->
+        <div id="ev-dev-enroll-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:16px;margin-bottom:14px;border:0.5px solid var(--border-md);">
+          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;font-family:monospace;">Add EV Charger Asset</div>
+
+          <!-- Integration type selector -->
+          <div style="margin-bottom:14px;">
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em;">Integration Type</label>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;" id="ev-dev-integ-selector">
+              <div class="ev-integ-opt" data-integ="ocpp201" onclick="selectEVInteg('ocpp201',this)" style="padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">OCPP 2.0.1</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Direct WebSocket — any brand</div>
+              </div>
+              <div class="ev-integ-opt" data-integ="ocpp16" onclick="selectEVInteg('ocpp16',this)" style="padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">OCPP 1.6J</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Direct WebSocket — legacy</div>
+              </div>
+              <div class="ev-integ-opt" data-integ="chargepoint" onclick="selectEVInteg('chargepoint',this)" style="padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">ChargePoint</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">SOAP API — shedLoad DR</div>
+              </div>
+              <div class="ev-integ-opt" data-integ="enelx" onclick="selectEVInteg('enelx',this)" style="padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Enel X / JuiceNet</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">REST API — legacy, transitioning</div>
+              </div>
+              <div class="ev-integ-opt" data-integ="blink" onclick="selectEVInteg('blink',this)" style="padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Blink Network</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">REST API — OCPP backend</div>
+              </div>
+              <div class="ev-integ-opt" data-integ="relay" onclick="selectEVInteg('relay',this)" style="padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Relay Fallback</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">No API — circuit cut via Notecard</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Common fields -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Station ID / Asset Tag</label>
+              <input type="text" id="ev-dev-station-id" placeholder="e.g. EV-LOT-A-01" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;font-family:monospace;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Display Name</label>
+              <input type="text" id="ev-dev-name" placeholder="e.g. Parking Lot A — Bay 1" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Manufacturer</label>
+              <select id="ev-dev-make" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="">Generic / Unknown</option>
+                <option value="ChargePoint">ChargePoint</option>
+                <option value="Blink">Blink</option>
+                <option value="EVBox">EVBox</option>
+                <option value="Wallbox">Wallbox</option>
+                <option value="ABB">ABB</option>
+                <option value="BTC Power">BTC Power</option>
+                <option value="Tritium">Tritium</option>
+                <option value="Tesla">Tesla</option>
+                <option value="Webasto">Webasto</option>
+                <option value="Enel X JuiceBox">Enel X JuiceBox</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Max Power (kW)</label>
+              <input type="number" id="ev-dev-max-kw" value="7.2" min="1" max="350" step="0.1" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Connectors</label>
+              <input type="number" id="ev-dev-connectors" value="1" min="1" max="10" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">DR Enrolled</label>
+              <select id="ev-dev-dr" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="true">Yes — participates in DR</option>
+                <option value="false">No — monitor only</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Location / Site</label>
+              <input type="text" id="ev-dev-location" placeholder="e.g. Building A Parking" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+          </div>
+
+          <!-- Integration-specific config panels -->
+          <div id="ev-integ-ocpp201" style="display:none;" class="ev-integ-panel">
+            <div style="background:var(--green-bg);border:0.5px solid var(--green);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--green-dark);line-height:1.7;">
+              &#10003; Configure your charger to connect to:<br/>
+              <code id="ev-dev-ocpp201-url" style="font-size:11px;background:rgba(0,0,0,.08);padding:2px 6px;border-radius:3px;"></code><br/>
+              The station ID you entered above is appended automatically.
+            </div>
+          </div>
+
+          <div id="ev-integ-ocpp16" style="display:none;" class="ev-integ-panel">
+            <div style="background:var(--blue-lt);border:0.5px solid var(--blue-dark);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--blue-dark);line-height:1.7;">
+              &#10003; Configure your charger to connect to:<br/>
+              <code id="ev-dev-ocpp16-url" style="font-size:11px;background:rgba(0,0,0,.08);padding:2px 6px;border-radius:3px;"></code><br/>
+              Set the OCPP subprotocol to <code>ocpp1.6</code>.
+            </div>
+          </div>
+
+          <div id="ev-integ-chargepoint" style="display:none;" class="ev-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:8px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">ChargePoint SOAP API</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">API License Key</label>
+                  <input type="password" id="ev-cp-api-key" placeholder="API License Key" style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">API Password</label>
+                  <input type="password" id="ev-cp-api-pass" placeholder="API Password" style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Station ID (e.g. 1:33923)</label>
+                  <input type="text" id="ev-cp-station-id" placeholder="1:XXXXX" style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+              </div>
+              <div style="font-size:11px;color:var(--text-hint);margin-top:6px;">
+                ChargePoint uses SOAP/XML API v5.1. DR shed uses <code>shedLoad</code> with allowedLoad or percentShed.
+                Get credentials at <a href="https://na.chargepoint.com/api_docs" target="_blank" style="color:var(--blue-dark);">na.chargepoint.com/api_docs</a>
+              </div>
+            </div>
+          </div>
+
+          <div id="ev-integ-enelx" style="display:none;" class="ev-integ-panel">
+            <div style="background:var(--amber-bg);border:0.5px solid var(--amber);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);line-height:1.6;margin-bottom:8px;">
+              &#9888;&#65039; <strong>Enel X Way USA closed October 2024.</strong> JuiceNet is transitioning to VoltiE Group. Existing JuiceNet installations may still function — use your JuiceNet API token from the portal.
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">JuiceNet API Token</label>
+                <input type="password" id="ev-enelx-token" placeholder="From JuiceNet portal &gt; User Profile" style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Device Token (per charger)</label>
+                <input type="text" id="ev-enelx-device-token" placeholder="Per-device token from getDevices" style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+              </div>
+            </div>
+          </div>
+
+          <div id="ev-integ-blink" style="display:none;" class="ev-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px 14px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Blink Network API</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Username</label>
+                  <input type="text" id="ev-blink-user" placeholder="Blink account username" style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Password</label>
+                  <input type="password" id="ev-blink-pass" placeholder="Blink account password" style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Charger Serial / ID</label>
+                  <input type="text" id="ev-blink-charger-id" placeholder="Charger serial number" style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+              </div>
+              <div style="font-size:11px;color:var(--text-hint);margin-top:6px;">Blink uses REST API with session token auth. DR control via remote start/stop and charging rate limit commands.</div>
+            </div>
+          </div>
+
+          <div id="ev-integ-relay" style="display:none;" class="ev-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px 14px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Relay Fallback — Notecard Circuit Control</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Notecard Device UID</label>
+                  <select id="ev-relay-device" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                    <option value="">-- Select relay device --</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Relay Number</label>
+                  <select id="ev-relay-num" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                    <option value="1">Relay 1</option>
+                    <option value="2">Relay 2</option>
+                    <option value="3">Relay 3</option>
+                    <option value="4">Relay 4</option>
+                  </select>
+                </div>
+              </div>
+              <div style="font-size:11px;color:var(--text-hint);margin-top:6px;">Cuts power to the EV charger's circuit. Works for any charger regardless of API capability.</div>
+            </div>
+          </div>
+
+          <!-- Shed limits -->
+          <div style="margin-top:12px;padding:12px 14px;background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-sm);" id="ev-dev-shed-config">
+            <div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">DR Shed Limits (Amps)</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">
+              <div><label style="font-size:10px;color:var(--red);display:block;margin-bottom:3px;">Emergency</label><input type="number" id="ev-dev-shed-emergency" value="0" min="0" max="80" style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/></div>
+              <div><label style="font-size:10px;color:var(--amber);display:block;margin-bottom:3px;">High</label><input type="number" id="ev-dev-shed-high" value="8" min="0" max="80" style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/></div>
+              <div><label style="font-size:10px;color:var(--blue-dark);display:block;margin-bottom:3px;">Medium</label><input type="number" id="ev-dev-shed-medium" value="16" min="0" max="80" style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/></div>
+              <div><label style="font-size:10px;color:var(--green-dark);display:block;margin-bottom:3px;">Low</label><input type="number" id="ev-dev-shed-low" value="24" min="0" max="80" style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/></div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+            <button onclick="toggleEVDevEnrollForm()" style="padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-secondary);">Cancel</button>
+            <button onclick="saveEVDevAsset()" style="padding:7px 24px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save Asset</button>
+          </div>
+        </div>
+
+        <!-- Asset list -->
+        <div id="ev-dev-asset-list"><div class="sched-empty">No EV charger assets registered.</div></div>
+      </div>
+
+      <!-- DR Control -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#9889; Demand Response — EV Fleet</div>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:12px;">Send demand response commands to all DR-enrolled EV chargers simultaneously, regardless of integration type.</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px;">
+          <button onclick="dispatchEVDR(1.0)" style="padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--red);background:var(--red-lt);color:var(--red);font-size:13px;font-weight:700;cursor:pointer;">&#128308; Emergency<br/><span style="font-size:10px;font-weight:400;">0A — Suspend all</span></button>
+          <button onclick="dispatchEVDR(0.75)" style="padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--amber);background:var(--amber-bg);color:var(--amber);font-size:13px;font-weight:700;cursor:pointer;">&#128992; High Shed<br/><span style="font-size:10px;font-weight:400;">Reduce to high limit</span></button>
+          <button onclick="dispatchEVDR(0.5)" style="padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--blue-dark);background:var(--blue-lt);color:var(--blue-dark);font-size:13px;font-weight:700;cursor:pointer;">&#128993; Medium Shed<br/><span style="font-size:10px;font-weight:400;">Reduce to medium limit</span></button>
+          <button onclick="dispatchEVRestore()" style="padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--green);background:var(--green-bg);color:var(--green-dark);font-size:13px;font-weight:700;cursor:pointer;">&#9989; Restore All<br/><span style="font-size:10px;font-weight:400;">Full power</span></button>
+        </div>
+        <div id="ev-dev-dr-log" style="font-size:11px;color:var(--text-hint);padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);">No DR events dispatched this session.</div>
+      </div>
+
+      <!-- Session & Event Log -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128203; EV Session & Event Log</div>
+          <button class="queue-refresh" onclick="loadEVDevLog()">Refresh</button>
+        </div>
+        <div id="ev-dev-log-list"><div class="sched-empty">No sessions recorded yet.</div></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- ── DRILL DOWN SIDE PANEL ── -->
 <div id="fh-drill-panel" style="position:fixed;top:0;right:-480px;width:480px;height:100vh;background:var(--surface);border-left:0.5px solid var(--border-md);z-index:1000;transition:right 0.3s ease;display:flex;flex-direction:column;box-shadow:-4px 0 20px rgba(0,0,0,0.15);">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:0.5px solid var(--border-md);">
@@ -4036,6 +4300,7 @@ function runTabInit(name) {
   if (name === "monitor-outage")   { initOutageTracker(); }
   if (name === "monitor-scada")    { initSCADA(); }
   if (name === "monitor-ev")       { initEVCharging(); }
+  if (name === "ev-chargers")      { initEVDevicesTab(); }
 }
 
 function switchTab(name, btn) { switchMain(name, btn); }
@@ -15000,6 +15265,492 @@ async function dispatchEVChargersDR(signalLevel) {
   if (!enrolled.length) return;
   console.log(`EV DR dispatch: ${enrolled.length} chargers, signal ${signalLevel}`);
   await shedEVChargers(null, signalLevel);
+}
+
+
+
+// ── EV Charger Device Assets ───────────────────────────────────────────────────
+
+let evDevAssets      = [];     // all enrolled EV assets
+let evDevSelectedInteg = null; // currently selected integration type
+const EV_DEV_KEY     = "lcp_ev_dev_assets_v1";
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+async function initEVDevicesTab() {
+  const base = PROXY_URL.replace(/\/$/, "");
+  const url201 = document.getElementById("ev-dev-ocpp201-url");
+  const url16  = document.getElementById("ev-dev-ocpp16-url");
+  if (url201) url201.textContent = `${base}/ocpp201/{stationId}`;
+  if (url16)  url16.textContent  = `${base}/ocpp16/{stationId}`;
+
+  // Populate relay device dropdown
+  const relayDev = document.getElementById("ev-relay-device");
+  if (relayDev) {
+    relayDev.innerHTML = '<option value="">-- Select relay device --</option>' +
+      (DEVICES || []).filter(d => !d.uid.includes("PLACEHOLDER"))
+        .map(d => `<option value="${d.uid}">${d.name}</option>`).join("");
+  }
+
+  await refreshEVDevAssets();
+  await loadEVDevLog();
+}
+
+// ── Form UI ────────────────────────────────────────────────────────────────────
+function toggleEVDevEnrollForm() {
+  const form = document.getElementById("ev-dev-enroll-form");
+  if (!form) return;
+  const isOpen = form.style.display !== "none";
+  form.style.display = isOpen ? "none" : "block";
+  if (!isOpen) {
+    // Reset
+    evDevSelectedInteg = null;
+    document.querySelectorAll(".ev-integ-opt").forEach(b => {
+      b.style.borderColor = "var(--border-md)";
+      b.style.background  = "var(--surface)";
+    });
+    document.querySelectorAll(".ev-integ-panel").forEach(p => p.style.display = "none");
+    ["ev-dev-station-id","ev-dev-name","ev-dev-location",
+     "ev-cp-api-key","ev-cp-api-pass","ev-cp-station-id",
+     "ev-enelx-token","ev-enelx-device-token",
+     "ev-blink-user","ev-blink-pass","ev-blink-charger-id"
+    ].forEach(id => { const el = document.getElementById(id); if(el) el.value = ""; });
+    document.getElementById("ev-dev-max-kw").value  = "7.2";
+    document.getElementById("ev-dev-connectors").value = "1";
+    document.getElementById("ev-dev-make").selectedIndex   = 0;
+    document.getElementById("ev-dev-dr").selectedIndex     = 0;
+  }
+}
+
+function selectEVInteg(integ, el) {
+  evDevSelectedInteg = integ;
+  document.querySelectorAll(".ev-integ-opt").forEach(b => {
+    b.style.borderColor = "var(--border-md)";
+    b.style.background  = "var(--surface)";
+  });
+  if (el) { el.style.borderColor = "var(--green)"; el.style.background = "var(--green-bg)"; }
+  document.querySelectorAll(".ev-integ-panel").forEach(p => p.style.display = "none");
+  const panel = document.getElementById(`ev-integ-${integ}`);
+  if (panel) panel.style.display = "block";
+
+  // Show/hide shed config (not relevant for relay which just cuts power)
+  const shedCfg = document.getElementById("ev-dev-shed-config");
+  if (shedCfg) shedCfg.style.display = integ === "relay" ? "none" : "block";
+}
+
+// ── Save Asset ─────────────────────────────────────────────────────────────────
+async function saveEVDevAsset() {
+  if (!evDevSelectedInteg) { setStatus("error", "Select an integration type."); return; }
+
+  const stationId = document.getElementById("ev-dev-station-id")?.value?.trim().toUpperCase().replace(/\s+/g,"_");
+  const name      = document.getElementById("ev-dev-name")?.value?.trim();
+  if (!stationId) { setStatus("error", "Station ID / Asset Tag required."); return; }
+  if (!name)      { setStatus("error", "Display name required."); return; }
+
+  // Build integration config
+  const integConfig = { type: evDevSelectedInteg };
+  if (evDevSelectedInteg === "chargepoint") {
+    integConfig.api_key    = document.getElementById("ev-cp-api-key")?.value?.trim();
+    integConfig.api_pass   = document.getElementById("ev-cp-api-pass")?.value?.trim();
+    integConfig.cp_station = document.getElementById("ev-cp-station-id")?.value?.trim();
+    if (!integConfig.api_key || !integConfig.cp_station) {
+      setStatus("error", "ChargePoint API key and station ID required."); return;
+    }
+  } else if (evDevSelectedInteg === "enelx") {
+    integConfig.api_token    = document.getElementById("ev-enelx-token")?.value?.trim();
+    integConfig.device_token = document.getElementById("ev-enelx-device-token")?.value?.trim();
+    if (!integConfig.api_token) { setStatus("error", "JuiceNet API token required."); return; }
+  } else if (evDevSelectedInteg === "blink") {
+    integConfig.username   = document.getElementById("ev-blink-user")?.value?.trim();
+    integConfig.password   = document.getElementById("ev-blink-pass")?.value?.trim();
+    integConfig.charger_id = document.getElementById("ev-blink-charger-id")?.value?.trim();
+    if (!integConfig.username || !integConfig.charger_id) {
+      setStatus("error", "Blink username and charger ID required."); return;
+    }
+  } else if (evDevSelectedInteg === "relay") {
+    integConfig.relay_uid = document.getElementById("ev-relay-device")?.value;
+    integConfig.relay_num = parseInt(document.getElementById("ev-relay-num")?.value || "1");
+    if (!integConfig.relay_uid) { setStatus("error", "Select a relay device."); return; }
+  }
+
+  const shedLimits = {
+    emergency: parseInt(document.getElementById("ev-dev-shed-emergency")?.value || "0"),
+    high:      parseInt(document.getElementById("ev-dev-shed-high")?.value      || "8"),
+    medium:    parseInt(document.getElementById("ev-dev-shed-medium")?.value    || "16"),
+    low:       parseInt(document.getElementById("ev-dev-shed-low")?.value       || "24")
+  };
+
+  const record = {
+    station_id:   stationId,
+    name,
+    protocol:     ["ocpp201","ocpp16"].includes(evDevSelectedInteg) ? evDevSelectedInteg : "api",
+    integration:  evDevSelectedInteg,
+    make:         document.getElementById("ev-dev-make")?.value || null,
+    max_kw:       parseFloat(document.getElementById("ev-dev-max-kw")?.value || "7.2"),
+    connectors:   parseInt(document.getElementById("ev-dev-connectors")?.value || "1"),
+    dr_enrolled:  document.getElementById("ev-dev-dr")?.value === "true",
+    location:     document.getElementById("ev-dev-location")?.value?.trim() || null,
+    integ_config: JSON.stringify(integConfig),
+    shed_limits:  JSON.stringify(shedLimits),
+    status:       "offline",
+    enabled:      true,
+    enrolled_at:  new Date().toISOString()
+  };
+
+  // Try Supabase, fall back to localStorage
+  let saved = false;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/ev_chargers`, {
+      method:"POST",
+      headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+        "Content-Type":"application/json","Prefer":"return=representation"},
+      body: JSON.stringify(record)
+    });
+    if (res.ok) saved = true;
+    else {
+      const err = await res.text();
+      console.warn("EV save Supabase:", res.status, err);
+    }
+  } catch(e) { console.warn("EV save:", e.message); }
+
+  if (!saved) {
+    const existing = JSON.parse(localStorage.getItem(EV_DEV_KEY) || "[]");
+    const filtered = existing.filter(a => a.station_id !== stationId);
+    filtered.push({ ...record, id: Date.now(),
+      shed_limits: shedLimits, integ_config: integConfig });
+    localStorage.setItem(EV_DEV_KEY, JSON.stringify(filtered));
+  }
+
+  setStatus("ready", `${name} saved as EV asset.`);
+  toggleEVDevEnrollForm();
+  await refreshEVDevAssets();
+}
+
+// ── Load & Render Assets ───────────────────────────────────────────────────────
+async function refreshEVDevAssets() {
+  let dbRows = [], localRows = [];
+  try {
+    const rows = await supabaseGet("ev_chargers?enabled=eq.true&order=enrolled_at.asc");
+    if (Array.isArray(rows) && rows.length) dbRows = rows;
+  } catch(e) {}
+  try {
+    const saved = localStorage.getItem(EV_DEV_KEY);
+    if (saved) localRows = JSON.parse(saved);
+  } catch(e) {}
+
+  const dbIds = new Set(dbRows.map(r => r.station_id));
+  const localOnly = localRows.filter(r => !dbIds.has(r.station_id));
+  evDevAssets = [...dbRows, ...localOnly].map(a => ({
+    ...a,
+    shed_limits:  typeof a.shed_limits  === "string" ? JSON.parse(a.shed_limits  || "{}") : (a.shed_limits  || {}),
+    integ_config: typeof a.integ_config === "string" ? JSON.parse(a.integ_config || "{}") : (a.integ_config || {})
+  }));
+
+  renderEVDevAssets();
+  updateEVDevFleetStats();
+}
+
+function renderEVDevAssets() {
+  const list = document.getElementById("ev-dev-asset-list");
+  if (!list) return;
+  if (!evDevAssets.length) {
+    list.innerHTML = '<div class="sched-empty">No EV charger assets registered. Click + Add Charger to begin.</div>';
+    return;
+  }
+
+  const INTEG_LABELS = {
+    ocpp201:"OCPP 2.0.1", ocpp16:"OCPP 1.6J",
+    chargepoint:"ChargePoint API", enelx:"Enel X / JuiceNet",
+    blink:"Blink Network", relay:"Relay Fallback"
+  };
+  const INTEG_COLORS = {
+    ocpp201:"var(--green-dark)", ocpp16:"var(--blue-dark)",
+    chargepoint:"#e87722", enelx:"var(--amber)",
+    blink:"#0057a8", relay:"var(--text-secondary)"
+  };
+  const STATUS_DOT = { available:"live", charging:"live", faulted:"unavailable",
+    offline:"unavailable", preparing:"registration", connected:"live" };
+
+  list.innerHTML = evDevAssets.map(a => {
+    const integ   = a.integ_config?.type || a.integration || "ocpp201";
+    const sess    = evSessions?.[a.station_id] || {};
+    const status  = sess.status || a.status || "offline";
+    const dotCls  = STATUS_DOT[status.toLowerCase()] || "unavailable";
+    const powerKw = sess.power_kw != null ? `${parseFloat(sess.power_kw).toFixed(1)} kW` : "—";
+    const energyKwh = sess.energy_kwh != null ? `${parseFloat(sess.energy_kwh).toFixed(2)} kWh` : "—";
+
+    return `<div class="scada-source-card${sess.shed_active ? " ev-shed-active" : ""}">
+      <div class="feed-status-dot ${dotCls}" style="margin-top:4px;"></div>
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
+          <span style="font-size:13px;font-weight:600;color:var(--text-primary);">&#128268; ${a.name}</span>
+          <span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;font-family:monospace;border:0.5px solid ${INTEG_COLORS[integ]||"var(--border-md)"};color:${INTEG_COLORS[integ]||"var(--text-hint)"};background:${INTEG_COLORS[integ]||"var(--border-md)"}18;">${INTEG_LABELS[integ]||integ}</span>
+          ${a.dr_enrolled ? '<span style="font-size:10px;font-weight:700;color:var(--green-dark);background:var(--green-bg);padding:2px 8px;border-radius:10px;">DR</span>' : ""}
+          ${sess.shed_active ? '<span style="font-size:10px;font-weight:700;color:var(--red);background:var(--red-lt);padding:2px 8px;border-radius:10px;">SHED</span>' : ""}
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">
+          ${a.station_id} &bull; ${a.make||"Generic"} &bull; ${a.max_kw} kW &bull; ${a.connectors} connector${a.connectors!==1?"s":""}
+          ${a.location ? ` &bull; ${a.location}` : ""}
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);">
+          Status: <strong>${status.charAt(0).toUpperCase()+status.slice(1)}</strong>
+          &bull; Power: <strong>${powerKw}</strong>
+          &bull; Session: <strong>${energyKwh}</strong>
+          ${integ === "relay" ? ` &bull; Relay: Device ${a.integ_config?.relay_uid?.slice(-4)||"?"} / R${a.integ_config?.relay_num||1}` : ""}
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0;">
+        ${a.dr_enrolled && integ !== "relay" ? `
+        <div style="display:flex;gap:4px;">
+          <button onclick="dispatchEVDRSingle('${a.station_id}', 0.75)"
+            style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--amber);background:var(--amber-bg);color:var(--amber);font-size:10px;font-weight:600;cursor:pointer;">Shed</button>
+          <button onclick="restoreEVSingle('${a.station_id}')"
+            style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--green);background:var(--green-bg);color:var(--green-dark);font-size:10px;font-weight:600;cursor:pointer;">Restore</button>
+        </div>` : ""}
+        <button onclick="removeEVDevAsset('${a.station_id}')"
+          style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">Remove</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function updateEVDevFleetStats() {
+  const total    = evDevAssets.length;
+  const online   = evDevAssets.filter(a => evSessions?.[a.station_id]?.status &&
+                   evSessions[a.station_id].status !== "offline").length;
+  const charging = evDevAssets.filter(a => evSessions?.[a.station_id]?.status === "charging").length;
+  const totalKw  = evDevAssets.reduce((s,a) => s + (parseFloat(evSessions?.[a.station_id]?.power_kw||0)),0);
+  const drCount  = evDevAssets.filter(a => a.dr_enrolled).length;
+  const shed     = evDevAssets.filter(a => evSessions?.[a.station_id]?.shed_active).length;
+
+  const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+  set("ev-dev-total",    total);
+  set("ev-dev-online",   online);
+  set("ev-dev-charging", charging);
+  set("ev-dev-kw",       totalKw.toFixed(1));
+  set("ev-dev-dr",       drCount);
+  set("ev-dev-shed",     shed);
+
+  const statusEl = document.getElementById("ev-dev-status");
+  if (statusEl) {
+    statusEl.textContent  = online > 0 ? `${online}/${total} online` : total > 0 ? "All offline" : "No assets";
+    statusEl.style.background = online > 0 ? "var(--green-bg)" : "var(--surface2)";
+    statusEl.style.color      = online > 0 ? "var(--green-dark)" : "var(--text-hint)";
+  }
+}
+
+async function removeEVDevAsset(stationId) {
+  if (!confirm("Remove this EV charger asset?")) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/ev_chargers?station_id=eq.${encodeURIComponent(stationId)}`, {
+      method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+    });
+  } catch(e) {}
+  const local = JSON.parse(localStorage.getItem(EV_DEV_KEY) || "[]");
+  localStorage.setItem(EV_DEV_KEY, JSON.stringify(local.filter(a => a.station_id !== stationId)));
+  await refreshEVDevAssets();
+}
+
+// ── DR Dispatch — All Integration Types ──────────────────────────────────────
+async function dispatchEVDR(signalLevel) {
+  const enrolled = evDevAssets.filter(a => a.dr_enrolled);
+  if (!enrolled.length) { setStatus("error", "No DR-enrolled EV chargers."); return; }
+
+  const results = await Promise.all(enrolled.map(a => dispatchEVDRSingle(a.station_id, signalLevel)));
+  const ok = results.filter(Boolean).length;
+
+  const logEl = document.getElementById("ev-dev-dr-log");
+  if (logEl) logEl.innerHTML = `<span style="color:var(--red);font-weight:600;">&#9889; DR Shed dispatched</span> — ${ok}/${enrolled.length} chargers responded &bull; Signal: ${Math.round(signalLevel*100)}% &bull; ${new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}`;
+
+  await logEVDREvent("shed", signalLevel, enrolled.map(a => a.station_id));
+  setStatus("ready", `EV DR shed sent to ${enrolled.length} charger${enrolled.length!==1?"s":""}.`);
+}
+
+async function dispatchEVDRSingle(stationId, signalLevel) {
+  const asset = evDevAssets.find(a => a.station_id === stationId);
+  if (!asset) return false;
+
+  const integ  = asset.integ_config?.type || asset.integration || "ocpp201";
+  const limits = asset.shed_limits || {emergency:0, high:8, medium:16, low:24};
+  let limitAmps = signalLevel >= 1.0 ? limits.emergency
+                : signalLevel >= 0.75 ? limits.high
+                : signalLevel >= 0.5  ? limits.medium : limits.low;
+
+  try {
+    if (integ === "ocpp201" || integ === "ocpp16") {
+      // OCPP — SetChargingProfile via Worker
+      const profileId = Math.floor(Math.random() * 99999) + 1;
+      const endpoint  = integ === "ocpp201" ? "ocpp201/send" : "ocpp16/send";
+      const payload   = integ === "ocpp201"
+        ? buildOCPP201ChargingProfile(stationId, profileId, limitAmps)
+        : buildOCPP16ChargingProfile(stationId, profileId, limitAmps);
+      await fetch(PROXY_URL + endpoint, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ station_id:stationId, action:"SetChargingProfile", payload })
+      });
+      return true;
+
+    } else if (integ === "chargepoint") {
+      // ChargePoint — shedLoad via Worker proxy
+      const res = await fetch(PROXY_URL + "ev/chargepoint/shed", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          api_key:    asset.integ_config.api_key,
+          api_pass:   asset.integ_config.api_pass,
+          station_id: asset.integ_config.cp_station,
+          allowed_load: Math.round(limitAmps * 230 / 1000 * 10) / 10  // A → kW approx
+        })
+      });
+      return (await res.json()).ok;
+
+    } else if (integ === "enelx") {
+      // Enel X JuiceNet — set_charge_limit via Worker proxy
+      const res = await fetch(PROXY_URL + "ev/enelx/shed", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          api_token:    asset.integ_config.api_token,
+          device_token: asset.integ_config.device_token,
+          limit_amps:   limitAmps
+        })
+      });
+      return (await res.json()).ok;
+
+    } else if (integ === "blink") {
+      // Blink — remote session control via Worker proxy
+      const res = await fetch(PROXY_URL + "ev/blink/shed", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          username:   asset.integ_config.username,
+          password:   asset.integ_config.password,
+          charger_id: asset.integ_config.charger_id,
+          action:     limitAmps <= 0 ? "stop" : "limit",
+          limit_amps: limitAmps
+        })
+      });
+      return (await res.json()).ok;
+
+    } else if (integ === "relay") {
+      // Relay fallback — LC hex via Notehub
+      const relayUid = asset.integ_config?.relay_uid;
+      if (relayUid) {
+        // Build LC hex: all relays off (shed) using strategy 19 (100% shed)
+        const hex = buildLCHex("all_on", "dlc", 19, 2, Math.floor(Date.now()/1000));
+        await sendLCToDevice(relayUid, hex);
+      }
+      return !!relayUid;
+    }
+  } catch(e) {
+    console.warn(`dispatchEVDRSingle ${stationId} (${integ}):`, e.message);
+    return false;
+  }
+  return false;
+}
+
+async function dispatchEVRestore() {
+  const enrolled = evDevAssets.filter(a => a.dr_enrolled);
+  if (!enrolled.length) return;
+  await Promise.all(enrolled.map(a => restoreEVSingle(a.station_id)));
+
+  const logEl = document.getElementById("ev-dev-dr-log");
+  if (logEl) logEl.innerHTML = `<span style="color:var(--green-dark);font-weight:600;">&#9989; Restore dispatched</span> — ${enrolled.length} charger${enrolled.length!==1?"s":""} &bull; ${new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}`;
+
+  await logEVDREvent("restore", 0, enrolled.map(a => a.station_id));
+  setStatus("ready", "EV chargers restored to full power.");
+}
+
+async function restoreEVSingle(stationId) {
+  const asset = evDevAssets.find(a => a.station_id === stationId);
+  if (!asset) return;
+  const integ   = asset.integ_config?.type || asset.integration || "ocpp201";
+  const maxAmps = Math.round((asset.max_kw * 1000) / 230);
+
+  try {
+    if (integ === "ocpp201" || integ === "ocpp16") {
+      const profileId = Math.floor(Math.random() * 99999) + 1;
+      const endpoint  = integ === "ocpp201" ? "ocpp201/send" : "ocpp16/send";
+      const payload   = integ === "ocpp201"
+        ? buildOCPP201ChargingProfile(stationId, profileId, maxAmps)
+        : buildOCPP16ChargingProfile(stationId, profileId, maxAmps);
+      await fetch(PROXY_URL + endpoint, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ station_id:stationId, action:"ClearChargingProfile",
+          payload:{ id:profileId, connectorId:0 } })
+      });
+    } else if (integ === "chargepoint") {
+      await fetch(PROXY_URL + "ev/chargepoint/restore", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ api_key:asset.integ_config.api_key,
+          api_pass:asset.integ_config.api_pass, station_id:asset.integ_config.cp_station })
+      });
+    } else if (integ === "enelx") {
+      await fetch(PROXY_URL + "ev/enelx/restore", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ api_token:asset.integ_config.api_token,
+          device_token:asset.integ_config.device_token, limit_amps:maxAmps })
+      });
+    } else if (integ === "blink") {
+      await fetch(PROXY_URL + "ev/blink/restore", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ username:asset.integ_config.username,
+          password:asset.integ_config.password, charger_id:asset.integ_config.charger_id })
+      });
+    } else if (integ === "relay") {
+      // Restore relay — send all relays ON
+      const relayUid = asset.integ_config?.relay_uid;
+      if (relayUid) {
+        const hex = buildLCHex("all_on","dlc",5,1,Math.floor(Date.now()/1000));
+        await sendLCToDevice(relayUid, hex);
+      }
+    }
+  } catch(e) { console.warn(`restoreEVSingle ${stationId}:`, e.message); }
+}
+
+// ── Session & DR Log ───────────────────────────────────────────────────────────
+async function loadEVDevLog() {
+  const list = document.getElementById("ev-dev-log-list");
+  if (!list) return;
+  try {
+    const rows = await supabaseGet("ev_sessions?order=updated_at.desc&limit=100");
+    if (!Array.isArray(rows) || !rows.length) {
+      list.innerHTML = '<div class="sched-empty">No sessions recorded. Sessions populate as chargers connect via OCPP or API polling.</div>';
+      return;
+    }
+    list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead><tr>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Station</th>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Integration</th>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Status</th>
+        <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Power</th>
+        <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Energy</th>
+        <th style="text-align:center;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">DR</th>
+        <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Updated</th>
+      </tr></thead>
+      <tbody>${rows.map(r => {
+        const asset = evDevAssets.find(a => a.station_id === r.station_id);
+        const integ = asset?.integration || r.protocol || "ocpp";
+        return `<tr>
+          <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-weight:600;">${r.station_name||r.station_id}</td>
+          <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-size:10px;font-family:monospace;">${integ}</td>
+          <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);">${r.status||"—"}</td>
+          <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;font-family:monospace;">${r.power_kw!=null?r.power_kw+" kW":"—"}</td>
+          <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;font-family:monospace;">${r.energy_kwh!=null?r.energy_kwh+" kWh":"—"}</td>
+          <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:center;">${r.shed_active?"<span style='color:var(--red);font-weight:600;'>SHED</span>":""}</td>
+          <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;color:var(--text-hint);">${new Date(r.updated_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</td>
+        </tr>`;
+      }).join("")}</tbody></table>`;
+  } catch(e) {
+    list.innerHTML = '<div class="sched-empty">Run the SQL to create ev_sessions table to see logs.</div>';
+  }
+}
+
+// ── Override dispatchEVChargersDR to use dev assets ───────────────────────────
+// This overrides the earlier version from the Monitor tab
+async function dispatchEVChargersDR(signalLevel) {
+  if (evDevAssets.length > 0) {
+    await dispatchEVDR(signalLevel);
+  } else if (evChargers.length > 0) {
+    // Fall back to Monitor tab chargers if dev assets not loaded
+    await shedEVChargers(null, signalLevel);
+  }
 }
 
 
