@@ -677,6 +677,7 @@
     <button class="sub-tab-btn" id="sub-admin-health" onclick="switchSub('admin','admin-health',this)">Fleet Health</button>
 
     <button class="sub-tab-btn" id="sub-admin-openadr" onclick="switchSub('admin','admin-openadr',this)">OpenADR Config</button>
+    <button class="sub-tab-btn" id="sub-admin-drprograms" onclick="switchSub('admin','admin-drprograms',this)">DR Programs</button>
     <button class="sub-tab-btn" id="sub-admin-help" onclick="switchSub('admin','admin-help',this)">Help & Reference</button>
     <button class="sub-tab-btn" id="sub-admin-monitor-triggers" onclick="switchSub('admin','admin-monitor-triggers',this)">Monitor & Triggers</button>
   </div>
@@ -2539,6 +2540,148 @@
 </div>
 
 <!-- ── OPENADR CONFIG TAB ── -->
+
+<!-- ── DR PROGRAMS TAB ── -->
+<div class="tab-pane" id="tab-admin-drprograms">
+  <div class="scroll-content">
+    <div style="max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <!-- Context -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#9889; Demand Response Programs</div>
+          <button onclick="toggleDRProgramForm()" style="padding:6px 16px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">+ Add Program</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);line-height:1.7;margin-bottom:4px;">
+          Each DR program defines how a specific utility curtailment program maps to device load control strategies.
+          OpenADR programs are configured separately. These programs cover everything else:
+          direct utility API signals, SCADA triggers, TOU-based curtailment, interruptible rate programs, and manual dispatch.
+          <br/>The setpoint table works identically to OpenADR — signal levels map to LC strategies.
+        </div>
+      </div>
+
+      <!-- Add Program Form -->
+      <div id="drp-add-form" style="display:none;">
+        <div class="sched-card">
+          <div class="sched-card-header">
+            <div class="sched-card-title" id="drp-form-title">New DR Program</div>
+            <div style="display:flex;gap:8px;">
+              <button onclick="toggleDRProgramForm()" style="padding:6px 14px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-secondary);">Cancel</button>
+              <button onclick="saveDRProgram()" style="padding:6px 16px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Save Program</button>
+            </div>
+          </div>
+
+          <!-- Program Identity -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Program Name</label>
+              <input type="text" id="drp-name" placeholder="e.g. OG&E Load Management" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Utility / Program ID</label>
+              <input type="text" id="drp-program-id" placeholder="e.g. OGE-LM-2025-A" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Program Type</label>
+              <select id="drp-type" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                <option value="interruptible">Interruptible Rate / Curtailment</option>
+                <option value="direct_load">Direct Load Control (DLC)</option>
+                <option value="tou">Time-of-Use (TOU) Curtailment</option>
+                <option value="capacity">Capacity / Peak Shaving</option>
+                <option value="emergency">Emergency Demand Response</option>
+                <option value="voluntary">Voluntary Demand Reduction</option>
+                <option value="ancillary">Ancillary Services / Frequency</option>
+                <option value="manual">Manual Dispatch</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Utility / ISO / Program Operator</label>
+              <input type="text" id="drp-utility" placeholder="e.g. Oklahoma Gas &amp; Electric" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Signal Source</label>
+              <select id="drp-signal-source" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                <option value="scada_trigger">SCADA Trigger / Monitor Rule</option>
+                <option value="utility_api">Direct Utility API (REST)</option>
+                <option value="tou_schedule">TOU Schedule (time-based)</option>
+                <option value="webhook">Webhook / POST from Utility</option>
+                <option value="manual">Manual Operator Dispatch</option>
+                <option value="openadr_fallback">OpenADR Fallback</option>
+                <option value="iso_lmp">ISO/RTO LMP Trigger</option>
+                <option value="outage_trigger">Outage Correlation Trigger</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Status</label>
+              <select id="drp-status" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                <option value="active">Active — enrolled and participating</option>
+                <option value="pending">Pending — awaiting enrollment</option>
+                <option value="inactive">Inactive — suspended or ended</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="margin-bottom:14px;">
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Notes / Contract Reference</label>
+            <textarea id="drp-notes" rows="2" placeholder="Contract number, enrollment date, contact, terms, etc."
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;resize:vertical;"></textarea>
+          </div>
+
+          <!-- Setpoint Table — identical pattern to OpenADR mappings -->
+          <div style="padding-top:12px;border-top:0.5px solid var(--border);">
+            <div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;font-family:monospace;margin-bottom:8px;">
+              Signal Level → Load Control Strategy Mapping
+            </div>
+            <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">
+              Define how curtailment signal levels (1.0 = full shed, 0.0 = restore) map to LC strategies on your devices.
+              Identical to OpenADR signal mapping — same LC hex logic, different dispatch trigger.
+            </div>
+            <div style="overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:12px;" id="drp-mapping-table">
+                <thead><tr>
+                  <th style="text-align:left;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);white-space:nowrap;">Signal Level</th>
+                  <th style="text-align:left;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Tier Name</th>
+                  <th style="text-align:left;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);white-space:nowrap;">Strategy #</th>
+                  <th style="text-align:left;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Mode</th>
+                  <th style="text-align:left;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Control %</th>
+                  <th style="text-align:left;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">LC Hex Preview</th>
+                </tr></thead>
+                <tbody id="drp-mapping-tbody">
+                  <!-- Populated by renderDRPMappingTable() -->
+                </tbody>
+              </table>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px;">
+              <button onclick="addDRPMappingRow()" style="padding:5px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;cursor:pointer;color:var(--text-secondary);">+ Add Tier</button>
+              <button onclick="resetDRPMappings()" style="padding:5px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;cursor:pointer;color:var(--text-secondary);">Reset to Defaults</button>
+            </div>
+          </div>
+
+          <!-- Device Enrollment -->
+          <div style="padding-top:14px;margin-top:14px;border-top:0.5px solid var(--border);">
+            <div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;font-family:monospace;margin-bottom:8px;">Enrolled Devices</div>
+            <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Select which devices participate in this program. Any device type can be enrolled.</div>
+            <div id="drp-device-list" style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;">
+              <!-- Populated by renderDRPDeviceList() -->
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Program List -->
+      <div id="drp-program-list">
+        <div class="sched-empty">No DR programs configured. Click + Add Program to define a utility curtailment program.</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <div class="tab-pane" id="tab-admin-openadr">
   <div class="scroll-content">
     <div style="max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
@@ -5101,6 +5244,7 @@ function runTabInit(name) {
   if (name === "admin-energy")    { initEnergyMonitor(); }
   if (name === "openadr")         { initOpenADREvents(); }
   if (name === "admin-openadr")   { initOpenADRConfig(); }
+  if (name === "admin-drprograms") { initDRPrograms(); }
   if (name === "admin-help")      { showHelpTab("scheduling"); }
   if (name === "admin-monitor-triggers") { initMonitorTriggers(); }
   if (name === "monitor-triggers") { initMonitorTriggersMain(); }
@@ -17977,6 +18121,438 @@ async function loadGeneratorLog() {
   } catch(e) {
     list.innerHTML = '<div class="sched-empty">Run SQL to create generator_dr_log table to see logs.</div>';
   }
+}
+
+
+
+// ── DR Programs (non-OpenADR) ─────────────────────────────────────────────────
+
+let drPrograms      = [];   // all configured programs
+let drpEditingId    = null; // null = new, else program id being edited
+let drpMappings     = [     // default setpoint table — mirrors oadrMappings
+  { level: 1.0,  desc: "Emergency Shed",  strategy: 19, mode: "dlc", pct: 100 },
+  { level: 0.75, desc: "High Shed",       strategy: 15, mode: "dlc", pct: 75  },
+  { level: 0.5,  desc: "Medium Shed",     strategy: 9,  mode: "di",  pct: 50  },
+  { level: 0.25, desc: "Low Shed",        strategy: 5,  mode: "di",  pct: 25  },
+  { level: 0.0,  desc: "Restore",         strategy: 61, mode: "dlc", pct: 0   },
+];
+let drpEnrolledDevices = {}; // { [programId]: Set of device UIDs }
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function initDRPrograms() {
+  await loadDRPrograms();
+}
+
+async function loadDRPrograms() {
+  let dbRows = [], localRows = [];
+  try {
+    const rows = await supabaseGet("dr_programs?order=created_at.asc");
+    if (Array.isArray(rows) && rows.length) dbRows = rows;
+  } catch(e) {}
+  try {
+    const saved = localStorage.getItem("lcp_dr_programs_v1");
+    if (saved) localRows = JSON.parse(saved);
+  } catch(e) {}
+
+  const dbIds  = new Set(dbRows.map(r => r.id?.toString()));
+  const local  = localRows.filter(r => !dbIds.has(r.id?.toString()));
+  drPrograms   = [...dbRows, ...local].map(p => ({
+    ...p,
+    mappings:  typeof p.mappings === "string"  ? JSON.parse(p.mappings  || "[]") : (p.mappings  || []),
+    devices:   typeof p.devices  === "string"  ? JSON.parse(p.devices   || "[]") : (p.devices   || [])
+  }));
+
+  renderDRProgramList();
+}
+
+// ── Form ──────────────────────────────────────────────────────────────────────
+function toggleDRProgramForm(editId = null) {
+  const form = document.getElementById("drp-add-form");
+  if (!form) return;
+  const isOpen = form.style.display !== "none";
+
+  if (isOpen && !editId) {
+    form.style.display = "none";
+    drpEditingId = null;
+    return;
+  }
+
+  drpEditingId = editId || null;
+  form.style.display = "block";
+
+  const title = document.getElementById("drp-form-title");
+  if (title) title.textContent = editId ? "Edit DR Program" : "New DR Program";
+
+  if (editId) {
+    const prog = drPrograms.find(p => p.id?.toString() === editId?.toString());
+    if (prog) {
+      document.getElementById("drp-name").value          = prog.name || "";
+      document.getElementById("drp-program-id").value    = prog.program_id || "";
+      document.getElementById("drp-utility").value       = prog.utility || "";
+      document.getElementById("drp-notes").value         = prog.notes || "";
+      document.getElementById("drp-type").value          = prog.type || "interruptible";
+      document.getElementById("drp-signal-source").value = prog.signal_source || "manual";
+      document.getElementById("drp-status").value        = prog.status || "active";
+      drpMappings = prog.mappings?.length ? [...prog.mappings] : [...drpDefaultMappings()];
+    }
+  } else {
+    // New program — clear fields, reset to defaults
+    ["drp-name","drp-program-id","drp-utility","drp-notes"].forEach(id => {
+      const el = document.getElementById(id); if(el) el.value = "";
+    });
+    document.getElementById("drp-type").selectedIndex          = 0;
+    document.getElementById("drp-signal-source").selectedIndex = 0;
+    document.getElementById("drp-status").selectedIndex        = 0;
+    drpMappings = drpDefaultMappings();
+  }
+
+  renderDRPMappingTable();
+  renderDRPDeviceList(editId ? drPrograms.find(p => p.id?.toString() === editId?.toString())?.devices || [] : []);
+  form.scrollIntoView({ behavior:"smooth", block:"start" });
+}
+
+function drpDefaultMappings() {
+  return [
+    { level: 1.0,  desc: "Emergency Shed",  strategy: 19, mode: "dlc", pct: 100 },
+    { level: 0.75, desc: "High Shed",       strategy: 15, mode: "dlc", pct: 75  },
+    { level: 0.5,  desc: "Medium Shed",     strategy: 9,  mode: "di",  pct: 50  },
+    { level: 0.25, desc: "Low Shed",        strategy: 5,  mode: "di",  pct: 25  },
+    { level: 0.0,  desc: "Restore",         strategy: 61, mode: "dlc", pct: 0   }
+  ];
+}
+
+// ── Mapping Table ─────────────────────────────────────────────────────────────
+function renderDRPMappingTable() {
+  const tbody = document.getElementById("drp-mapping-tbody");
+  if (!tbody) return;
+
+  tbody.innerHTML = drpMappings.map((m, i) => {
+    // Build hex preview (using default action all_on, startTime 0)
+    const hex = buildLCHex ? buildLCHex("all_on", m.mode, m.strategy, 1, 0) : "—";
+    const levelColor = m.level >= 0.75 ? "var(--red)"
+                     : m.level >= 0.5  ? "var(--amber)"
+                     : m.level >= 0.25 ? "var(--blue-dark)"
+                     : m.level === 0   ? "var(--green-dark)"
+                     : "var(--text-primary)";
+    return `<tr>
+      <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);">
+        <input type="number" value="${m.level}" min="0" max="1" step="0.01"
+          style="width:60px;padding:4px 6px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;color:${levelColor};font-weight:700;"
+          oninput="drpMappings[${i}].level=parseFloat(this.value);renderDRPMappingTable()"/>
+      </td>
+      <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);">
+        <input type="text" value="${m.desc}"
+          style="width:140px;padding:4px 6px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"
+          oninput="drpMappings[${i}].desc=this.value"/>
+      </td>
+      <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);">
+        <input type="number" value="${m.strategy}" min="1" max="63"
+          style="width:60px;padding:4px 6px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"
+          oninput="drpMappings[${i}].strategy=parseInt(this.value);renderDRPMappingTable()"/>
+      </td>
+      <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);">
+        <select style="padding:4px 6px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"
+          onchange="drpMappings[${i}].mode=this.value;renderDRPMappingTable()">
+          <option value="dlc" ${m.mode==="dlc"?"selected":""}>DLC</option>
+          <option value="di"  ${m.mode==="di" ?"selected":""}>DI</option>
+          <option value="bas" ${m.mode==="bas"?"selected":""}>BAS</option>
+        </select>
+      </td>
+      <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);">
+        <input type="number" value="${m.pct}" min="0" max="100"
+          style="width:60px;padding:4px 6px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"
+          oninput="drpMappings[${i}].pct=parseInt(this.value)"/>
+        <span style="font-size:11px;color:var(--text-hint);">%</span>
+      </td>
+      <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);">
+        <code style="font-size:10px;color:var(--text-hint);font-family:monospace;">${hex.substring(0,12)}…</code>
+        <button onclick="drpMappings.splice(${i},1);renderDRPMappingTable()" title="Remove tier"
+          style="margin-left:6px;padding:2px 6px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">✕</button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+function addDRPMappingRow() {
+  // Add a new tier between 0.0 and the lowest current level
+  const levels  = drpMappings.map(m => m.level).filter(l => l > 0);
+  const minLevel= levels.length ? Math.min(...levels) : 0.5;
+  const newLevel= Math.max(0.01, Math.round((minLevel / 2) * 100) / 100);
+  drpMappings.push({ level: newLevel, desc: "New Tier", strategy: 5, mode: "dlc", pct: Math.round(newLevel * 100) });
+  drpMappings.sort((a,b) => b.level - a.level);
+  renderDRPMappingTable();
+}
+
+function resetDRPMappings() {
+  drpMappings = drpDefaultMappings();
+  renderDRPMappingTable();
+}
+
+// ── Device List ───────────────────────────────────────────────────────────────
+function renderDRPDeviceList(enrolledUids = []) {
+  const container = document.getElementById("drp-device-list");
+  if (!container) return;
+  if (!DEVICES?.length) {
+    container.innerHTML = '<div style="font-size:11px;color:var(--text-hint);">No devices loaded. Go to Devices tab first.</div>';
+    return;
+  }
+
+  const enrolled = new Set(Array.isArray(enrolledUids) ? enrolledUids : []);
+  const TYPE_ICONS = { ev:"⚡", battery:"🔋", generator:"🔌", relay:"📡" };
+  const TYPE_LABELS= { ev:"EV Charger", battery:"Battery", generator:"Generator", relay:"Relay" };
+
+  const byType = {};
+  DEVICES.filter(d => !d.uid.includes("PLACEHOLDER")).forEach(d => {
+    const t = d.type || "relay";
+    if (!byType[t]) byType[t] = [];
+    byType[t].push(d);
+  });
+
+  container.innerHTML = Object.entries(byType).map(([type, devs]) => `
+    <div style="margin-bottom:8px;">
+      <div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;font-family:monospace;">
+        ${TYPE_ICONS[type]||"📡"} ${TYPE_LABELS[type]||type}
+      </div>
+      ${devs.map(d => `
+        <label style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--radius-sm);cursor:pointer;background:${enrolled.has(d.uid)?"var(--green-bg)":"var(--surface2)"};border:0.5px solid ${enrolled.has(d.uid)?"var(--green)":"var(--border)"};margin-bottom:4px;transition:all .1s;">
+          <input type="checkbox" class="drp-device-cb" data-uid="${d.uid}" ${enrolled.has(d.uid)?"checked":""}
+            onchange="this.closest('label').style.background=this.checked?'var(--green-bg)':'var(--surface2)';this.closest('label').style.borderColor=this.checked?'var(--green)':'var(--border)';" />
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text-primary);">${d.name}</div>
+            <div style="font-size:10px;color:var(--text-hint);font-family:monospace;">${d.uid}</div>
+          </div>
+        </label>`).join("")}
+    </div>`).join("");
+}
+
+function getDRPEnrolledDevices() {
+  return Array.from(document.querySelectorAll(".drp-device-cb:checked")).map(cb => cb.dataset.uid);
+}
+
+// ── Save ──────────────────────────────────────────────────────────────────────
+async function saveDRProgram() {
+  const name     = document.getElementById("drp-name")?.value?.trim();
+  const progId   = document.getElementById("drp-program-id")?.value?.trim();
+  const utility  = document.getElementById("drp-utility")?.value?.trim();
+  const notes    = document.getElementById("drp-notes")?.value?.trim();
+  const type     = document.getElementById("drp-type")?.value;
+  const source   = document.getElementById("drp-signal-source")?.value;
+  const status   = document.getElementById("drp-status")?.value;
+  if (!name) { setStatus("error", "Program name required."); return; }
+
+  const devices = getDRPEnrolledDevices();
+  const record  = {
+    name,
+    program_id:    progId || null,
+    utility:       utility || null,
+    notes:         notes || null,
+    type,
+    signal_source: source,
+    status,
+    mappings:      JSON.stringify(drpMappings),
+    devices:       JSON.stringify(devices),
+    updated_at:    new Date().toISOString()
+  };
+
+  let saved = false;
+  try {
+    if (drpEditingId) {
+      // Update existing
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/dr_programs?id=eq.${drpEditingId}`, {
+        method:"PATCH",
+        headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+          "Content-Type":"application/json","Prefer":"return=minimal"},
+        body: JSON.stringify(record)
+      });
+      if (res.ok) saved = true;
+    } else {
+      record.created_at = new Date().toISOString();
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/dr_programs`, {
+        method:"POST",
+        headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+          "Content-Type":"application/json","Prefer":"return=representation"},
+        body: JSON.stringify(record)
+      });
+      if (res.ok) saved = true;
+      else console.warn("DR Program save:", res.status, await res.text());
+    }
+  } catch(e) { console.warn("DR Program save:", e.message); }
+
+  if (!saved) {
+    // localStorage fallback
+    const local = JSON.parse(localStorage.getItem("lcp_dr_programs_v1") || "[]");
+    const id    = drpEditingId || `local_${Date.now()}`;
+    const idx   = local.findIndex(p => p.id?.toString() === id?.toString());
+    const entry = { ...record, id, mappings: drpMappings, devices };
+    if (idx >= 0) local[idx] = entry; else local.push(entry);
+    localStorage.setItem("lcp_dr_programs_v1", JSON.stringify(local));
+  }
+
+  setStatus("ready", `DR Program "${name}" saved.`);
+  toggleDRProgramForm();
+  await loadDRPrograms();
+}
+
+// ── Render Program List ───────────────────────────────────────────────────────
+function renderDRProgramList() {
+  const container = document.getElementById("drp-program-list");
+  if (!container) return;
+
+  if (!drPrograms.length) {
+    container.innerHTML = '<div class="sched-empty">No DR programs configured. Click + Add Program to define a utility curtailment program.</div>';
+    return;
+  }
+
+  const TYPE_LABELS = {
+    interruptible:"Interruptible Rate", direct_load:"Direct Load Control",
+    tou:"TOU Curtailment", capacity:"Capacity / Peak Shaving",
+    emergency:"Emergency DR", voluntary:"Voluntary", ancillary:"Ancillary Services",
+    manual:"Manual Dispatch", other:"Other"
+  };
+  const SOURCE_LABELS = {
+    scada_trigger:"SCADA Trigger", utility_api:"Utility API",
+    tou_schedule:"TOU Schedule", webhook:"Webhook",
+    manual:"Manual", openadr_fallback:"OpenADR Fallback",
+    iso_lmp:"ISO/RTO LMP", outage_trigger:"Outage Trigger"
+  };
+  const STATUS_COLORS = { active:"var(--green-dark)", pending:"var(--amber)", inactive:"var(--text-hint)" };
+
+  container.innerHTML = drPrograms.map(p => {
+    const mappings = Array.isArray(p.mappings) ? p.mappings : [];
+    const devices  = Array.isArray(p.devices)  ? p.devices  : [];
+    return `<div class="sched-card" style="margin-bottom:0;">
+      <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:5px;">
+            <span style="font-size:14px;font-weight:700;color:var(--text-primary);">&#9889; ${p.name}</span>
+            <span style="padding:2px 9px;border-radius:10px;font-size:10px;font-weight:700;background:var(--surface2);border:0.5px solid var(--border-md);color:var(--text-secondary);">${TYPE_LABELS[p.type]||p.type}</span>
+            <span style="padding:2px 9px;border-radius:10px;font-size:10px;font-weight:700;color:${STATUS_COLORS[p.status]||"var(--text-hint)"};background:${p.status==="active"?"var(--green-bg)":"var(--surface2)"};border:0.5px solid ${STATUS_COLORS[p.status]||"var(--border)"};">
+              ${p.status?.toUpperCase()||"UNKNOWN"}
+            </span>
+          </div>
+          <div style="font-size:11px;color:var(--text-hint);margin-bottom:6px;">
+            ${p.utility ? `<strong>${p.utility}</strong> &bull; ` : ""}
+            ${p.program_id ? `ID: <code style="font-size:10px;">${p.program_id}</code> &bull; ` : ""}
+            Signal: ${SOURCE_LABELS[p.signal_source]||p.signal_source||"—"} &bull;
+            ${devices.length} device${devices.length!==1?"s":""} enrolled
+          </div>
+          ${p.notes ? `<div style="font-size:11px;color:var(--text-hint);margin-bottom:8px;font-style:italic;">${p.notes}</div>` : ""}
+
+          <!-- Compact setpoint preview -->
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+            ${mappings.map(m => {
+              const color = m.level >= 0.75 ? "var(--red)"
+                          : m.level >= 0.5  ? "var(--amber)"
+                          : m.level >= 0.25 ? "var(--blue-dark)"
+                          : m.level === 0   ? "var(--green-dark)"
+                          : "var(--text-secondary)";
+              return `<span style="padding:3px 10px;border-radius:10px;font-size:10px;font-weight:600;background:${color}18;border:0.5px solid ${color};color:${color};font-family:monospace;">
+                ${m.level === 0 ? "Restore" : m.desc} (${Math.round(m.level*100)}%)
+              </span>`;
+            }).join("")}
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
+          <button onclick="dispatchDRProgram('${p.id}', 1.0)"
+            style="padding:5px 12px;border-radius:var(--radius-sm);border:1.5px solid var(--red);background:var(--red-lt);color:var(--red);font-size:11px;font-weight:600;cursor:pointer;">
+            &#9889; Emergency</button>
+          <button onclick="dispatchDRProgram('${p.id}', 0.5)"
+            style="padding:5px 12px;border-radius:var(--radius-sm);border:1.5px solid var(--amber);background:var(--amber-bg);color:var(--amber);font-size:11px;font-weight:600;cursor:pointer;">
+            &#128993; Shed</button>
+          <button onclick="dispatchDRProgram('${p.id}', 0.0)"
+            style="padding:5px 12px;border-radius:var(--radius-sm);border:1.5px solid var(--green);background:var(--green-bg);color:var(--green-dark);font-size:11px;font-weight:600;cursor:pointer;">
+            &#9989; Restore</button>
+          <div style="display:flex;gap:5px;">
+            <button onclick="toggleDRProgramForm('${p.id}')"
+              style="flex:1;padding:4px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:10px;cursor:pointer;color:var(--text-secondary);">Edit</button>
+            <button onclick="deleteDRProgram('${p.id}')"
+              style="padding:4px 8px;border-radius:4px;border:0.5px solid var(--red);background:none;font-size:10px;cursor:pointer;color:var(--red);">Delete</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('<div style="height:1px;background:var(--border);margin:0 -16px;"></div>');
+}
+
+// ── Dispatch a DR Program ─────────────────────────────────────────────────────
+async function dispatchDRProgram(programId, signalLevel) {
+  const prog = drPrograms.find(p => p.id?.toString() === programId?.toString());
+  if (!prog) return;
+
+  // Find best matching setpoint
+  const mappings = Array.isArray(prog.mappings) ? prog.mappings : drpDefaultMappings();
+  const sorted   = [...mappings].sort((a,b) => b.level - a.level);
+  let best       = sorted[sorted.length - 1]; // default to lowest (restore)
+  for (const m of sorted) {
+    if (signalLevel >= m.level) { best = m; break; }
+  }
+
+  const devices = Array.isArray(prog.devices) ? prog.devices : [];
+  if (!devices.length) {
+    setStatus("error", `${prog.name}: No devices enrolled. Edit the program to add devices.`);
+    return;
+  }
+
+  const action = signalLevel === 0 ? "all_on" : "all_off";
+  const lcHex  = buildLCHex ? buildLCHex(action, best.mode, best.strategy, 2, Math.floor(Date.now()/1000)) : null;
+  if (!lcHex) { setStatus("error", "LC hex builder not available."); return; }
+
+  setStatus("sending", `${prog.name} — dispatching ${best.desc} (level ${signalLevel}) to ${devices.length} device${devices.length!==1?"s":""}...`);
+
+  let sent = 0;
+  for (const uid of devices) {
+    try {
+      if (uid.startsWith("ev_")) {
+        const stationId = uid.replace("ev_","");
+        if (signalLevel === 0) await restoreEVSingle(stationId);
+        else await dispatchEVDRSingle(stationId, signalLevel);
+      } else if (uid.startsWith("batt_")) {
+        const assetId = uid.replace("batt_","");
+        if (signalLevel === 0) await restoreBatterySingle(assetId);
+        else await dispatchBatteryDRSingle(assetId, signalLevel >= 0.75 ? "discharge" : "hold");
+      } else if (uid.startsWith("gen_")) {
+        const assetId = uid.replace("gen_","");
+        if (signalLevel === 0) await stopGeneratorSingle(assetId);
+        else await startGeneratorSingle(assetId);
+      } else {
+        // Relay device
+        await sendLCToDevice(uid, lcHex);
+      }
+      sent++;
+    } catch(e) { console.warn(`DRP dispatch ${uid}:`, e.message); }
+  }
+
+  // Log event
+  try {
+    await supabasePost("dr_program_events", {
+      program_id:   programId,
+      program_name: prog.name,
+      signal_level: signalLevel,
+      tier_name:    best.desc,
+      strategy:     best.strategy,
+      lc_hex:       lcHex,
+      device_count: sent,
+      fired_at:     new Date().toISOString(),
+      fired_by:     currentUser?.email || "manual"
+    });
+  } catch(e) {}
+
+  setStatus("ready", `${prog.name} — ${best.desc} sent to ${sent}/${devices.length} devices. LC: ${lcHex.substring(0,14)}…`);
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+async function deleteDRProgram(programId) {
+  const prog = drPrograms.find(p => p.id?.toString() === programId?.toString());
+  if (!confirm(`Delete "${prog?.name || "this program"}"?`)) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/dr_programs?id=eq.${programId}`, {
+      method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+    });
+  } catch(e) {}
+  const local = JSON.parse(localStorage.getItem("lcp_dr_programs_v1") || "[]");
+  localStorage.setItem("lcp_dr_programs_v1", JSON.stringify(local.filter(p => p.id?.toString() !== programId?.toString())));
+  await loadDRPrograms();
 }
 
 
