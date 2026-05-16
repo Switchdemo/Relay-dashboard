@@ -3485,10 +3485,17 @@
             </div>
           </div>
 
-          <!-- Row 4: Map URL — clearly optional -->
+          <!-- Row 4: Map URL with live search -->
           <div style="margin-bottom:6px;">
             <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Outage Map URL <span style="font-weight:400;">(optional — leave blank if none exists)</span></label>
-            <input type="url" id="new-util-map-url" placeholder="https://outagemap.utility.com/ — leave blank for munis/coops without a public map" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;" />
+            <div style="display:flex;gap:6px;align-items:center;">
+              <input type="url" id="new-util-map-url" placeholder="https://outagemap.utility.com/ — or click Search to find automatically" style="flex:1;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;" />
+              <button type="button" onclick="searchOutageMap()" id="outage-search-btn"
+                style="padding:7px 14px;border-radius:var(--radius-sm);border:0.5px solid var(--blue-dark);background:var(--blue-lt);color:var(--blue-dark);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">
+                &#128269; Search
+              </button>
+            </div>
+            <div id="outage-search-result" style="font-size:11px;margin-top:5px;color:var(--text-hint);min-height:16px;"></div>
           </div>
           <div style="font-size:11px;color:var(--text-hint);margin-bottom:12px;">
             If no outage map URL is available the utility will still be tracked — the map link will show "Not available" and may be added later.
@@ -7417,8 +7424,15 @@ let summaryRefreshInterval = null;
 
 async function initSummaryTab() {
   refreshSummaryFeeds();
+  await loadProgramSummary();          // populates stat tiles (enrolled/online/offline/no-event)
   await populateParticipationEventSelect();
-  // Summary no longer auto-refreshes device status — that lives on Current Device Status tab
+  // Auto-refresh stats every 30s while on summary tab
+  if (summaryRefreshInterval) clearInterval(summaryRefreshInterval);
+  summaryRefreshInterval = setInterval(async () => {
+    if (document.getElementById("tab-summary")?.classList.contains("active")) {
+      await loadProgramSummary();
+    }
+  }, 30000);
 }
 
 let refreshCountdown = 10;
@@ -7464,13 +7478,25 @@ async function loadProgramSummary() {
     } catch(e) { eventData[device.uid] = null; }
   }
 
-  // Calculate stats
+  // Calculate stats from device data fetched above
   let online = 0, offline = 0, noEvent = 0;
-  const enrolled = DEVICES.length;
+  const enrolled = DEVICES.filter(d => d.type !== "ev" && d.type !== "battery" && d.type !== "generator" && !d.uid.includes("PLACEHOLDER")).length;
+
+  for (const device of DEVICES.filter(d => d.type !== "ev" && d.type !== "battery" && d.type !== "generator" && !d.uid.includes("PLACEHOLDER"))) {
+    const reading    = deviceData[device.uid];
+    const evData     = eventData[device.uid];
+    const lastReport = reading?.recorded_at ? new Date(reading.recorded_at) : null;
+    const isOnline   = lastReport && (now - lastReport.getTime()) < 60 * 60 * 1000;
+    if (isOnline) online++; else offline++;
+    if (!evData) noEvent++;
+  }
+
+  document.getElementById("stat-enrolled").textContent = enrolled;
+  document.getElementById("stat-online").textContent   = online;
+  document.getElementById("stat-offline").textContent  = offline;
+  document.getElementById("stat-no-event").textContent = noEvent;
 
   // Device status table now lives on Current Device Status tab — not rendered here
-  // Stats are updated by loadDeviceStatusTable() when that tab is active
-  // Keep stat counters synced if they've been loaded
   return;
 
   const tbody = document.getElementById("summary-device-tbody_unused");
@@ -22475,6 +22501,61 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 });
+
+
+
+// ── Outage Map Search ─────────────────────────────────────────────────────────
+async function searchOutageMap() {
+  const nameEl   = document.getElementById("new-util-name");
+  const stateEl  = document.getElementById("new-util-state");
+  const mapEl    = document.getElementById("new-util-map-url");
+  const resultEl = document.getElementById("outage-search-result");
+  const btn      = document.getElementById("outage-search-btn");
+
+  const name  = nameEl?.value?.trim();
+  const state = stateEl?.value?.trim();
+
+  if (!name) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--amber);">Enter a utility name first.</span>';
+    return;
+  }
+
+  // Show loading
+  if (btn)      { btn.disabled = true; btn.textContent = "Searching…"; }
+  if (resultEl) resultEl.innerHTML = '<span style="color:var(--text-hint);">&#128269; Searching for outage map…</span>';
+
+  try {
+    const res  = await fetch(PROXY_URL + "utility/search-outage-map", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ name, state: state || "" })
+    });
+    const data = await res.json();
+
+    if (data.found && data.url) {
+      if (mapEl)    mapEl.value = data.url;
+      if (resultEl) resultEl.innerHTML =
+        `<span style="color:var(--green-dark);">&#10003; Found: <a href="${data.url}" target="_blank" style="color:var(--blue-dark);">${data.url}</a> — ${data.note||""}</span>`;
+    } else if (data.poweroutage_url) {
+      // No direct map but PowerOutage.us tracks them
+      if (resultEl) resultEl.innerHTML =
+        `<span style="color:var(--amber);">No dedicated outage map found. ` +
+        `<a href="${data.poweroutage_url}" target="_blank" style="color:var(--blue-dark);">PowerOutage.us tracks this utility</a>. ` +
+        `You can use that URL or leave blank.</span>`;
+      // Offer to set PowerOutage.us URL
+      if (mapEl && !mapEl.value) mapEl.value = data.poweroutage_url;
+    } else {
+      if (resultEl) resultEl.innerHTML =
+        `<span style="color:var(--text-hint);">&#128683; No public outage map found for "${name}". ` +
+        `The utility will still be tracked — you can add a URL later if one becomes available.</span>`;
+    }
+  } catch(e) {
+    if (resultEl) resultEl.innerHTML =
+      `<span style="color:var(--red);">Search error: ${e.message}</span>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = "&#128269; Search"; }
+  }
+}
 
 
 // ── Background Theme System ───────────────────────────────────────────────────
