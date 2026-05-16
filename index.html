@@ -511,6 +511,20 @@
   .ev-meter-tile { background:var(--surface2);border-radius:4px;padding:8px;text-align:center; }
   .ev-meter-val  { font-size:16px;font-weight:700;color:var(--text-primary);font-family:monospace; }
   .ev-meter-lbl  { font-size:10px;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em; }
+
+  /* ── Battery Systems ── */
+  .battery-card { border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:14px;background:var(--surface);margin-bottom:8px; }
+  .battery-soc-bar { height:8px;border-radius:4px;background:var(--surface2);overflow:hidden;margin:6px 0; }
+  .battery-soc-fill { height:100%;border-radius:4px;transition:width .8s;background:var(--green-dark); }
+  .battery-soc-fill.low    { background:var(--red); }
+  .battery-soc-fill.medium { background:var(--amber); }
+  .battery-mode-badge { display:inline-block;padding:3px 10px;border-radius:10px;font-size:10px;font-weight:700;font-family:monospace; }
+  .battery-mode-badge.autonomous     { background:var(--green-bg);color:var(--green-dark); }
+  .battery-mode-badge.self_consumption { background:var(--blue-lt);color:var(--blue-dark); }
+  .battery-mode-badge.backup         { background:var(--amber-bg);color:var(--amber); }
+  .battery-mode-badge.dr_active      { background:var(--red-lt);color:var(--red); }
+  .batt-integ-opt { padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;transition:all .15s; }
+  .batt-integ-opt:hover { border-color:var(--text-primary); }
 </style>
 </head>
 <body>
@@ -668,6 +682,7 @@
     <button class="sub-tab-btn" id="sub-map" onclick="switchSub('devices','map',this)">Device Location</button>
     <button class="sub-tab-btn" id="sub-settings" onclick="switchSub('devices','settings',this)">Device Settings</button>
     <button class="sub-tab-btn" id="sub-ev-chargers" onclick="switchSub('devices','ev-chargers',this)">&#128268; EV Chargers</button>
+    <button class="sub-tab-btn" id="sub-battery" onclick="switchSub('devices','battery',this)">&#128267; Battery Systems</button>
   </div>
   <div class="status-bar">
     <div class="dot ready" id="dot"></div>
@@ -4139,6 +4154,362 @@
   </div>
 </div>
 
+
+<!-- ── BATTERY SYSTEMS DEVICE TAB ── -->
+<div class="tab-pane" id="tab-battery">
+  <div class="scroll-content">
+    <div style="max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <!-- Fleet Overview -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128267; Battery Storage Assets</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span id="batt-status" style="font-size:11px;font-family:monospace;padding:2px 8px;border-radius:10px;background:var(--surface2);color:var(--text-hint);">Loading...</span>
+            <button class="queue-refresh" onclick="refreshBatteryAssets()">Refresh</button>
+            <button onclick="toggleBatteryEnrollForm()" style="padding:6px 14px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">+ Add Battery</button>
+          </div>
+        </div>
+
+        <!-- Fleet stats -->
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:14px;">
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="batt-stat-total">—</div><div class="ev-meter-lbl">Total</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="batt-stat-online" style="color:var(--green-dark);">—</div><div class="ev-meter-lbl">Online</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="batt-stat-avg-soc">—</div><div class="ev-meter-lbl">Avg SOC</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="batt-stat-kw" style="color:var(--blue-dark);">—</div><div class="ev-meter-lbl">kW Flow</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="batt-stat-dr">—</div><div class="ev-meter-lbl">DR Enrolled</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="batt-stat-dr-active" style="color:var(--red);">—</div><div class="ev-meter-lbl">DR Active</div></div>
+        </div>
+
+        <!-- Enroll form -->
+        <div id="batt-enroll-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:16px;margin-bottom:14px;border:0.5px solid var(--border-md);">
+          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;font-family:monospace;">Add Battery Storage Asset</div>
+
+          <!-- Integration type -->
+          <div style="margin-bottom:14px;">
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em;">Integration Type</label>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;">
+              <div class="batt-integ-opt" data-integ="tesla_powerwall" onclick="selectBattInteg('tesla_powerwall',this)">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Tesla Powerwall</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Fleet API — backup reserve + mode control</div>
+              </div>
+              <div class="batt-integ-opt" data-integ="enphase" onclick="selectBattInteg('enphase',this)">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Enphase IQ Battery</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Enlighten API v4 — cloud + local gateway</div>
+              </div>
+              <div class="batt-integ-opt" data-integ="solaredge" onclick="selectBattInteg('solaredge',this)">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">SolarEdge</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Monitoring API — storage data + mode</div>
+              </div>
+              <div class="batt-integ-opt" data-integ="generac" onclick="selectBattInteg('generac',this)">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Generac PWRcell</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">REST API — grid services control</div>
+              </div>
+              <div class="batt-integ-opt" data-integ="sonnen" onclick="selectBattInteg('sonnen',this)">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Sonnen</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Local API v2 — mode &amp; SOC control</div>
+              </div>
+              <div class="batt-integ-opt" data-integ="victron" onclick="selectBattInteg('victron',this)">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Victron (VRM)</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">VRM cloud API — Cerbo GX / MultiPlus</div>
+              </div>
+              <div class="batt-integ-opt" data-integ="local_rest" onclick="selectBattInteg('local_rest',this)">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Generic / Modbus Gateway</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Any battery with REST API or SunSpec Modbus</div>
+              </div>
+              <div class="batt-integ-opt" data-integ="relay" onclick="selectBattInteg('relay',this)">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Relay Fallback</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">No API — cut charging circuit via Notecard</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Common fields -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Asset ID / Name</label>
+              <input type="text" id="batt-asset-id" placeholder="e.g. BATT-MAIN-01" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;font-family:monospace;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Display Name</label>
+              <input type="text" id="batt-name" placeholder="e.g. Main House Battery" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Location / Site</label>
+              <input type="text" id="batt-location" placeholder="e.g. Building A" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Capacity (kWh)</label>
+              <input type="number" id="batt-capacity-kwh" value="13.5" min="1" max="1000" step="0.1" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Max Power (kW)</label>
+              <input type="number" id="batt-max-kw" value="7.6" min="0.5" max="500" step="0.1" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">DR Enrolled</label>
+              <select id="batt-dr" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="true">Yes — participates in DR</option>
+                <option value="false">No — monitor only</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Min Backup Reserve (%)</label>
+              <input type="number" id="batt-min-reserve" value="20" min="0" max="100" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;" title="Always preserve this % for backup — never discharged below this during DR"/>
+            </div>
+          </div>
+
+          <!-- Integration-specific panels -->
+          <div id="batt-integ-tesla_powerwall" style="display:none;" class="batt-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:14px;margin-bottom:8px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Tesla Fleet API — Energy Site</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Client ID</label>
+                  <input type="text" id="batt-tesla-client-id" placeholder="Tesla Developer Client ID" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Client Secret</label>
+                  <input type="password" id="batt-tesla-client-secret" placeholder="Tesla Developer Client Secret" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Refresh Token</label>
+                  <input type="password" id="batt-tesla-refresh-token" placeholder="OAuth refresh token" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Energy Site ID</label>
+                  <input type="text" id="batt-tesla-site-id" placeholder="Numeric site ID" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Region</label>
+                  <select id="batt-tesla-region" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                    <option value="na">North America</option>
+                    <option value="eu">Europe</option>
+                  </select>
+                </div>
+              </div>
+              <div style="font-size:11px;color:var(--text-hint);">DR: Sets backup reserve to 5% + self_consumption mode (enables discharge). Restore: Returns to autonomous mode at configured min reserve. Find your Energy Site ID via the Tesla Fleet API products endpoint or the Netzero app.</div>
+            </div>
+          </div>
+
+          <div id="batt-integ-enphase" style="display:none;" class="batt-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:14px;margin-bottom:8px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Enphase Enlighten API v4</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">API Key</label>
+                  <input type="password" id="batt-enphase-api-key" placeholder="From developer-v4.enphase.com" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Client ID</label>
+                  <input type="text" id="batt-enphase-client-id" placeholder="OAuth Client ID" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">System ID</label>
+                  <input type="text" id="batt-enphase-system-id" placeholder="Enlighten system ID" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Access Token</label>
+                <input type="password" id="batt-enphase-token" placeholder="OAuth access token (from authorization flow)" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+              </div>
+              <div style="font-size:11px;color:var(--text-hint);margin-top:6px;">Get API access at <a href="https://developer-v4.enphase.com" target="_blank" style="color:var(--blue-dark);">developer-v4.enphase.com</a>. DR uses VPP battery control endpoints introduced in 2025.</div>
+            </div>
+          </div>
+
+          <div id="batt-integ-solaredge" style="display:none;" class="batt-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:14px;margin-bottom:8px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">SolarEdge Monitoring API</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">API Key</label>
+                  <input type="password" id="batt-se-api-key" placeholder="From SolarEdge Monitoring Portal" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Site ID</label>
+                  <input type="text" id="batt-se-site-id" placeholder="Numeric site ID from portal" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+              </div>
+              <div style="font-size:11px;color:var(--text-hint);">Monitoring API provides real-time power flow and storage data. DR mode control requires Modbus TCP locally or the SolarEdge installer API — document the site for manual coordination if direct control is not available.</div>
+            </div>
+          </div>
+
+          <div id="batt-integ-generac" style="display:none;" class="batt-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:14px;margin-bottom:8px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Generac PWRcell / PWRview</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Username</label>
+                  <input type="text" id="batt-generac-user" placeholder="PWRview account email" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Password</label>
+                  <input type="password" id="batt-generac-pass" placeholder="PWRview password" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Device ID</label>
+                  <input type="text" id="batt-generac-device-id" placeholder="PWRcell device serial" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sonnen panel -->
+          <div id="batt-integ-sonnen" style="display:none;" class="batt-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:14px;margin-bottom:8px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Sonnen Local API v2</div>
+              <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Battery IP Address</label>
+                  <input type="text" id="batt-sonnen-ip" placeholder="192.168.1.x" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Auth Token</label>
+                  <input type="password" id="batt-sonnen-token" placeholder="From battery dashboard" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+              </div>
+              <div style="font-size:11px;color:var(--text-hint);line-height:1.7;">
+                Token found at: <code>http://{battery-ip}/api/doc.html</code> → Software Integration → Enable JSON API.<br/>
+                DR: Sets operating mode to <code>self_consumption</code> (discharge) or <code>manual</code> with forced charge power 0W (hold).<br/>
+                Covers: sonnenBatterie 8, Eco 8, 10, 10 Performance, SB 8, and newer systems.
+              </div>
+            </div>
+          </div>
+
+          <!-- Victron VRM panel -->
+          <div id="batt-integ-victron" style="display:none;" class="batt-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:14px;margin-bottom:8px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Victron VRM Cloud API</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">VRM API Token</label>
+                  <input type="password" id="batt-victron-token" placeholder="From VRM portal → API Tokens" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Installation ID</label>
+                  <input type="text" id="batt-victron-install-id" placeholder="Numeric ID from VRM URL" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Device Instance</label>
+                  <input type="text" id="batt-victron-instance" placeholder="276 (MultiPlus default)" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+              </div>
+              <div style="font-size:11px;color:var(--text-hint);line-height:1.7;">
+                Token: <a href="https://vrm.victronenergy.com" target="_blank" style="color:var(--blue-dark);">vrm.victronenergy.com</a> → Settings → API Tokens → Create Token.<br/>
+                Installation ID: visible in the VRM portal URL (<code>/installation/{id}/dashboard</code>).<br/>
+                DR: Sets ESS mode via <code>PUT /installations/{id}/settings</code> — <code>MinSOC</code> and <code>Mode</code> registers via VRM API.<br/>
+                Covers: Cerbo GX, Color Control GX, Venus GX + MultiPlus II, Quattro, EasySolar.
+              </div>
+            </div>
+          </div>
+
+          <!-- Generic / Modbus Gateway panel (expanded) -->
+          <div id="batt-integ-local_rest" style="display:none;" class="batt-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:14px;margin-bottom:8px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Generic / Modbus REST Gateway</div>
+              <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Gateway URL</label>
+                  <input type="url" id="batt-rest-url" placeholder="https://192.168.1.x/api or https://gateway.local/api" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Auth Token</label>
+                  <input type="password" id="batt-rest-token" placeholder="Bearer token (optional)" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">DR Shed Path (POST)</label>
+                  <input type="text" id="batt-rest-shed-path" placeholder="/api/battery/mode/discharge" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Restore Path (POST)</label>
+                  <input type="text" id="batt-rest-restore-path" placeholder="/api/battery/mode/normal" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+              </div>
+              <!-- SunSpec reference -->
+              <details style="font-size:11px;color:var(--text-hint);">
+                <summary style="cursor:pointer;font-weight:600;color:var(--text-secondary);margin-bottom:6px;">&#128218; SunSpec Modbus Register Reference</summary>
+                <div style="background:var(--ink);border-radius:var(--radius-sm);padding:10px 14px;margin-top:8px;font-family:monospace;font-size:10px;line-height:2;color:rgba(255,255,255,.7);">
+                  <div style="color:rgba(255,255,255,.4);margin-bottom:4px;"># Key SunSpec registers for battery storage (base address 40000)</div>
+                  <div>40082 — StorCtl_Mod &nbsp;&nbsp;(storage control mode: 0=auto, 1=charge, 2=discharge)</div>
+                  <div>40083 — InBatV &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(input battery voltage, V)</div>
+                  <div>40274 — ChaState &nbsp;&nbsp;&nbsp;&nbsp;(SOC 0–100%)</div>
+                  <div>40982 — SoC_target &nbsp;&nbsp;(target SOC for charge/discharge control)</div>
+                  <div>40083 — W_ChaMax &nbsp;&nbsp;&nbsp;&nbsp;(max charge rate, W)</div>
+                  <div>40084 — W_DisChaMax &nbsp;(max discharge rate, W)</div>
+                  <div style="color:rgba(255,255,255,.4);margin-top:6px;"># Common gateway options that expose SunSpec as REST:</div>
+                  <div style="color:#a8e6cf;">SolarEdge, SMA, Fronius, Sungrow, ABB, Victron (via venus-os)</div>
+                </div>
+              </details>
+            </div>
+          </div>
+
+          <div id="batt-integ-relay" style="display:none;" class="batt-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px 14px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Relay Fallback — Notecard Circuit Control</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Notecard Device</label>
+                  <select id="batt-relay-device" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                    <option value="">-- Select relay device --</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Relay Number</label>
+                  <select id="batt-relay-num" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                    <option value="1">Relay 1</option><option value="2">Relay 2</option>
+                    <option value="3">Relay 3</option><option value="4">Relay 4</option>
+                  </select>
+                </div>
+              </div>
+              <div style="font-size:11px;color:var(--text-hint);margin-top:6px;">Cuts the battery charging circuit. Prevents charging but does not enable discharge. Use API integration where possible.</div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+            <button onclick="toggleBatteryEnrollForm()" style="padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-secondary);">Cancel</button>
+            <button onclick="saveBatteryAsset()" style="padding:7px 24px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save Battery Asset</button>
+          </div>
+        </div>
+
+        <!-- Battery asset list -->
+        <div id="batt-asset-list"><div class="sched-empty">No battery storage assets registered.</div></div>
+      </div>
+
+      <!-- DR Control Panel -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#9889; Demand Response — Battery Fleet</div>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:12px;">Battery DR works differently from load control — batteries can <strong>stop charging</strong> (reduce load) or <strong>discharge</strong> (support grid). Min backup reserve is always maintained.</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px;">
+          <button onclick="dispatchBatteryDR('discharge')" style="padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--green-dark);background:var(--green-bg);color:var(--green-dark);font-size:13px;font-weight:700;cursor:pointer;">&#9889; Discharge<br/><span style="font-size:10px;font-weight:400;">Self-consumption mode — support grid</span></button>
+          <button onclick="dispatchBatteryDR('hold')" style="padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--blue-dark);background:var(--blue-lt);color:var(--blue-dark);font-size:13px;font-weight:700;cursor:pointer;">&#9632; Hold<br/><span style="font-size:10px;font-weight:400;">Stop charging — preserve SOC</span></button>
+          <button onclick="dispatchBatteryDR('charge')" style="padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--amber);background:var(--amber-bg);color:var(--amber);font-size:13px;font-weight:700;cursor:pointer;">&#9650; Pre-charge<br/><span style="font-size:10px;font-weight:400;">Charge before event — maximize capacity</span></button>
+          <button onclick="restoreBatteryDR()" style="padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--green);background:var(--green-bg);color:var(--green-dark);font-size:13px;font-weight:700;cursor:pointer;">&#9989; Restore<br/><span style="font-size:10px;font-weight:400;">Return to autonomous mode</span></button>
+        </div>
+        <div id="batt-dr-log" style="font-size:11px;color:var(--text-hint);padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);">No DR events dispatched this session.</div>
+      </div>
+
+      <!-- Status & History -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128202; Battery Status & History</div>
+          <button class="queue-refresh" onclick="loadBatteryLog()">Refresh</button>
+        </div>
+        <div id="batt-log-list"><div class="sched-empty">No battery events recorded.</div></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- ── DRILL DOWN SIDE PANEL ── -->
 <div id="fh-drill-panel" style="position:fixed;top:0;right:-480px;width:480px;height:100vh;background:var(--surface);border-left:0.5px solid var(--border-md);z-index:1000;transition:right 0.3s ease;display:flex;flex-direction:column;box-shadow:-4px 0 20px rgba(0,0,0,0.15);">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:0.5px solid var(--border-md);">
@@ -4382,6 +4753,7 @@ function runTabInit(name) {
   if (name === "monitor-scada")    { initSCADA(); }
   if (name === "monitor-ev")       { initEVCharging(); }
   if (name === "ev-chargers")      { initEVDevicesTab(); }
+  if (name === "battery")          { initBatteryTab(); }
 }
 
 function switchTab(name, btn) { switchMain(name, btn); }
@@ -4668,6 +5040,12 @@ function populateTargetSelector() {
     if (evDevs.length) {
       html += `<optgroup label="EV Chargers">` +
         evDevs.map(d => `<option value="${d.uid}">⚡ ${d.name}</option>`).join("") +
+        `</optgroup>`;
+    }
+    const battDevs = DEVICES.filter(d => d.type === "battery");
+    if (battDevs.length) {
+      html += `<optgroup label="Battery Systems">` +
+        battDevs.map(d => `<option value="${d.uid}">🔋 ${d.name}</option>`).join("") +
         `</optgroup>`;
     }
     sel.innerHTML = html;
@@ -10535,6 +10913,14 @@ async function sendToDevice(uid, key) {
     else        await restoreEVSingle(stationId);
     return;
   }
+  // Route battery assets to battery DR dispatch
+  if (uid.startsWith("batt_")) {
+    const assetId = uid.replace("batt_","");
+    const isShed  = key === "all_off" || key.endsWith("_off");
+    if (isShed) await dispatchBatteryDRSingle(assetId, "hold");
+    else        await restoreBatterySingle(assetId);
+    return;
+  }
   try {
     await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(COMMANDS[key]) });
   } catch(e) { console.error("Send error", uid, e); }
@@ -10678,6 +11064,19 @@ function renderGroups() {
                   <div>
                     <div class="group-device-label">&#9889; ${d.name}</div>
                     <div class="group-device-uid">${d.evAsset?.integration||"OCPP"} &bull; ${d.uid.replace("ev_","")}</div>
+                  </div>
+                </label>`).join("");
+            }
+            const battDevs = DEVICES.filter(d => d.type === "battery");
+            if (battDevs.length) {
+              html += `<div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;padding:8px 0 4px;font-family:monospace;border-top:0.5px solid var(--border);margin-top:6px;">Battery Systems</div>`;
+              html += battDevs.map(d => `
+                <label class="group-device-row ${(groupAssignments[d.uid] || []).includes(gn) ? "group-member" : ""}">
+                  <input type="checkbox" ${(groupAssignments[d.uid] || []).includes(gn) ? "checked" : ""}
+                    onchange="assignDevice('${d.uid}', ${gn}, this.checked)" />
+                  <div>
+                    <div class="group-device-label">&#128267; ${d.name}</div>
+                    <div class="group-device-uid">${d.battAsset?.integration||"Battery"} &bull; ${d.battAsset?.capacity_kwh||""}kWh</div>
                   </div>
                 </label>`).join("");
             }
@@ -16124,6 +16523,573 @@ async function testTeslaConnection() {
     if (resultEl) { resultEl.textContent = `Error: ${e.message}`; resultEl.style.color = "var(--red)"; }
   }
 }
+
+
+// ── Battery Storage Assets ────────────────────────────────────────────────────
+
+let batteryAssets      = [];
+let batteryLiveData    = {}; // { assetId: { soc, power_kw, mode, status } }
+let battSelectedInteg  = null;
+let battRefreshTimer   = null;
+const BATT_STORAGE_KEY = "lcp_battery_assets_v1";
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function initBatteryTab() {
+  // Populate relay device dropdown
+  const relayDev = document.getElementById("batt-relay-device");
+  if (relayDev) {
+    relayDev.innerHTML = '<option value="">-- Select relay device --</option>' +
+      (DEVICES || []).filter(d => d.type !== "ev" && !d.uid.includes("PLACEHOLDER"))
+        .map(d => `<option value="${d.uid}">${d.name}</option>`).join("");
+  }
+  await refreshBatteryAssets();
+  await loadBatteryLog();
+  if (!battRefreshTimer) {
+    battRefreshTimer = setInterval(() => { refreshBatteryAssets(); }, 60000);
+  }
+}
+
+// ── Form UI ───────────────────────────────────────────────────────────────────
+function toggleBatteryEnrollForm() {
+  const form = document.getElementById("batt-enroll-form");
+  if (!form) return;
+  const isOpen = form.style.display !== "none";
+  form.style.display = isOpen ? "none" : "block";
+  if (!isOpen) {
+    battSelectedInteg = null;
+    document.querySelectorAll(".batt-integ-opt").forEach(b => {
+      b.style.borderColor = "var(--border-md)";
+      b.style.background  = "var(--surface)";
+    });
+    document.querySelectorAll(".batt-integ-panel").forEach(p => p.style.display = "none");
+    ["batt-asset-id","batt-name","batt-location",
+      "batt-sonnen-ip","batt-sonnen-token",
+      "batt-victron-token","batt-victron-install-id","batt-victron-instance"
+    ].forEach(id => {
+      const el = document.getElementById(id); if(el) el.value = "";
+    });
+    document.getElementById("batt-capacity-kwh").value = "13.5";
+    document.getElementById("batt-max-kw").value       = "7.6";
+    document.getElementById("batt-min-reserve").value  = "20";
+  }
+}
+
+function selectBattInteg(integ, el) {
+  battSelectedInteg = integ;
+  document.querySelectorAll(".batt-integ-opt").forEach(b => {
+    b.style.borderColor = "var(--border-md)";
+    b.style.background  = "var(--surface)";
+  });
+  if (el) { el.style.borderColor = "var(--green)"; el.style.background = "var(--green-bg)"; }
+  document.querySelectorAll(".batt-integ-panel").forEach(p => p.style.display = "none");
+  const panel = document.getElementById(`batt-integ-${integ}`);
+  if (panel) panel.style.display = "block";
+}
+
+// ── Save Asset ────────────────────────────────────────────────────────────────
+async function saveBatteryAsset() {
+  if (!battSelectedInteg) { setStatus("error", "Select an integration type."); return; }
+  const assetId = document.getElementById("batt-asset-id")?.value?.trim().toUpperCase().replace(/\s+/g,"_");
+  const name    = document.getElementById("batt-name")?.value?.trim();
+  if (!assetId) { setStatus("error", "Asset ID required."); return; }
+  if (!name)    { setStatus("error", "Display name required."); return; }
+
+  const integConfig = { type: battSelectedInteg };
+
+  if (battSelectedInteg === "tesla_powerwall") {
+    integConfig.client_id     = document.getElementById("batt-tesla-client-id")?.value?.trim();
+    integConfig.client_secret = document.getElementById("batt-tesla-client-secret")?.value?.trim();
+    integConfig.refresh_token = document.getElementById("batt-tesla-refresh-token")?.value?.trim();
+    integConfig.site_id       = document.getElementById("batt-tesla-site-id")?.value?.trim();
+    integConfig.region        = document.getElementById("batt-tesla-region")?.value || "na";
+    if (!integConfig.client_id || !integConfig.refresh_token || !integConfig.site_id) {
+      setStatus("error", "Tesla Client ID, refresh token, and energy site ID required."); return;
+    }
+  } else if (battSelectedInteg === "enphase") {
+    integConfig.api_key    = document.getElementById("batt-enphase-api-key")?.value?.trim();
+    integConfig.client_id  = document.getElementById("batt-enphase-client-id")?.value?.trim();
+    integConfig.system_id  = document.getElementById("batt-enphase-system-id")?.value?.trim();
+    integConfig.token      = document.getElementById("batt-enphase-token")?.value?.trim();
+    if (!integConfig.api_key || !integConfig.system_id) {
+      setStatus("error", "Enphase API key and system ID required."); return;
+    }
+  } else if (battSelectedInteg === "solaredge") {
+    integConfig.api_key = document.getElementById("batt-se-api-key")?.value?.trim();
+    integConfig.site_id = document.getElementById("batt-se-site-id")?.value?.trim();
+    if (!integConfig.api_key || !integConfig.site_id) {
+      setStatus("error", "SolarEdge API key and site ID required."); return;
+    }
+  } else if (battSelectedInteg === "generac") {
+    integConfig.username  = document.getElementById("batt-generac-user")?.value?.trim();
+    integConfig.password  = document.getElementById("batt-generac-pass")?.value?.trim();
+    integConfig.device_id = document.getElementById("batt-generac-device-id")?.value?.trim();
+    if (!integConfig.username || !integConfig.device_id) {
+      setStatus("error", "Generac username and device ID required."); return;
+    }
+  } else if (battSelectedInteg === "sonnen") {
+    integConfig.ip    = document.getElementById("batt-sonnen-ip")?.value?.trim();
+    integConfig.token = document.getElementById("batt-sonnen-token")?.value?.trim();
+    if (!integConfig.ip) { setStatus("error", "Battery IP address required."); return; }
+  } else if (battSelectedInteg === "victron") {
+    integConfig.token      = document.getElementById("batt-victron-token")?.value?.trim();
+    integConfig.install_id = document.getElementById("batt-victron-install-id")?.value?.trim();
+    integConfig.instance   = document.getElementById("batt-victron-instance")?.value?.trim() || "276";
+    if (!integConfig.token || !integConfig.install_id) {
+      setStatus("error", "Victron VRM token and installation ID required."); return;
+    }
+  } else if (battSelectedInteg === "local_rest") {
+    integConfig.url          = document.getElementById("batt-rest-url")?.value?.trim();
+    integConfig.token        = document.getElementById("batt-rest-token")?.value?.trim();
+    integConfig.shed_path    = document.getElementById("batt-rest-shed-path")?.value?.trim();
+    integConfig.restore_path = document.getElementById("batt-rest-restore-path")?.value?.trim();
+    if (!integConfig.url) { setStatus("error", "Gateway URL required."); return; }
+  } else if (battSelectedInteg === "relay") {
+    integConfig.relay_uid = document.getElementById("batt-relay-device")?.value;
+    integConfig.relay_num = parseInt(document.getElementById("batt-relay-num")?.value || "1");
+    if (!integConfig.relay_uid) { setStatus("error", "Select a relay device."); return; }
+  }
+
+  const record = {
+    asset_id:     assetId,
+    name,
+    integration:  battSelectedInteg,
+    location:     document.getElementById("batt-location")?.value?.trim() || null,
+    capacity_kwh: parseFloat(document.getElementById("batt-capacity-kwh")?.value || "13.5"),
+    max_kw:       parseFloat(document.getElementById("batt-max-kw")?.value || "7.6"),
+    dr_enrolled:  document.getElementById("batt-dr")?.value === "true",
+    min_reserve:  parseInt(document.getElementById("batt-min-reserve")?.value || "20"),
+    integ_config: JSON.stringify(integConfig),
+    status:       "unknown",
+    enabled:      true,
+    enrolled_at:  new Date().toISOString()
+  };
+
+  // Supabase → localStorage fallback
+  let saved = false;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/battery_assets`, {
+      method:"POST",
+      headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+        "Content-Type":"application/json","Prefer":"return=representation"},
+      body: JSON.stringify(record)
+    });
+    if (res.ok) saved = true;
+    else console.warn("Battery save Supabase:", res.status, await res.text());
+  } catch(e) { console.warn("Battery save:", e.message); }
+
+  if (!saved) {
+    const existing = JSON.parse(localStorage.getItem(BATT_STORAGE_KEY) || "[]");
+    existing.push({ ...record, id:Date.now(), integ_config:integConfig });
+    localStorage.setItem(BATT_STORAGE_KEY, JSON.stringify(existing));
+  }
+
+  setStatus("ready", `${name} saved as battery asset.`);
+  toggleBatteryEnrollForm();
+  await refreshBatteryAssets();
+}
+
+// ── Load & Render ─────────────────────────────────────────────────────────────
+async function refreshBatteryAssets() {
+  let dbRows = [], localRows = [];
+  try {
+    const rows = await supabaseGet("battery_assets?enabled=eq.true&order=enrolled_at.asc");
+    if (Array.isArray(rows) && rows.length) dbRows = rows;
+  } catch(e) {}
+  try {
+    const saved = localStorage.getItem(BATT_STORAGE_KEY);
+    if (saved) localRows = JSON.parse(saved);
+  } catch(e) {}
+
+  const dbIds   = new Set(dbRows.map(r => r.asset_id));
+  const local   = localRows.filter(r => !dbIds.has(r.asset_id));
+  batteryAssets = [...dbRows, ...local].map(a => ({
+    ...a,
+    integ_config: typeof a.integ_config === "string"
+      ? (() => { try { return JSON.parse(a.integ_config); } catch(e) { return {}; } })()
+      : (a.integ_config || {})
+  }));
+
+  // Poll live status for REST-capable assets
+  for (const a of batteryAssets) {
+    await pollBatteryStatus(a).catch(() => {});
+  }
+
+  renderBatteryAssets();
+  updateBatteryFleetStats();
+  injectBatteriesIntoDevices();
+}
+
+async function pollBatteryStatus(asset) {
+  const integ = asset.integ_config?.type || asset.integration;
+  try {
+    let res, data;
+    if (integ === "tesla_powerwall") {
+      res  = await fetch(PROXY_URL + "battery/tesla/status", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          client_id:     asset.integ_config.client_id,
+          client_secret: asset.integ_config.client_secret,
+          refresh_token: asset.integ_config.refresh_token,
+          region:        asset.integ_config.region || "na",
+          site_id:       asset.integ_config.site_id
+        })
+      });
+      data = await res.json();
+      if (data.ok) {
+        batteryLiveData[asset.asset_id] = {
+          soc:          data.percentage_charged,
+          power_kw:     data.power_kw,
+          mode:         data.mode,
+          status:       data.grid_status === "SystemGridConnected" ? "online" : "offline",
+          grid_status:  data.grid_status,
+          last_updated: new Date().toISOString()
+        };
+      }
+    } else if (integ === "solaredge") {
+      res  = await fetch(PROXY_URL + "battery/solaredge/status", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ api_key:asset.integ_config.api_key, site_id:asset.integ_config.site_id })
+      });
+      data = await res.json();
+      if (data.ok) {
+        batteryLiveData[asset.asset_id] = {
+          soc:      data.soc,
+          power_kw: data.power_kw,
+          mode:     data.mode || "unknown",
+          status:   "online",
+          last_updated: new Date().toISOString()
+        };
+      }
+    } else if (integ === "sonnen") {
+      res  = await fetch(PROXY_URL + "battery/sonnen/status", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ ip:asset.integ_config.ip, token:asset.integ_config.token })
+      });
+      data = await res.json();
+      if (data.ok) {
+        batteryLiveData[asset.asset_id] = {
+          soc:      data.soc,
+          power_kw: data.power_kw,
+          mode:     data.mode || "self_consumption",
+          status:   "online",
+          last_updated: new Date().toISOString()
+        };
+      }
+    } else if (integ === "victron") {
+      res  = await fetch(PROXY_URL + "battery/victron/status", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ token:asset.integ_config.token, install_id:asset.integ_config.install_id })
+      });
+      data = await res.json();
+      if (data.ok) {
+        batteryLiveData[asset.asset_id] = {
+          soc:      data.soc,
+          power_kw: data.power_kw,
+          mode:     data.mode || "unknown",
+          status:   "online",
+          last_updated: new Date().toISOString()
+        };
+      }
+    }
+  } catch(e) { /* silent — status stays as last known */ }
+}
+
+function renderBatteryAssets() {
+  const list = document.getElementById("batt-asset-list");
+  if (!list) return;
+  if (!batteryAssets.length) {
+    list.innerHTML = '<div class="sched-empty">No battery storage assets registered. Click + Add Battery to begin.</div>';
+    return;
+  }
+
+  const INTEG_LABELS = {
+    tesla_powerwall:"Tesla Powerwall", enphase:"Enphase IQ",
+    solaredge:"SolarEdge", generac:"Generac PWRcell",
+    sonnen:"Sonnen", victron:"Victron (VRM)",
+    local_rest:"Generic / Modbus", relay:"Relay Fallback"
+  };
+  const INTEG_COLORS = {
+    tesla_powerwall:"#cc0000", enphase:"#f37321",
+    solaredge:"#1e4d91", generac:"#e63946",
+    sonnen:"#5a9a3e", victron:"#009cde",
+    local_rest:"var(--text-secondary)", relay:"var(--text-secondary)"
+  };
+
+  list.innerHTML = batteryAssets.map(a => {
+    const integ  = a.integ_config?.type || a.integration;
+    const live   = batteryLiveData[a.asset_id] || {};
+    const soc    = live.soc != null ? live.soc : null;
+    const socFill= soc != null ? soc : 0;
+    const socClass= soc == null ? "" : soc < 20 ? "low" : soc < 40 ? "medium" : "";
+    const power  = live.power_kw != null ? `${live.power_kw > 0 ? "+" : ""}${parseFloat(live.power_kw).toFixed(1)} kW` : "—";
+    const mode   = live.mode || a.status || "unknown";
+    const powerColor = live.power_kw > 0 ? "var(--green-dark)" : live.power_kw < 0 ? "var(--red)" : "var(--text-hint)";
+
+    return `<div class="battery-card${live.dr_active ? " ev-shed-active" : ""}">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
+        <div class="feed-status-dot ${live.status === "online" ? "live" : "unavailable"}"></div>
+        <span style="font-size:13px;font-weight:600;color:var(--text-primary);">&#128267; ${a.name}</span>
+        <span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;font-family:monospace;border:0.5px solid ${INTEG_COLORS[integ]||"var(--border-md)"};color:${INTEG_COLORS[integ]||"var(--text-hint)"};background:${INTEG_COLORS[integ]||"var(--border-md)"}18;">${INTEG_LABELS[integ]||integ}</span>
+        <span class="battery-mode-badge ${mode}">${mode.replace(/_/g," ")}</span>
+        ${a.dr_enrolled ? '<span style="font-size:10px;font-weight:700;color:var(--green-dark);background:var(--green-bg);padding:2px 8px;border-radius:10px;">DR</span>' : ""}
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+        <div class="ev-meter-tile">
+          <div class="ev-meter-val" style="color:${soc==null?"var(--text-hint)":soc<20?"var(--red)":soc<40?"var(--amber)":"var(--green-dark)"};">${soc!=null?soc+"%":"—"}</div>
+          <div class="ev-meter-lbl">State of Charge</div>
+        </div>
+        <div class="ev-meter-tile">
+          <div class="ev-meter-val" style="color:${powerColor};">${power}</div>
+          <div class="ev-meter-lbl">${live.power_kw>0?"Charging":live.power_kw<0?"Discharging":"Power"}</div>
+        </div>
+        <div class="ev-meter-tile">
+          <div class="ev-meter-val">${a.capacity_kwh} <span style="font-size:11px;font-weight:400;">kWh</span></div>
+          <div class="ev-meter-lbl">Capacity</div>
+        </div>
+        <div class="ev-meter-tile">
+          <div class="ev-meter-val">${a.min_reserve}%</div>
+          <div class="ev-meter-lbl">Min Reserve</div>
+        </div>
+      </div>
+
+      ${soc != null ? `<div class="battery-soc-bar"><div class="battery-soc-fill ${socClass}" style="width:${socFill}%;"></div></div>` : ""}
+
+      <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap;">
+        <div style="font-size:10px;color:var(--text-hint);flex:1;align-self:center;">${a.location||""} &bull; ${a.max_kw} kW max</div>
+        ${a.dr_enrolled ? `
+        <button onclick="dispatchBatteryDRSingle('${a.asset_id}','discharge')" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--green-dark);background:var(--green-bg);color:var(--green-dark);font-size:10px;font-weight:600;cursor:pointer;">Discharge</button>
+        <button onclick="dispatchBatteryDRSingle('${a.asset_id}','hold')" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--blue-dark);background:var(--blue-lt);color:var(--blue-dark);font-size:10px;font-weight:600;cursor:pointer;">Hold</button>
+        <button onclick="restoreBatterySingle('${a.asset_id}')" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--green);background:var(--green-bg);color:var(--green-dark);font-size:10px;cursor:pointer;">Restore</button>` : ""}
+        <button onclick="removeBatteryAsset('${a.asset_id}')" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">Remove</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function updateBatteryFleetStats() {
+  const total   = batteryAssets.length;
+  const online  = batteryAssets.filter(a => batteryLiveData[a.asset_id]?.status === "online").length;
+  const avgSoc  = batteryAssets.length
+    ? Math.round(batteryAssets.reduce((s,a) => s + (batteryLiveData[a.asset_id]?.soc || 0), 0) / total)
+    : 0;
+  const totalKw = batteryAssets.reduce((s,a) => s + (batteryLiveData[a.asset_id]?.power_kw || 0), 0);
+  const drCount = batteryAssets.filter(a => a.dr_enrolled).length;
+  const drActive= batteryAssets.filter(a => batteryLiveData[a.asset_id]?.dr_active).length;
+
+  const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+  set("batt-stat-total",     total);
+  set("batt-stat-online",    online);
+  set("batt-stat-avg-soc",   total ? avgSoc + "%" : "—");
+  set("batt-stat-kw",        total ? totalKw.toFixed(1) : "—");
+  set("batt-stat-dr",        drCount);
+  set("batt-stat-dr-active", drActive);
+
+  const statusEl = document.getElementById("batt-status");
+  if (statusEl) {
+    statusEl.textContent  = online > 0 ? `${online}/${total} online` : total > 0 ? "All offline" : "No assets";
+    statusEl.style.background = online > 0 ? "var(--green-bg)" : "var(--surface2)";
+    statusEl.style.color      = online > 0 ? "var(--green-dark)" : "var(--text-hint)";
+  }
+}
+
+async function removeBatteryAsset(assetId) {
+  if (!confirm("Remove this battery asset?")) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/battery_assets?asset_id=eq.${encodeURIComponent(assetId)}`, {
+      method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+    });
+  } catch(e) {}
+  const local = JSON.parse(localStorage.getItem(BATT_STORAGE_KEY) || "[]");
+  localStorage.setItem(BATT_STORAGE_KEY, JSON.stringify(local.filter(a => a.asset_id !== assetId)));
+  await refreshBatteryAssets();
+}
+
+// ── Inject batteries into DEVICES for group + scheduler targeting ──────────────
+function injectBatteriesIntoDevices() {
+  DEVICES = DEVICES.filter(d => d.type !== "battery");
+  batteryAssets.forEach(a => {
+    DEVICES.push({
+      id:          `batt_${a.asset_id}`,
+      uid:         `batt_${a.asset_id}`,
+      name:        a.name,
+      type:        "battery",
+      battAsset:   a
+    });
+    if (!relayState[`batt_${a.asset_id}`]) {
+      relayState[`batt_${a.asset_id}`] = { 1:false, 2:false, 3:false, 4:false, all:false };
+    }
+  });
+  if (typeof refreshGroupSelectors === "function") refreshGroupSelectors();
+  if (typeof populateTargetSelector === "function") populateTargetSelector();
+}
+
+// ── DR Dispatch ───────────────────────────────────────────────────────────────
+async function dispatchBatteryDR(action) {
+  const enrolled = batteryAssets.filter(a => a.dr_enrolled);
+  if (!enrolled.length) { setStatus("error", "No DR-enrolled battery assets."); return; }
+  const results = await Promise.all(enrolled.map(a => dispatchBatteryDRSingle(a.asset_id, action)));
+  const ok = results.filter(Boolean).length;
+
+  const logEl = document.getElementById("batt-dr-log");
+  if (logEl) logEl.innerHTML = `<span style="color:var(--green-dark);font-weight:600;">&#9889; ${action.toUpperCase()} dispatched</span> — ${ok}/${enrolled.length} batteries responded &bull; ${new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}`;
+
+  setStatus("ready", `Battery DR ${action} sent to ${enrolled.length} asset${enrolled.length!==1?"s":""}.`);
+  await logBatteryDREvent(action, enrolled.map(a => a.asset_id));
+}
+
+async function dispatchBatteryDRSingle(assetId, action) {
+  const asset = batteryAssets.find(a => a.asset_id === assetId);
+  if (!asset) return false;
+  const integ = asset.integ_config?.type || asset.integration;
+
+  try {
+    if (integ === "tesla_powerwall") {
+      const res = await fetch(PROXY_URL + "battery/tesla/" + (action === "discharge" ? "discharge" : action === "hold" ? "hold" : "charge"), {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          client_id:     asset.integ_config.client_id,
+          client_secret: asset.integ_config.client_secret,
+          refresh_token: asset.integ_config.refresh_token,
+          region:        asset.integ_config.region || "na",
+          site_id:       asset.integ_config.site_id,
+          min_reserve:   asset.min_reserve || 20
+        })
+      });
+      const data = await res.json();
+      if (data.ok) batteryLiveData[assetId] = { ...batteryLiveData[assetId], dr_active:true, mode:action };
+      return data.ok;
+
+    } else if (integ === "enphase") {
+      const res = await fetch(PROXY_URL + "battery/enphase/" + action, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          api_key:   asset.integ_config.api_key,
+          token:     asset.integ_config.token,
+          system_id: asset.integ_config.system_id,
+          min_reserve: asset.min_reserve || 20
+        })
+      });
+      return (await res.json()).ok;
+
+    } else if (integ === "solaredge") {
+      const res = await fetch(PROXY_URL + "battery/solaredge/" + action, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          api_key:    asset.integ_config.api_key,
+          site_id:    asset.integ_config.site_id,
+          min_reserve: asset.min_reserve || 20
+        })
+      });
+      return (await res.json()).ok;
+
+    } else if (integ === "sonnen") {
+      const endpoint = action === "restore" ? "restore" : action === "charge" ? "charge" : action;
+      const res = await fetch(PROXY_URL + "battery/sonnen/" + endpoint, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          ip:          asset.integ_config.ip,
+          token:       asset.integ_config.token,
+          min_reserve: asset.min_reserve || 20
+        })
+      });
+      return (await res.json()).ok;
+
+    } else if (integ === "victron") {
+      const res = await fetch(PROXY_URL + "battery/victron/" + (action === "restore" ? "restore" : action === "charge" ? "charge" : action === "hold" ? "hold" : "discharge"), {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          token:      asset.integ_config.token,
+          install_id: asset.integ_config.install_id,
+          instance:   asset.integ_config.instance || "276",
+          min_reserve: asset.min_reserve || 20
+        })
+      });
+      return (await res.json()).ok;
+
+    } else if (integ === "local_rest") {
+      const path = action === "discharge" ? asset.integ_config.shed_path
+                 : action === "hold"      ? asset.integ_config.shed_path
+                 : asset.integ_config.restore_path;
+      if (!path) return false;
+      const res = await fetch(PROXY_URL + "battery/local/command", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ url:asset.integ_config.url + path, token:asset.integ_config.token })
+      });
+      return (await res.json()).ok;
+
+    } else if (integ === "relay") {
+      // Cut charging circuit (relay OFF)
+      const relayUid = asset.integ_config?.relay_uid;
+      if (relayUid && action !== "charge") {
+        const hex = buildLCHex("all_on","dlc",19,2,Math.floor(Date.now()/1000));
+        await sendLCToDevice(relayUid, hex);
+        return true;
+      }
+      return false;
+    }
+  } catch(e) {
+    console.warn(`dispatchBatteryDRSingle ${assetId} (${integ}):`, e.message);
+    return false;
+  }
+  return false;
+}
+
+async function restoreBatteryDR() {
+  const enrolled = batteryAssets.filter(a => a.dr_enrolled);
+  await Promise.all(enrolled.map(a => restoreBatterySingle(a.asset_id)));
+  const logEl = document.getElementById("batt-dr-log");
+  if (logEl) logEl.innerHTML = `<span style="color:var(--green-dark);font-weight:600;">&#9989; Restore dispatched</span> — ${enrolled.length} batter${enrolled.length!==1?"ies":"y"} &bull; ${new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}`;
+  setStatus("ready", "Battery assets restored to autonomous mode.");
+  await logBatteryDREvent("restore", enrolled.map(a => a.asset_id));
+}
+
+async function restoreBatterySingle(assetId) {
+  await dispatchBatteryDRSingle(assetId, "restore");
+  if (batteryLiveData[assetId]) batteryLiveData[assetId].dr_active = false;
+}
+
+async function logBatteryDREvent(action, assetIds) {
+  try {
+    await supabasePost("battery_dr_log", {
+      action,
+      asset_ids:  JSON.stringify(assetIds),
+      fired_at:   new Date().toISOString(),
+      fired_by:   currentUser?.email || "manual"
+    });
+  } catch(e) {}
+}
+
+// Battery routing merged into sendToDevice above
+
+// ── Log & History ──────────────────────────────────────────────────────────────
+async function loadBatteryLog() {
+  const list = document.getElementById("batt-log-list");
+  if (!list) return;
+  try {
+    const rows = await supabaseGet("battery_dr_log?order=fired_at.desc&limit=50");
+    if (!Array.isArray(rows) || !rows.length) {
+      list.innerHTML = '<div class="sched-empty">No battery DR events recorded yet.</div>';
+      return;
+    }
+    list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead><tr>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Action</th>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Assets</th>
+        <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">By</th>
+        <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Time</th>
+      </tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-weight:600;color:${r.action==="restore"?"var(--green-dark)":"var(--blue-dark)"};">${r.action.toUpperCase()}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-size:10px;font-family:monospace;">${(() => { try { return JSON.parse(r.asset_ids||"[]").join(", "); } catch(e) { return r.asset_ids||""; } })()}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;color:var(--text-hint);">${r.fired_by||"—"}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;color:var(--text-hint);">${new Date(r.fired_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</td>
+      </tr>`).join("")}</tbody></table>`;
+  } catch(e) {
+    list.innerHTML = '<div class="sched-empty">Run SQL to create battery_dr_log table.</div>';
+  }
+}
+
 
 // ── Background Theme System ───────────────────────────────────────────────────
 
