@@ -13868,8 +13868,18 @@ async function saveSCADASource() {
   }
 
   setStatus("ready", `SCADA source "${name}" saved.`);
-  toggleSCADASourceForm();
+
+  // Hide the form first, then reload
+  const form = document.getElementById("scada-source-form");
+  if (form) form.style.display = "none";
   selectedSCADAProto = null;
+
+  // Reset protocol visual state
+  document.querySelectorAll(".scada-proto-opt").forEach(b => {
+    b.style.borderColor = "var(--border-md)";
+    b.style.background  = "var(--surface)";
+  });
+
   await loadSCADASources();
 }
 
@@ -13908,19 +13918,21 @@ async function loadSCADASources() {
       scadaSources.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
   }
 
-  if (!list) return;
-  if (!scadaSources.length) {
-    list.innerHTML = '<div class="sched-empty">No data sources configured.</div>';
-    return;
-  }
-
   const PROTO_LABELS = {
     rest_poll:"REST/JSON", webhook:"Webhook/POST", mqtt_ws:"MQTT/WS",
     opcua_rest:"OPC-UA REST", csv_upload:"CSV Upload",
     dnp3_gw:"DNP3 Gateway", modbus_gw:"Modbus Gateway", iec61850_gw:"IEC 61850"
   };
 
-  list.innerHTML = scadaSources.map(s => {
+  // Build HTML regardless of whether element is currently visible
+  const renderSources = () => {
+    const el = document.getElementById("scada-source-list");
+    if (!el) return;
+    if (!scadaSources.length) {
+      el.innerHTML = '<div class="sched-empty">No data sources configured. Click + Add Source to add one.</div>';
+      return;
+    }
+    el.innerHTML = scadaSources.map(s => {
     const cfg = (() => { try { return JSON.parse(s.config||"{}"); } catch(e) { return {}; } })();
     const territory = scadaTerritories.find(t => t.id == s.territory_id);
     return `<div class="scada-source-card">
@@ -13942,7 +13954,17 @@ async function loadSCADASources() {
         <button onclick="removeSCADASource(${s.id})" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">Remove</button>
       </div>
     </div>`;
-  }).join("");
+    }).join("");
+  }; // end renderSources
+
+  renderSources();
+
+  // Also update point source filter dropdown
+  const filterEl = document.getElementById("scada-point-source-filter");
+  if (filterEl) {
+    filterEl.innerHTML = '<option value="">All Sources</option>' +
+      scadaSources.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
+  }
 }
 
 async function testSCADASource(id) {
