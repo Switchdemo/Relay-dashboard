@@ -10710,6 +10710,7 @@ function selectRuleTier(tier) {
   const apWarn   = document.getElementById("autopilot-warning");
   if (graceRow) graceRow.style.display = tier === "autopilot" ? "block" : "none";
   if (apWarn)   apWarn.style.display   = tier === "autopilot" ? "block" : "none";
+  applyRuleTierVisibility(tier);
 }
 
 function onRuleFeedChange() {
@@ -12097,12 +12098,7 @@ function applyRuleTierVisibility(tier) {
   if (cancelRow) cancelRow.style.display = tier === "alert" ? "none" : "flex";
 }
 
-// Override selectRuleTier to also apply visibility
-const _origSelectRuleTier = selectRuleTier;
-function selectRuleTier(tier) {
-  _origSelectRuleTier(tier);
-  applyRuleTierVisibility(tier);
-}
+// selectRuleTier visibility wired directly into the original function below
 
 // ── Email Notification System ─────────────────────────────────────────────────
 
