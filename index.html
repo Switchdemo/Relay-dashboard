@@ -717,7 +717,40 @@
 <!-- ── DATA TAB ── -->
 <div class="tab-pane" id="tab-data">
   <div class="scroll-content">
-    <div class="data-grid" id="data-grid"></div>
+    <div style="max-width:1200px;margin:0 auto;padding:1rem;display:flex;flex-direction:column;gap:16px;">
+
+      <!-- Device Status Table -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">Device Status</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div id="summary-refresh-indicator" style="font-size:10px;color:var(--text-hint);">Auto-refresh: 10s</div>
+            <button class="queue-refresh" onclick="loadDeviceStatusTable()">Refresh Now</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+              <tr>
+                <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Device</th>
+                <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Active in Dashboard</th>
+                <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Last Report</th>
+                <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Location</th>
+                <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Event Received</th>
+                <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Relay Status</th>
+              </tr>
+            </thead>
+            <tbody id="summary-device-tbody">
+              <tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-hint);">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Live Device Tiles (existing data-grid) -->
+      <div class="data-grid" id="data-grid"></div>
+
+    </div>
   </div>
 </div>
 
@@ -819,34 +852,6 @@
           <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;">No Event</div>
           <div id="stat-no-event" style="font-size:32px;font-weight:700;color:var(--amber);margin:6px 0;">—</div>
           <div style="font-size:11px;color:var(--text-hint);">No event received</div>
-        </div>
-      </div>
-
-      <!-- Device Status Table -->
-      <div class="sched-card">
-        <div class="sched-card-header">
-          <div class="sched-card-title">Device Status</div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <div id="summary-refresh-indicator" style="font-size:10px;color:var(--text-hint);">Auto-refresh: 10s</div>
-            <button class="queue-refresh" onclick="loadProgramSummary()">Refresh Now</button>
-          </div>
-        </div>
-        <div style="overflow-x:auto;">
-          <table style="width:100%;border-collapse:collapse;font-size:12px;">
-            <thead>
-              <tr>
-                <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Device</th>
-                <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Active in Dashboard</th>
-                <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Last Report</th>
-                <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Location</th>
-                <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Event Received</th>
-                <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Relay Status</th>
-              </tr>
-            </thead>
-            <tbody id="summary-device-tbody">
-              <tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-hint);">Loading...</td></tr>
-            </tbody>
-          </table>
         </div>
       </div>
 
@@ -5245,6 +5250,7 @@ function runTabInit(name) {
   if (name === "openadr")         { initOpenADREvents(); }
   if (name === "admin-openadr")   { initOpenADRConfig(); }
   if (name === "admin-drprograms") { initDRPrograms(); }
+  if (name === "data")             { initDeviceStatusTab(); }
   if (name === "admin-help")      { showHelpTab("scheduling"); }
   if (name === "admin-monitor-triggers") { initMonitorTriggers(); }
   if (name === "monitor-triggers") { initMonitorTriggersMain(); }
@@ -7207,21 +7213,114 @@ function viewDeviceHistory(uid) {
   }, 150);
 }
 
+// ── Current Device Status Tab ────────────────────────────────────────────────
+let deviceStatusRefreshInterval = null;
+
+async function initDeviceStatusTab() {
+  await loadDeviceStatusTable();
+  if (deviceStatusRefreshInterval) clearInterval(deviceStatusRefreshInterval);
+  deviceStatusRefreshInterval = setInterval(async () => {
+    const tabActive = document.getElementById("tab-data")?.classList.contains("active");
+    if (tabActive) {
+      await loadDeviceStatusTable();
+      updateRefreshIndicator();
+    }
+  }, 10000);
+}
+
+// loadDeviceStatusTable — same logic as loadProgramSummary's device section
+async function loadDeviceStatusTable() {
+  const now        = Date.now();
+  const oneHourAgo = new Date(now - 60 * 60 * 1000).toISOString();
+  refreshCountdown = 10;
+
+  const deviceData = {};
+  const eventData  = {};
+
+  // Only relay-type DEVICES have Supabase readings — filter others out
+  const relayDevices = DEVICES.filter(d => d.type !== "ev" && d.type !== "battery" && d.type !== "generator" && !d.uid.includes("PLACEHOLDER"));
+
+  for (const device of relayDevices) {
+    try {
+      const rows = await supabaseGet(
+        `device_readings?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1`
+      );
+      deviceData[device.uid] = rows?.[0] ?? null;
+    } catch(e) { deviceData[device.uid] = null; }
+  }
+  for (const device of relayDevices) {
+    try {
+      const rows = await supabaseGet(
+        `device_events?device_uid=eq.${encodeURIComponent(device.uid)}&order=received_at.desc&limit=1`
+      );
+      eventData[device.uid] = rows?.[0] ?? null;
+    } catch(e) { eventData[device.uid] = null; }
+  }
+
+  let online = 0, offline = 0, noEvent = 0;
+
+  const tbody = document.getElementById("summary-device-tbody");
+  if (!tbody) return;
+
+  if (!relayDevices.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-hint);">No relay devices enrolled.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = relayDevices.map(device => {
+    const reading    = deviceData[device.uid];
+    const evData     = eventData[device.uid];
+    const lastReport = reading?.recorded_at ? new Date(reading.recorded_at) : null;
+    const isOnline   = lastReport && (now - lastReport.getTime()) < 60 * 60 * 1000;
+    const location   = reading?.location ?? "—";
+
+    const hasEvent    = !!evData;
+    const eventStatus = hasEvent
+      ? `<span style="color:var(--green-dark);font-weight:500;">${evData.lc_status_label || "Received"}</span><br><span style="font-size:10px;color:var(--text-hint);">${new Date(evData.received_at).toLocaleString()}</span>`
+      : `<span style="color:var(--amber);font-weight:500;">No event received</span>`;
+
+    const r1 = reading?.relay_status_r1 > 0;
+    const r2 = reading?.relay_status_r2 > 0;
+    const r3 = reading?.relay_status_r3 > 0;
+    const r4 = reading?.relay_status_r4 > 0;
+    const anyOn   = r1 || r2 || r3 || r4;
+    const relayStr = reading
+      ? [r1?"R1":"", r2?"R2":"", r3?"R3":"", r4?"R4":""].filter(Boolean).join(", ") || "All Off"
+      : "—";
+
+    if (isOnline) online++; else offline++;
+    if (!hasEvent) noEvent++;
+
+    const statusDot = isOnline
+      ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:5px;"></span>Online`
+      : `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red);margin-right:5px;"></span>Offline`;
+
+    return `<tr style="${!hasEvent ? "background:rgba(186,117,23,0.05);" : ""}">
+      <td style="padding:8px;border-bottom:0.5px solid var(--border);font-weight:500;">${device.name}<br><span style="font-size:10px;color:var(--text-hint);font-family:monospace;">${device.uid}</span></td>
+      <td style="padding:8px;border-bottom:0.5px solid var(--border);white-space:nowrap;">${statusDot}</td>
+      <td style="padding:8px;border-bottom:0.5px solid var(--border);white-space:nowrap;">${lastReport ? lastReport.toLocaleString() : "Never"}</td>
+      <td style="padding:8px;border-bottom:0.5px solid var(--border);">${location}</td>
+      <td style="padding:8px;border-bottom:0.5px solid var(--border);">${eventStatus}</td>
+      <td style="padding:8px;border-bottom:0.5px solid var(--border);font-weight:${anyOn?"600":"400"};color:${anyOn?"var(--green-dark)":"var(--text-secondary)"};">${relayStr}</td>
+    </tr>`;
+  }).join("");
+
+  // Update summary stats (shared with summary tab stat tiles)
+  const enrolled = relayDevices.length;
+  const statEl = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+  statEl("stat-enrolled", enrolled);
+  statEl("stat-online",   online);
+  statEl("stat-offline",  offline);
+  statEl("stat-no-event", noEvent);
+}
+
 // ── PROGRAM SUMMARY ──────────────────────────────────────────────────────────
 let summaryRefreshInterval = null;
 
 async function initSummaryTab() {
   refreshSummaryFeeds();
-  await loadProgramSummary();
   await populateParticipationEventSelect();
-  // Auto-refresh every 10 seconds
-  if (summaryRefreshInterval) clearInterval(summaryRefreshInterval);
-  summaryRefreshInterval = setInterval(async () => {
-    if (document.getElementById("tab-summary").classList.contains("active")) {
-      await loadProgramSummary();
-      updateRefreshIndicator();
-    }
-  }, 10000);
+  // Summary no longer auto-refreshes device status — that lives on Current Device Status tab
 }
 
 let refreshCountdown = 10;
@@ -7271,7 +7370,12 @@ async function loadProgramSummary() {
   let online = 0, offline = 0, noEvent = 0;
   const enrolled = DEVICES.length;
 
-  const tbody = document.getElementById("summary-device-tbody");
+  // Device status table now lives on Current Device Status tab — not rendered here
+  // Stats are updated by loadDeviceStatusTable() when that tab is active
+  // Keep stat counters synced if they've been loaded
+  return;
+
+  const tbody = document.getElementById("summary-device-tbody_unused");
   if (!tbody) return;
 
   tbody.innerHTML = DEVICES.map(device => {
