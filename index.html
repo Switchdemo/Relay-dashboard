@@ -13699,8 +13699,21 @@ function selectSCADAProto(proto, el) {
 function toggleSCADASourceForm() {
   const form = document.getElementById("scada-source-form");
   if (!form) return;
-  form.style.display = form.style.display === "none" ? "block" : "none";
-  if (form.style.display === "block") populateSCADATerritorySelect();
+  const isOpen = form.style.display !== "none";
+  form.style.display = isOpen ? "none" : "block";
+  if (!isOpen) {
+    populateSCADATerritorySelect();
+    // Reset protocol selection visual state
+    document.querySelectorAll(".scada-proto-opt").forEach(b => {
+      b.style.borderColor = "var(--border-md)";
+      b.style.background  = "var(--surface)";
+    });
+    document.getElementById("scada-src-name").value = "";
+    ["scada-proto-rest","scada-proto-webhook","scada-proto-mqtt_ws","scada-proto-opcua_rest","scada-proto-csv_upload","scada-proto-dnp3_gw","scada-proto-modbus_gw","scada-proto-iec61850_gw"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = "none";
+    });
+  }
 }
 
 function toggleSCADATerritoryForm() {
@@ -13802,6 +13815,8 @@ async function saveSCADASource() {
     protoConfig.nodes = document.getElementById("scada-opc-nodes")?.value?.trim();
   }
 
+  const recordTypes = Array.from(document.getElementById("scada-record-types")?.selectedOptions || []).map(o => o.value);
+
   const record = {
     name,
     protocol:        selectedSCADAProto,
@@ -13809,27 +13824,84 @@ async function saveSCADASource() {
     config:          JSON.stringify(protoConfig),
     record_interval: parseInt(document.getElementById("scada-record-interval")?.value || "900"),
     retention_days:  parseInt(document.getElementById("scada-retention")?.value || "90"),
-    record_types:    Array.from(document.getElementById("scada-record-types")?.selectedOptions || []).map(o => o.value),
+    record_types:    JSON.stringify(recordTypes),
     enabled:         true,
     status:          "configured",
     created_at:      new Date().toISOString()
   };
 
+  // Try Supabase first, fall back to localStorage
+  let savedToDb = false;
   try {
-    await supabasePost("scada_sources", record);
-    setStatus("ready", `SCADA source "${name}" saved.`);
-    toggleSCADASourceForm();
-    await loadSCADASources();
-  } catch(e) { setStatus("error", "Failed to save source: " + e.message); }
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/scada_sources`, {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+      },
+      body: JSON.stringify(record)
+    });
+    if (res.ok) {
+      savedToDb = true;
+    } else {
+      const err = await res.text();
+      console.warn("SCADA source save failed:", res.status, err);
+    }
+  } catch(e) {
+    console.warn("SCADA source save error:", e.message);
+  }
+
+  if (!savedToDb) {
+    // Fall back to localStorage
+    try {
+      const key = "lcp_scada_sources_v1";
+      const existing = JSON.parse(localStorage.getItem(key) || "[]");
+      existing.push({ ...record, id: Date.now(), record_types: recordTypes });
+      localStorage.setItem(key, JSON.stringify(existing));
+      console.log("SCADA source saved to localStorage (run SQL to create scada_sources table)");
+    } catch(e2) {
+      setStatus("error", "Failed to save source: " + e2.message);
+      return;
+    }
+  }
+
+  setStatus("ready", `SCADA source "${name}" saved.`);
+  toggleSCADASourceForm();
+  selectedSCADAProto = null;
+  await loadSCADASources();
 }
 
 async function loadSCADASources() {
   const list = document.getElementById("scada-source-list");
   const filter = document.getElementById("scada-point-source-filter");
+
+  let dbRows = [];
+  let localRows = [];
+
   try {
     const rows = await supabaseGet("scada_sources?enabled=eq.true&order=created_at.asc");
-    scadaSources = Array.isArray(rows) ? rows : [];
-  } catch(e) { scadaSources = []; }
+    if (Array.isArray(rows) && rows.length) dbRows = rows;
+  } catch(e) { console.warn("loadSCADASources:", e.message); }
+
+  try {
+    const saved = localStorage.getItem("lcp_scada_sources_v1");
+    if (saved) localRows = JSON.parse(saved);
+  } catch(e) {}
+
+  // Merge — DB takes priority, supplement with local-only
+  const dbNames = new Set(dbRows.map(r => r.name));
+  const localOnly = localRows.filter(r => !dbNames.has(r.name));
+  scadaSources = [...dbRows, ...localOnly];
+
+  // Normalize record_types — may be string or array
+  scadaSources = scadaSources.map(s => ({
+    ...s,
+    record_types: typeof s.record_types === "string"
+      ? (() => { try { return JSON.parse(s.record_types); } catch(e) { return ["analog","alarm","status","derived"]; } })()
+      : (s.record_types || ["analog","alarm","status","derived"])
+  }));
 
   if (filter) {
     filter.innerHTML = '<option value="">All Sources</option>' +
