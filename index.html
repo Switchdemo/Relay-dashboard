@@ -3079,45 +3079,47 @@
         <!-- Add utility form -->
         <div id="add-utility-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px;border:0.5px solid var(--border-md);">
           <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;font-family:monospace;">Add Utility</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+          <!-- State selector drives utility list -->
+          <div style="display:grid;grid-template-columns:120px 1fr;gap:10px;margin-bottom:12px;align-items:end;">
             <div>
-              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Utility Name</label>
-              <select id="new-util-preset" onchange="applyUtilityPreset()" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
-                <option value="">-- Select or enter custom --</option>
-                <optgroup label="Oklahoma">
-                  <option value="OGE|Oklahoma Gas &amp; Electric|Oklahoma|OK|https://outagemap.oge.com/|617">OG&amp;E — Oklahoma Gas &amp; Electric</option>
-                  <option value="PSO|Public Service Oklahoma|Oklahoma|OK|https://www.psoklahoma.com/outage/outage-map/|618">PSO — Public Service Oklahoma</option>
-                  <option value="OEC|Oklahoma Electric Cooperative|Oklahoma|OK|https://okcoop.org/outage-map/|">OEC — Oklahoma Electric Cooperative</option>
-                </optgroup>
-                <optgroup label="Texas">
-                  <option value="ONCOR|Oncor Electric Delivery|Dallas|TX|https://stormcenter.oncor.com/|376">Oncor Electric Delivery</option>
-                  <option value="TNMP|Texas New Mexico Power|Texas|TX|https://tnmp.com/outages/|">TNMP — Texas New Mexico Power</option>
-                  <option value="AEPCENTRAL|AEP Texas Central|Texas|TX|https://www.aeptexas.com/outage/|">AEP Texas Central</option>
-                </optgroup>
-                <optgroup label="New England">
-                  <option value="GMP|Green Mountain Power|Vermont|VT|https://gmpoutages.comed.com/|">Green Mountain Power</option>
-                  <option value="EVERSOURCE|Eversource Energy|Connecticut|CT|https://www.eversource.com/content/ct-c/residential/outages-emergencies/report-power-outage/outage-map|">Eversource Energy</option>
-                </optgroup>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">State</label>
+              <select id="new-util-state" onchange="populateUtilityByState(this.value)" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="">-- State --</option>
+                <option>AL</option><option>AK</option><option>AZ</option><option>AR</option>
+                <option>CA</option><option>CO</option><option>CT</option><option>DC</option>
+                <option>DE</option><option>FL</option><option>GA</option><option>HI</option>
+                <option>ID</option><option>IL</option><option>IN</option><option>IA</option>
+                <option>KS</option><option>KY</option><option>LA</option><option>ME</option>
+                <option>MD</option><option>MA</option><option>MI</option><option>MN</option>
+                <option>MS</option><option>MO</option><option>MT</option><option>NE</option>
+                <option>NV</option><option>NH</option><option>NJ</option><option>NM</option>
+                <option>NY</option><option>NC</option><option>ND</option><option>OH</option>
+                <option>OK</option><option>OR</option><option>PA</option><option>RI</option>
+                <option>SC</option><option>SD</option><option>TN</option><option>TX</option>
+                <option>UT</option><option>VT</option><option>VA</option><option>WA</option>
+                <option>WV</option><option>WI</option><option>WY</option>
               </select>
             </div>
             <div>
-              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">County / Area</label>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Utility</label>
+              <select id="new-util-preset" onchange="applyUtilityPreset()" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="">-- Select state first --</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">County / Area (optional)</label>
               <input type="text" id="new-util-county" placeholder="e.g. Oklahoma County" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;" />
             </div>
             <div>
-              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">State</label>
-              <input type="text" id="new-util-state" placeholder="e.g. OK" maxlength="2" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;font-family:monospace;text-transform:uppercase;" />
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">ODIN Utility ID (auto-filled if known)</label>
+              <input type="text" id="new-util-odin-id" placeholder="Optional — leave blank" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;font-family:monospace;" />
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:12px;">
-            <div>
-              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Outage Map URL</label>
-              <input type="url" id="new-util-map-url" placeholder="https://outagemap.utility.com/" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;" />
-            </div>
-            <div>
-              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">ODIN Utility ID (optional)</label>
-              <input type="text" id="new-util-odin-id" placeholder="e.g. 617" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;font-family:monospace;" />
-            </div>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Outage Map URL (auto-filled)</label>
+            <input type="url" id="new-util-map-url" placeholder="Select a utility above to auto-fill" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;" />
           </div>
           <div style="display:flex;gap:8px;justify-content:flex-end;">
             <button onclick="toggleAddUtility()" style="padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-secondary);">Cancel</button>
@@ -12466,16 +12468,136 @@ function confirmSuggestedEvent(ruleId) {
 
 // ── Outage Tracker ────────────────────────────────────────────────────────────
 
-const UTILITY_PRESETS = {
-  "OGE":      { name:"Oklahoma Gas & Electric", county:"Oklahoma", state:"OK", mapUrl:"https://outagemap.oge.com/", odinId:"617" },
-  "PSO":      { name:"Public Service Oklahoma", county:"Oklahoma", state:"OK", mapUrl:"https://www.psoklahoma.com/outage/outage-map/", odinId:"618" },
-  "OEC":      { name:"Oklahoma Electric Cooperative", county:"Oklahoma", state:"OK", mapUrl:"https://okcoop.org/outage-map/", odinId:"" },
-  "ONCOR":    { name:"Oncor Electric Delivery", county:"Dallas", state:"TX", mapUrl:"https://stormcenter.oncor.com/", odinId:"376" },
-  "TNMP":     { name:"Texas New Mexico Power", county:"Texas", state:"TX", mapUrl:"https://tnmp.com/outages/", odinId:"" },
-  "AEPCENTRAL":{ name:"AEP Texas Central", county:"Texas", state:"TX", mapUrl:"https://www.aeptexas.com/outage/", odinId:"" },
-  "GMP":      { name:"Green Mountain Power", county:"Vermont", state:"VT", mapUrl:"https://gmpoutages.comed.com/", odinId:"" },
-  "EVERSOURCE":{ name:"Eversource Energy", county:"Connecticut", state:"CT", mapUrl:"https://www.eversource.com/content/ct-c/residential/outages-emergencies/report-power-outage/outage-map", odinId:"" }
+// ── Utility database keyed by state — major IOUs and co-ops ─────────────────
+const UTILITY_DB = {
+  AL: [{ name:"Alabama Power",              mapUrl:"https://www.alabamapower.com/outages/view-outages.html" },
+       { name:"PowerSouth Energy Coop",     mapUrl:"https://powersouth.com/outage-center/" }],
+  AK: [{ name:"Chugach Electric Association",mapUrl:"https://www.chugachelectric.com/outages" },
+       { name:"Golden Valley Electric",     mapUrl:"https://gvea.com/outages/" }],
+  AZ: [{ name:"Arizona Public Service (APS)",mapUrl:"https://www.aps.com/en/outage/outage-information/outage-center" },
+       { name:"Salt River Project (SRP)",   mapUrl:"https://www.srpnet.com/electric/outages" },
+       { name:"Tucson Electric Power",      mapUrl:"https://www.tucsonelectric.com/outages" }],
+  AR: [{ name:"Entergy Arkansas",           mapUrl:"https://www.entergy-arkansas.com/outages/" },
+       { name:"Arkansas Electric Co-op",    mapUrl:"https://aeci.org/outage-map/" }],
+  CA: [{ name:"Pacific Gas & Electric (PG&E)",mapUrl:"https://pgealerts.alerts.pge.com/outagecenter/" },
+       { name:"Southern California Edison", mapUrl:"https://outage.sce.com/wps/portal/home" },
+       { name:"San Diego Gas & Electric",   mapUrl:"https://sdge.com/outages" },
+       { name:"LADWP",                      mapUrl:"https://ladwp.com/ladwp/faces/ladwp/outage/outagemap" }],
+  CO: [{ name:"Xcel Energy Colorado",       mapUrl:"https://www.xcelenergy.com/outages_and_renewables/power_outages" },
+       { name:"Black Hills Energy",         mapUrl:"https://www.blackhillsenergy.com/outages-and-safety/report-an-electric-outage" }],
+  CT: [{ name:"Eversource Connecticut",     mapUrl:"https://www.eversource.com/content/ct-c/residential/outages-emergencies/report-power-outage/outage-map" },
+       { name:"United Illuminating (Avangrid)",mapUrl:"https://ui.com/outage/outage-map" }],
+  DE: [{ name:"Delmarva Power",             mapUrl:"https://www.delmarva.com/outages/reportoranoutage/outagemap.aspx" }],
+  FL: [{ name:"Florida Power & Light (FPL)",mapUrl:"https://www.fpl.com/outage/outage-map.html" },
+       { name:"Duke Energy Florida",        mapUrl:"https://outagemap.duke-energy.com/#/current-storm/fl" },
+       { name:"Tampa Electric (TECO)",      mapUrl:"https://www.tampaelectric.com/residential/customerservice/outages/outagemap/" },
+       { name:"Florida Public Utilities",   mapUrl:"https://www.fpuc.com/my-home/outages-and-emergencies/" }],
+  GA: [{ name:"Georgia Power",             mapUrl:"https://outagemap.georgiapower.com/" },
+       { name:"Flint Energies",            mapUrl:"https://www.flintenergies.com/outage-center" }],
+  HI: [{ name:"Hawaiian Electric (HECO)",   mapUrl:"https://www.hawaiianelectric.com/billing-and-payment/rates-and-regulations/request-forms/outage-map" }],
+  ID: [{ name:"Idaho Power",               mapUrl:"https://idahopower.com/outages/outage-map/" },
+       { name:"Rocky Mountain Power",      mapUrl:"https://www.rockymountainpower.net/outages.html" }],
+  IL: [{ name:"ComEd (Exelon)",            mapUrl:"https://outagemap.comed.com/" },
+       { name:"Ameren Illinois",           mapUrl:"https://www.ameren.com/illinois/outage/outage-map" }],
+  IN: [{ name:"AES Indiana",               mapUrl:"https://outage.aes.com/outage-center/outage-map?region=Indiana" },
+       { name:"Duke Energy Indiana",       mapUrl:"https://outagemap.duke-energy.com/#/current-storm/in" },
+       { name:"Indiana Michigan Power",    mapUrl:"https://www.indianamichiganpower.com/info/outages/outagemap.aspx" }],
+  IA: [{ name:"MidAmerican Energy",        mapUrl:"https://www.midamericanenergy.com/outage" },
+       { name:"Alliant Energy (Iowa)",     mapUrl:"https://www.alliantenergy.com/ResidentialCustomers/OutageCenter/OutageMap" }],
+  KS: [{ name:"Evergy Kansas",             mapUrl:"https://www.evergy.com/manage-account/outage-center/outage-map" },
+       { name:"Westar Energy",             mapUrl:"https://www.westarenergy.com/outages" }],
+  KY: [{ name:"Kentucky Utilities (LG&E)", mapUrl:"https://lge-ku.com/outage-center/outage-map" },
+       { name:"Duke Energy Kentucky",      mapUrl:"https://outagemap.duke-energy.com/#/current-storm/ky" }],
+  LA: [{ name:"Entergy Louisiana",         mapUrl:"https://www.entergy-louisiana.com/outages/" },
+       { name:"Cleco Power",               mapUrl:"https://www.cleco.com/my-home/outage-center/outage-map" }],
+  ME: [{ name:"Central Maine Power",       mapUrl:"https://outagemap.cmpco.com/" },
+       { name:"Versant Power",             mapUrl:"https://versantpower.com/outages/" }],
+  MD: [{ name:"BGE (Exelon)",              mapUrl:"https://outage.bge.com/map/" },
+       { name:"Pepco (Exelon)",            mapUrl:"https://outage.pepco.com/map/" },
+       { name:"Delmarva Power",            mapUrl:"https://www.delmarva.com/outages/reportoranoutage/outagemap.aspx" }],
+  MA: [{ name:"Eversource Massachusetts",  mapUrl:"https://www.eversource.com/content/ema-c/residential/outages-emergencies/report-power-outage/outage-map" },
+       { name:"National Grid Massachusetts",mapUrl:"https://www.nationalgridus.com/MA-Home/Outages/Outage-Map" }],
+  MI: [{ name:"DTE Energy",                mapUrl:"https://newlook.dteenergy.com/wps/wcm/connect/dte-web/quicklinks/electric-outage-map" },
+       { name:"Consumers Energy",          mapUrl:"https://www.consumersenergy.com/outagemap" }],
+  MN: [{ name:"Xcel Energy Minnesota",     mapUrl:"https://www.xcelenergy.com/outages_and_renewables/power_outages" },
+       { name:"Minnesota Power",           mapUrl:"https://www.mnpower.com/CustomerService/OutageMap" },
+       { name:"Great River Energy",        mapUrl:"https://www.greatriverenergy.com/outages" }],
+  MS: [{ name:"Entergy Mississippi",       mapUrl:"https://www.entergy-mississippi.com/outages/" },
+       { name:"Mississippi Power",         mapUrl:"https://www.mississippipower.com/outages" }],
+  MO: [{ name:"Ameren Missouri",           mapUrl:"https://www.ameren.com/missouri/outage/outage-map" },
+       { name:"Evergy Missouri",           mapUrl:"https://www.evergy.com/manage-account/outage-center/outage-map" }],
+  MT: [{ name:"NorthWestern Energy",       mapUrl:"https://www.northwesternenergy.com/outage-center" },
+       { name:"Montana-Dakota Utilities",  mapUrl:"https://www.montana-dakota.com/electric/outage-center" }],
+  NE: [{ name:"OPPD",                      mapUrl:"https://outage.oppd.com/" },
+       { name:"Lincoln Electric System",   mapUrl:"https://les.com/electric-services/outage" },
+       { name:"Nebraska Public Power",     mapUrl:"https://www.nppd.com/safety-and-outages/outage-map/" }],
+  NV: [{ name:"NV Energy",                 mapUrl:"https://www.nvenergy.com/account-services/manage-my-service/outage-center" }],
+  NH: [{ name:"Eversource New Hampshire",  mapUrl:"https://www.eversource.com/content/nh/residential/outages-emergencies/report-power-outage/outage-map" },
+       { name:"Unitil",                    mapUrl:"https://unitil.com/outage-center/outage-map" }],
+  NJ: [{ name:"PSE&G",                     mapUrl:"https://nj.pseg.com/home/customer-support/poweroutages/power-outage-map.aspx" },
+       { name:"JCP&L (FirstEnergy)",       mapUrl:"https://firstenergycorp.com/outages_help/check_outage_status/outage_map.html" },
+       { name:"Atlantic City Electric",    mapUrl:"https://www.atlanticcityelectric.com/outages/reportoranoutage/outagemap.aspx" }],
+  NM: [{ name:"PNM Resources",             mapUrl:"https://www.pnm.com/outages" },
+       { name:"El Paso Electric",          mapUrl:"https://www.epelectric.com/outage-map" }],
+  NY: [{ name:"Con Edison",                mapUrl:"https://conedison.com/en/outages-and-emergencies/outagemap/" },
+       { name:"National Grid NY",          mapUrl:"https://www.nationalgridus.com/NY-Home/Outages/Outage-Map" },
+       { name:"Central Hudson",            mapUrl:"https://www.centralhudson.com/outage/view-current-outages/" },
+       { name:"PSEG Long Island",          mapUrl:"https://www.psegliny.com/outage" }],
+  NC: [{ name:"Duke Energy Carolinas",     mapUrl:"https://outagemap.duke-energy.com/#/current-storm/carolinas" },
+       { name:"Duke Energy Progress",      mapUrl:"https://outagemap.duke-energy.com/#/current-storm/progress" },
+       { name:"Dominion Energy NC",        mapUrl:"https://www.dominionenergy.com/outage/outage-map" }],
+  ND: [{ name:"Montana-Dakota Utilities",  mapUrl:"https://www.montana-dakota.com/electric/outage-center" },
+       { name:"Xcel Energy ND",            mapUrl:"https://www.xcelenergy.com/outages_and_renewables/power_outages" }],
+  OH: [{ name:"AEP Ohio",                  mapUrl:"https://www.aepohio.com/info/outages/outagemap.aspx" },
+       { name:"FirstEnergy Ohio",          mapUrl:"https://firstenergycorp.com/outages_help/check_outage_status/outage_map.html" },
+       { name:"Duke Energy Ohio",          mapUrl:"https://outagemap.duke-energy.com/#/current-storm/oh" },
+       { name:"AES Ohio (DP&L)",           mapUrl:"https://outage.aes.com/outage-center/outage-map?region=Ohio" }],
+  OK: [{ name:"Oklahoma Gas & Electric (OG&E)", mapUrl:"https://outagemap.oge.com/", odinId:"617" },
+       { name:"Public Service Oklahoma (PSO)",  mapUrl:"https://www.psoklahoma.com/outage/outage-map/", odinId:"618" },
+       { name:"Oklahoma Electric Cooperative",  mapUrl:"https://okcoop.org/outage-map/" }],
+  OR: [{ name:"Pacific Power",             mapUrl:"https://www.pacificpower.net/outages-safety/outage-center/outage-map.html" },
+       { name:"Portland General Electric", mapUrl:"https://www.portlandgeneral.com/outage" },
+       { name:"Eugene Water & Electric",   mapUrl:"https://www.eweb.org/outages" }],
+  PA: [{ name:"PECO (Exelon)",             mapUrl:"https://www.peco.com/safety-and-outages/check-outage-status/outage-map" },
+       { name:"PPL Electric Utilities",    mapUrl:"https://www.pplweb.com/for-your-home/outage-center/view-outages-map" },
+       { name:"West Penn Power (FirstEnergy)",mapUrl:"https://firstenergycorp.com/outages_help/check_outage_status/outage_map.html" },
+       { name:"Duquesne Light",            mapUrl:"https://www.duquesnelight.com/outages-safety/report-view-outage" }],
+  RI: [{ name:"National Grid Rhode Island",mapUrl:"https://www.nationalgridus.com/RI-Home/Outages/Outage-Map" }],
+  SC: [{ name:"Duke Energy SC",            mapUrl:"https://outagemap.duke-energy.com/#/current-storm/carolinas" },
+       { name:"Dominion Energy SC",        mapUrl:"https://www.dominionenergy.com/outage/outage-map" },
+       { name:"Santee Cooper",             mapUrl:"https://outagemap.santeecooper.com/" }],
+  SD: [{ name:"Xcel Energy SD",            mapUrl:"https://www.xcelenergy.com/outages_and_renewables/power_outages" },
+       { name:"Montana-Dakota Utilities",  mapUrl:"https://www.montana-dakota.com/electric/outage-center" },
+       { name:"Black Hills Energy SD",     mapUrl:"https://www.blackhillsenergy.com/outages-and-safety/report-an-electric-outage" }],
+  TN: [{ name:"TVA / Memphis Light Gas",   mapUrl:"https://www.mlgw.com/service/outages" },
+       { name:"Nashville Electric Service",mapUrl:"https://nespower.com/outages" },
+       { name:"EPB Chattanooga",           mapUrl:"https://epb.com/outage-map/" }],
+  TX: [{ name:"Oncor Electric Delivery",   mapUrl:"https://stormcenter.oncor.com/", odinId:"376" },
+       { name:"AEP Texas Central",         mapUrl:"https://www.aeptexas.com/outage/" },
+       { name:"AEP Texas North",           mapUrl:"https://www.aeptexas.com/outage/" },
+       { name:"Texas New Mexico Power",    mapUrl:"https://tnmp.com/outages/" },
+       { name:"CenterPoint Energy",        mapUrl:"https://stormcenter.centerpointenergy.com/" },
+       { name:"Bluebonnet Electric Co-op", mapUrl:"https://www.bluebonnet.coop/outage-center/outage-map/" }],
+  UT: [{ name:"Rocky Mountain Power",      mapUrl:"https://www.rockymountainpower.net/outages.html" }],
+  VT: [{ name:"Green Mountain Power",      mapUrl:"https://gmpoutages.comed.com/" },
+       { name:"Burlington Electric",       mapUrl:"https://www.burlingtonelectric.com/outage" }],
+  VA: [{ name:"Dominion Energy Virginia",  mapUrl:"https://www.dominionenergy.com/outage/outage-map" },
+       { name:"Appalachian Power (AEP VA)",mapUrl:"https://www.appalachianpower.com/info/outages/outagemap.aspx" }],
+  WA: [{ name:"Puget Sound Energy (PSE)",  mapUrl:"https://pse.com/en/outage-map" },
+       { name:"Seattle City Light",        mapUrl:"https://www.seattle.gov/city-light/outages-and-emerencies/outage-map" },
+       { name:"Pacificorp / Pacific Power",mapUrl:"https://www.pacificpower.net/outages-safety/outage-center/outage-map.html" }],
+  WV: [{ name:"Appalachian Power (AEP WV)",mapUrl:"https://www.appalachianpower.com/info/outages/outagemap.aspx" },
+       { name:"Mountaineer Gas / Dominion",mapUrl:"https://www.dominionenergy.com/outage/outage-map" }],
+  WI: [{ name:"We Energies",               mapUrl:"https://www.we-energies.com/services/outages/outage_maps.htm" },
+       { name:"Alliant Energy Wisconsin",  mapUrl:"https://www.alliantenergy.com/ResidentialCustomers/OutageCenter/OutageMap" },
+       { name:"Madison Gas & Electric",    mapUrl:"https://www.mge.com/customers/power/outage/" }],
+  WY: [{ name:"Rocky Mountain Power",      mapUrl:"https://www.rockymountainpower.net/outages.html" },
+       { name:"Black Hills Energy WY",     mapUrl:"https://www.blackhillsenergy.com/outages-and-safety/report-an-electric-outage" }],
+  DC: [{ name:"Pepco DC",                  mapUrl:"https://outage.pepco.com/map/" }]
 };
+
+// Legacy — kept for backward compatibility
+const UTILITY_PRESETS = {};
 
 let configuredUtilities = []; // loaded from Supabase utility_outage_config
 let outagePoller = null;
@@ -12485,12 +12607,27 @@ const OUTAGE_CONFIG_KEY = "lcp_outage_utilities_v1";
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function initOutageTracker() {
   await loadConfiguredUtilities();
+
+  // If no utilities configured yet, show a helpful state detection message
+  if (!configuredUtilities.length) {
+    const state = detectSiteState();
+    const list  = document.getElementById("outage-utility-list");
+    if (list && state) {
+      const utils = UTILITY_DB[state] || [];
+      list.innerHTML = `<div style="font-size:12px;color:var(--text-hint);padding:10px 0;">
+        &#128205; Detected state: <strong>${state}</strong> — ${utils.length} utilit${utils.length!==1?"ies":"y"} available.
+        Click <strong>+ Add Utility</strong> to select one.
+        ${utils.map(u => `<div style="margin-top:6px;font-size:11px;color:var(--text-secondary);">&#9889; ${u.name}</div>`).join("")}
+      </div>`;
+    }
+  }
+
   await refreshOutageData();
   await loadCorrelationChart();
   if (!outagePoller) {
     outagePoller = setInterval(() => {
       refreshOutageData();
-    }, 15 * 60 * 1000); // every 15 minutes
+    }, 15 * 60 * 1000);
   }
 }
 
@@ -12498,69 +12635,165 @@ async function initOutageTracker() {
 function toggleAddUtility() {
   const form = document.getElementById("add-utility-form");
   if (!form) return;
-  form.style.display = form.style.display === "none" ? "block" : "none";
-  if (form.style.display === "block") {
-    document.getElementById("new-util-preset").selectedIndex = 0;
-    document.getElementById("new-util-county").value = "";
-    document.getElementById("new-util-state").value = "";
-    document.getElementById("new-util-map-url").value = "";
-    document.getElementById("new-util-odin-id").value = "";
+  const isOpen = form.style.display !== "none";
+  form.style.display = isOpen ? "none" : "block";
+  if (!isOpen) {
+    // Auto-detect state from weather location or intake data
+    const detectedState = detectSiteState();
+    const stateEl = document.getElementById("new-util-state");
+    const presetEl = document.getElementById("new-util-preset");
+    if (stateEl) {
+      stateEl.value = detectedState || "";
+      if (detectedState) populateUtilityByState(detectedState);
+    }
+    if (presetEl) presetEl.selectedIndex = 0;
+    const countyEl = document.getElementById("new-util-county");
+    const mapEl    = document.getElementById("new-util-map-url");
+    const odinEl   = document.getElementById("new-util-odin-id");
+    if (countyEl) countyEl.value = "";
+    if (mapEl)    mapEl.value    = "";
+    if (odinEl)   odinEl.value   = "";
   }
 }
 
+function detectSiteState() {
+  // Try intake data first
+  if (intakeData?.site?.state) return intakeData.site.state.toUpperCase().slice(0,2);
+  // Try NWS station discovery — nwsStationId starts with K for CONUS
+  // Try weather location data — NWS points API gave us state in county field
+  // Fall back to nothing — let operator select
+  return "";
+}
+
+function populateUtilityByState(state) {
+  const sel = document.getElementById("new-util-preset");
+  if (!sel || !state) return;
+  const utils = UTILITY_DB[state.toUpperCase()] || [];
+  sel.innerHTML = utils.length
+    ? `<option value="">-- Select utility --</option>` +
+      utils.map((u, i) => `<option value="${i}">${u.name}</option>`).join("")
+    : `<option value="">No utilities found for ${state}</option>`;
+}
+
 function applyUtilityPreset() {
-  const val = document.getElementById("new-util-preset")?.value;
-  if (!val) return;
-  const [key, name, county, state, mapUrl, odinId] = val.split("|");
-  document.getElementById("new-util-county").value  = county || "";
-  document.getElementById("new-util-state").value   = state  || "";
-  document.getElementById("new-util-map-url").value = mapUrl || "";
-  document.getElementById("new-util-odin-id").value = odinId || "";
+  const stateEl = document.getElementById("new-util-state");
+  const selEl   = document.getElementById("new-util-preset");
+  const state   = stateEl?.value?.toUpperCase();
+  const idx     = parseInt(selEl?.value);
+  if (!state || isNaN(idx)) return;
+
+  const utils = UTILITY_DB[state] || [];
+  const u     = utils[idx];
+  if (!u) return;
+
+  const mapEl  = document.getElementById("new-util-map-url");
+  const odinEl = document.getElementById("new-util-odin-id");
+  if (mapEl)  mapEl.value  = u.mapUrl || "";
+  if (odinEl) odinEl.value = u.odinId || "";
 }
 
 async function saveUtilityConfig() {
-  const preset  = document.getElementById("new-util-preset")?.value || "";
-  const parts   = preset.split("|");
-  const name    = parts[1] || document.getElementById("new-util-preset")?.options[document.getElementById("new-util-preset").selectedIndex]?.text || "Custom Utility";
-  const county  = document.getElementById("new-util-county")?.value?.trim();
-  const state   = document.getElementById("new-util-state")?.value?.trim().toUpperCase();
-  const mapUrl  = document.getElementById("new-util-map-url")?.value?.trim();
-  const odinId  = document.getElementById("new-util-odin-id")?.value?.trim();
+  const stateEl  = document.getElementById("new-util-state");
+  const selEl    = document.getElementById("new-util-preset");
+  const state    = stateEl?.value?.trim().toUpperCase();
+  const selIdx   = parseInt(selEl?.value);
+  const county   = document.getElementById("new-util-county")?.value?.trim();
+  const mapUrl   = document.getElementById("new-util-map-url")?.value?.trim();
+  const odinId   = document.getElementById("new-util-odin-id")?.value?.trim();
 
-  if (!name || !state) { setStatus("error", "Utility name and state are required."); return; }
+  if (!state) { setStatus("error", "Please select a state."); return; }
+
+  // Get utility name from UTILITY_DB or fallback to custom
+  const utils = UTILITY_DB[state] || [];
+  const util  = !isNaN(selIdx) && utils[selIdx] ? utils[selIdx] : null;
+  const name  = util?.name || (selEl?.options[selEl.selectedIndex]?.text?.replace(/^--.*--$/, "").trim()) || "";
+
+  if (!name) {
+    setStatus("error", "Please select a utility from the list.");
+    return;
+  }
+
+  const finalMapUrl = mapUrl || util?.mapUrl || "";
+  const finalOdinId = odinId || util?.odinId || "";
 
   const record = {
     utility_name: name,
     county:       county || state,
     state,
-    map_url:      mapUrl || null,
-    odin_id:      odinId || null,
+    map_url:      finalMapUrl || null,
+    odin_id:      finalOdinId || null,
     enabled:      true,
     added_at:     new Date().toISOString()
   };
 
+  // Try Supabase first, fall back to localStorage
+  let savedToDb = false;
   try {
-    await supabasePost("utility_outage_config", record);
-    setStatus("ready", `${name} added to outage tracker.`);
-    toggleAddUtility();
-    await loadConfiguredUtilities();
-    await refreshOutageData();
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/utility_outage_config`, {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+      },
+      body: JSON.stringify(record)
+    });
+    if (res.ok) {
+      savedToDb = true;
+    } else {
+      const err = await res.text();
+      console.warn("Supabase utility save failed:", res.status, err);
+    }
   } catch(e) {
-    setStatus("error", "Failed to save utility: " + e.message);
+    console.warn("Supabase utility save error:", e.message);
   }
+
+  if (!savedToDb) {
+    // Fall back to localStorage
+    try {
+      const existing = JSON.parse(localStorage.getItem(OUTAGE_CONFIG_KEY) || "[]");
+      const newEntry = { ...record, id: Date.now() };
+      existing.push(newEntry);
+      localStorage.setItem(OUTAGE_CONFIG_KEY, JSON.stringify(existing));
+      console.log("Utility saved to localStorage (Supabase table may not exist yet)");
+    } catch(e) {
+      setStatus("error", "Failed to save utility: " + e.message);
+      return;
+    }
+  }
+
+  setStatus("ready", `${name} added to outage tracker.`);
+  toggleAddUtility();
+  await loadConfiguredUtilities();
+  await refreshOutageData();
 }
 
 async function loadConfiguredUtilities() {
+  let dbRows = [];
+  let localRows = [];
+
+  // Try Supabase
   try {
     const rows = await supabaseGet("utility_outage_config?enabled=eq.true&order=added_at.asc");
-    configuredUtilities = Array.isArray(rows) ? rows : [];
+    if (Array.isArray(rows) && rows.length > 0) {
+      dbRows = rows;
+    }
   } catch(e) {
-    // Fall back to localStorage if table not created yet
-    try {
-      const saved = localStorage.getItem(OUTAGE_CONFIG_KEY);
-      configuredUtilities = saved ? JSON.parse(saved) : [];
-    } catch(e2) { configuredUtilities = []; }
+    console.warn("loadConfiguredUtilities Supabase:", e.message);
   }
+
+  // Also check localStorage (for entries saved before SQL was run)
+  try {
+    const saved = localStorage.getItem(OUTAGE_CONFIG_KEY);
+    if (saved) localRows = JSON.parse(saved);
+  } catch(e) {}
+
+  // Merge — prefer DB rows, supplement with local-only entries
+  const dbNames = new Set(dbRows.map(r => r.utility_name));
+  const localOnly = localRows.filter(r => !dbNames.has(r.utility_name));
+  configuredUtilities = [...dbRows, ...localOnly];
+
   renderUtilityList();
 }
 
