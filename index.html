@@ -525,6 +525,17 @@
   .battery-mode-badge.dr_active      { background:var(--red-lt);color:var(--red); }
   .batt-integ-opt { padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;transition:all .15s; }
   .batt-integ-opt:hover { border-color:var(--text-primary); }
+
+  /* ── Generators ── */
+  .gen-card { border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:14px;background:var(--surface);margin-bottom:8px; }
+  .gen-status-dot { width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:3px; }
+  .gen-status-dot.running  { background:var(--green-dark);box-shadow:0 0 6px var(--green-dark); }
+  .gen-status-dot.standby  { background:var(--amber); }
+  .gen-status-dot.offline  { background:var(--border-md); }
+  .gen-status-dot.fault    { background:var(--red); }
+  .gen-integ-opt { padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;transition:all .15s; }
+  .gen-integ-opt:hover { border-color:var(--text-primary); }
+  .gen-integ-panel { display:none; }
 </style>
 </head>
 <body>
@@ -683,6 +694,7 @@
     <button class="sub-tab-btn" id="sub-settings" onclick="switchSub('devices','settings',this)">Device Settings</button>
     <button class="sub-tab-btn" id="sub-ev-chargers" onclick="switchSub('devices','ev-chargers',this)">&#128268; EV Chargers</button>
     <button class="sub-tab-btn" id="sub-battery" onclick="switchSub('devices','battery',this)">&#128267; Battery Systems</button>
+    <button class="sub-tab-btn" id="sub-generators" onclick="switchSub('devices','generators',this)">&#9889; Generators</button>
   </div>
   <div class="status-bar">
     <div class="dot ready" id="dot"></div>
@@ -4510,6 +4522,352 @@
   </div>
 </div>
 
+
+<!-- ── GENERATORS DEVICE TAB ── -->
+<div class="tab-pane" id="tab-generators">
+  <div class="scroll-content">
+    <div style="max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <!-- Fleet Overview -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#9889; Generator Assets</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span id="gen-status-badge" style="font-size:11px;font-family:monospace;padding:2px 8px;border-radius:10px;background:var(--surface2);color:var(--text-hint);">Loading...</span>
+            <button class="queue-refresh" onclick="refreshGenerators()">Refresh</button>
+            <button onclick="toggleGenEnrollForm()" style="padding:6px 14px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">+ Add Generator</button>
+          </div>
+        </div>
+
+        <!-- Fleet stats -->
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:14px;">
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="gen-stat-total">—</div><div class="ev-meter-lbl">Total</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="gen-stat-running" style="color:var(--green-dark);">—</div><div class="ev-meter-lbl">Running</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="gen-stat-standby" style="color:var(--amber);">—</div><div class="ev-meter-lbl">Standby</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="gen-stat-kw" style="color:var(--blue-dark);">—</div><div class="ev-meter-lbl">Total kW</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="gen-stat-dr">—</div><div class="ev-meter-lbl">DR Enrolled</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="gen-stat-faults" style="color:var(--red);">—</div><div class="ev-meter-lbl">Faults</div></div>
+        </div>
+
+        <!-- Architecture note -->
+        <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--text-hint);margin-bottom:14px;line-height:1.7;">
+          &#9888;&#65039; <strong>Generator DR = Start/Stop, not throttle.</strong>
+          During a DR event, enrolled generators receive a <strong>Start</strong> command so the site can island or shed utility load.
+          <strong>Relay/Dry Contact</strong> (recommended) works on 100% of generators via the two-wire remote start input.
+          Modbus TCP gateway and Generac Mobile Link (monitoring) are also supported.
+        </div>
+
+        <!-- Enroll form -->
+        <div id="gen-enroll-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:16px;margin-bottom:14px;border:0.5px solid var(--border-md);">
+          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;font-family:monospace;">Add Generator Asset</div>
+
+          <!-- Integration type selector -->
+          <div style="margin-bottom:14px;">
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em;">Integration / Control Method</label>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;">
+
+              <div class="gen-integ-opt" data-integ="relay" onclick="selectGenInteg('relay',this)">
+                <div style="font-size:13px;font-weight:700;color:var(--green-dark);">&#9989; Relay / Dry Contact</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Recommended — universal two-wire remote start via Notecard</div>
+              </div>
+
+              <div class="gen-integ-opt" data-integ="modbus" onclick="selectGenInteg('modbus',this)">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Modbus TCP Gateway</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Commercial — Generac H-100, Kohler, Cummins PCC, CAT EMCP</div>
+              </div>
+
+              <div class="gen-integ-opt" data-integ="generac_ml" onclick="selectGenInteg('generac_ml',this)">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Generac Mobile Link</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Monitoring only — status, runtime, alarms (no remote start)</div>
+              </div>
+
+              <div class="gen-integ-opt" data-integ="snmp" onclick="selectGenInteg('snmp',this)">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">SNMP Gateway</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Monitoring only — commercial facilities with SNMP infrastructure</div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Common fields -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Asset ID / Name</label>
+              <input type="text" id="gen-asset-id" placeholder="e.g. GEN-BLDG-A-01" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;font-family:monospace;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Display Name</label>
+              <input type="text" id="gen-name" placeholder="e.g. Building A Standby Generator" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Location / Site</label>
+              <input type="text" id="gen-location" placeholder="e.g. Building A Utility Room" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Manufacturer</label>
+              <select id="gen-make" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="">Generic / Unknown</option>
+                <option value="Generac">Generac</option>
+                <option value="Kohler">Kohler</option>
+                <option value="Cummins">Cummins</option>
+                <option value="Briggs & Stratton">Briggs &amp; Stratton</option>
+                <option value="CAT">CAT / Caterpillar</option>
+                <option value="MTU">MTU Onsite Energy</option>
+                <option value="Aggreko">Aggreko</option>
+                <option value="Honda">Honda</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Rated kW</label>
+              <input type="number" id="gen-rated-kw" value="22" min="1" max="5000" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Fuel Type</label>
+              <select id="gen-fuel" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="natural_gas">Natural Gas</option>
+                <option value="propane">Propane / LP</option>
+                <option value="diesel">Diesel</option>
+                <option value="dual_fuel">Dual Fuel</option>
+                <option value="gasoline">Gasoline</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Transfer Switch</label>
+              <select id="gen-transfer" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="auto">Automatic (ATS)</option>
+                <option value="manual">Manual</option>
+                <option value="soft">Soft Transfer</option>
+                <option value="none">No Transfer Switch</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">DR Enrolled</label>
+              <select id="gen-dr" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="true">Yes — DR dispatch</option>
+                <option value="false">No — monitor only</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Integration panels -->
+
+          <!-- Relay / Dry Contact (recommended) -->
+          <div id="gen-integ-relay" class="gen-integ-panel">
+            <div style="background:var(--green-bg);border:0.5px solid var(--green);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:10px;">
+              <div style="font-size:11px;font-weight:600;color:var(--green-dark);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">Relay / Dry Contact — Recommended</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+                <div>
+                  <label style="font-size:10px;color:var(--green-dark);display:block;margin-bottom:3px;">Notecard Device</label>
+                  <select id="gen-relay-device" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--green);background:var(--surface);font-size:12px;">
+                    <option value="">-- Select relay device --</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--green-dark);display:block;margin-bottom:3px;">Relay Number</label>
+                  <select id="gen-relay-num" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--green);background:var(--surface);font-size:12px;">
+                    <option value="1">Relay 1</option>
+                    <option value="2">Relay 2</option>
+                    <option value="3">Relay 3</option>
+                    <option value="4">Relay 4</option>
+                  </select>
+                </div>
+              </div>
+              <div style="font-size:11px;color:var(--green-dark);line-height:1.7;">
+                Wire the Notecard relay's NO (Normally Open) contact across the generator's two-wire remote start terminals.
+                Relay CLOSED = generator starts. Relay OPEN = generator stops.<br/>
+                Works on 100% of standby generators regardless of brand, age, or controller.
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Warm-up Time (seconds)</label>
+                <input type="number" id="gen-warmup" value="30" min="0" max="300" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Cool-down Time (seconds)</label>
+                <input type="number" id="gen-cooldown" value="60" min="0" max="300" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+              </div>
+            </div>
+          </div>
+
+          <!-- Modbus TCP Gateway -->
+          <div id="gen-integ-modbus" class="gen-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:14px;margin-bottom:8px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Modbus TCP Gateway</div>
+              <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Gateway Host / IP</label>
+                  <input type="text" id="gen-modbus-host" placeholder="192.168.1.x or gateway.local" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Port</label>
+                  <input type="number" id="gen-modbus-port" value="502" min="1" max="65535" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Unit ID</label>
+                  <input type="number" id="gen-modbus-unit" value="1" min="1" max="247" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Controller Type</label>
+                  <select id="gen-modbus-controller" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                    <option value="generic">Generic Modbus</option>
+                    <option value="generac_h100">Generac H-100</option>
+                    <option value="generac_gpanel">Generac G-Panel</option>
+                    <option value="kohler_dec">Kohler DEC 3000/3500</option>
+                    <option value="cummins_pcc">Cummins PowerCommand PCC</option>
+                    <option value="cat_emcp">CAT EMCP 4.x</option>
+                    <option value="comap_il4">ComAp InteliLite 4</option>
+                    <option value="deepsea">Deep Sea Electronics DSE</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">REST Proxy URL (optional)</label>
+                  <input type="url" id="gen-modbus-proxy" placeholder="https://gateway.local/api" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Proxy Auth Token</label>
+                  <input type="password" id="gen-modbus-token" placeholder="Bearer token (if required)" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+              </div>
+              <!-- Register reference -->
+              <details style="font-size:11px;color:var(--text-hint);">
+                <summary style="cursor:pointer;font-weight:600;color:var(--text-secondary);margin-bottom:6px;">&#128218; Modbus Register Reference</summary>
+                <div style="background:var(--ink);border-radius:var(--radius-sm);padding:10px 14px;margin-top:8px;font-family:monospace;font-size:10px;line-height:2;color:rgba(255,255,255,.7);">
+                  <div style="color:rgba(255,255,255,.4);margin-bottom:4px;"># Generac H-100 / G-Panel</div>
+                  <div>40001 — Engine Status &nbsp;&nbsp;&nbsp;(0=off, 1=cranking, 2=running, 3=fault)</div>
+                  <div>40002 — Remote Start &nbsp;&nbsp;&nbsp;&nbsp;(write 1=start, 0=stop)</div>
+                  <div>40010 — Output Voltage</div>
+                  <div>40012 — Output Frequency</div>
+                  <div>40020 — Engine Oil Pressure (psi)</div>
+                  <div>40021 — Coolant Temperature (°F)</div>
+                  <div>40030 — kW Output &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(total)</div>
+                  <div style="color:rgba(255,255,255,.4);margin-top:6px;"># Cummins PCC (PowerCommand)</div>
+                  <div>40001 — Generator Status</div>
+                  <div>40100 — Remote Start Command (write)</div>
+                  <div>40200 — kW Output</div>
+                  <div style="color:rgba(255,255,255,.4);margin-top:6px;"># ComAp InteliLite 4 (Modbus via CM3-Ethernet)</div>
+                  <div>1000 — Gen-set Mode &nbsp;&nbsp;&nbsp;&nbsp;(1=MAN, 2=AUT)</div>
+                  <div>1001 — Engine State &nbsp;&nbsp;&nbsp;&nbsp;(3=running, 5=ready)</div>
+                  <div>1100 — kW Output</div>
+                  <div>1200 — Start/Stop Command (write)</div>
+                </div>
+              </details>
+            </div>
+          </div>
+
+          <!-- Generac Mobile Link (monitoring only) -->
+          <div id="gen-integ-generac_ml" class="gen-integ-panel">
+            <div style="background:var(--amber-bg);border:0.5px solid var(--amber);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">
+              &#9888;&#65039; <strong>Monitoring only.</strong> Generac Mobile Link does not expose a remote start API to third parties.
+              Status, runtime, and alarm data only. Add a relay integration for DR control.
+            </div>
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px 14px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Generac Mobile Link</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Username / Email</label>
+                  <input type="email" id="gen-ml-user" placeholder="Mobile Link account email" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Password</label>
+                  <input type="password" id="gen-ml-pass" placeholder="Mobile Link password" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Generator ID</label>
+                  <input type="text" id="gen-ml-id" placeholder="From Mobile Link app" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+              </div>
+              <div style="font-size:11px;color:var(--text-hint);margin-top:8px;">
+                Covers Generac, Eaton, Honeywell, and Siemens generators using the Generac controller. Generator ID visible in Mobile Link app under device details.
+              </div>
+            </div>
+          </div>
+
+          <!-- SNMP Gateway (monitoring only) -->
+          <div id="gen-integ-snmp" class="gen-integ-panel">
+            <div style="background:var(--amber-bg);border:0.5px solid var(--amber);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">
+              &#9888;&#65039; <strong>Monitoring only.</strong> SNMP provides status and telemetry reads. For DR control, add a relay or Modbus integration.
+            </div>
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px 14px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">SNMP via REST Gateway</div>
+              <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:8px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">SNMP REST Proxy URL</label>
+                  <input type="url" id="gen-snmp-url" placeholder="https://snmp-gateway.local/api/generator" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Community String</label>
+                  <input type="text" id="gen-snmp-community" placeholder="public" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Generator Host / IP</label>
+                  <input type="text" id="gen-snmp-host" placeholder="192.168.1.x (generator SNMP agent)" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">SNMP Version</label>
+                  <select id="gen-snmp-version" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                    <option value="2c">v2c (most common)</option>
+                    <option value="3">v3 (auth/priv)</option>
+                    <option value="1">v1 (legacy)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+            <button onclick="toggleGenEnrollForm()" style="padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-secondary);">Cancel</button>
+            <button onclick="saveGeneratorAsset()" style="padding:7px 24px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save Generator Asset</button>
+          </div>
+        </div>
+
+        <!-- Asset list -->
+        <div id="gen-asset-list"><div class="sched-empty">No generator assets registered. Click + Add Generator to begin.</div></div>
+      </div>
+
+      <!-- DR Control Panel -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#9889; Demand Response — Generator Fleet</div>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:12px;">
+          Start enrolled generators so the site can shed utility load or island during a DR event.
+          Relay-controlled generators respond in seconds. Modbus-controlled generators respond per controller latency.
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px;">
+          <button onclick="dispatchGeneratorDR('start')" style="padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--green-dark);background:var(--green-bg);color:var(--green-dark);font-size:13px;font-weight:700;cursor:pointer;">
+            &#9654; Start All<br/><span style="font-size:10px;font-weight:400;">Start all DR-enrolled generators</span>
+          </button>
+          <button onclick="dispatchGeneratorDR('test')" style="padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--blue-dark);background:var(--blue-lt);color:var(--blue-dark);font-size:13px;font-weight:700;cursor:pointer;">
+            &#9654; Test Run<br/><span style="font-size:10px;font-weight:400;">30-second exercise run</span>
+          </button>
+          <button onclick="dispatchGeneratorDR('stop')" style="padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--red);background:var(--red-lt);color:var(--red);font-size:13px;font-weight:700;cursor:pointer;">
+            &#9646;&#9646; Stop All<br/><span style="font-size:10px;font-weight:400;">Stop all generators — allow cool-down</span>
+          </button>
+        </div>
+        <div id="gen-dr-log" style="font-size:11px;color:var(--text-hint);padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);">No DR events dispatched this session.</div>
+      </div>
+
+      <!-- Event & Runtime Log -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128203; Generator Event Log</div>
+          <button class="queue-refresh" onclick="loadGeneratorLog()">Refresh</button>
+        </div>
+        <div id="gen-log-list"><div class="sched-empty">No events recorded yet.</div></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- ── DRILL DOWN SIDE PANEL ── -->
 <div id="fh-drill-panel" style="position:fixed;top:0;right:-480px;width:480px;height:100vh;background:var(--surface);border-left:0.5px solid var(--border-md);z-index:1000;transition:right 0.3s ease;display:flex;flex-direction:column;box-shadow:-4px 0 20px rgba(0,0,0,0.15);">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:0.5px solid var(--border-md);">
@@ -4754,6 +5112,7 @@ function runTabInit(name) {
   if (name === "monitor-ev")       { initEVCharging(); }
   if (name === "ev-chargers")      { initEVDevicesTab(); }
   if (name === "battery")          { initBatteryTab(); }
+  if (name === "generators")       { initGeneratorsTab(); }
 }
 
 function switchTab(name, btn) { switchMain(name, btn); }
@@ -5046,6 +5405,12 @@ function populateTargetSelector() {
     if (battDevs.length) {
       html += `<optgroup label="Battery Systems">` +
         battDevs.map(d => `<option value="${d.uid}">🔋 ${d.name}</option>`).join("") +
+        `</optgroup>`;
+    }
+    const genDevs = DEVICES.filter(d => d.type === "generator");
+    if (genDevs.length) {
+      html += `<optgroup label="Generators">` +
+        genDevs.map(d => `<option value="${d.uid}">⚡ ${d.name}</option>`).join("") +
         `</optgroup>`;
     }
     sel.innerHTML = html;
@@ -10921,6 +11286,14 @@ async function sendToDevice(uid, key) {
     else        await restoreBatterySingle(assetId);
     return;
   }
+  // Route generators — shed = start generator (site sheds utility load)
+  if (uid.startsWith("gen_")) {
+    const assetId = uid.replace("gen_","");
+    const isShed  = key === "all_off" || key.endsWith("_off");
+    if (isShed) await startGeneratorSingle(assetId);
+    else        await stopGeneratorSingle(assetId);
+    return;
+  }
   try {
     await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(COMMANDS[key]) });
   } catch(e) { console.error("Send error", uid, e); }
@@ -11077,6 +11450,19 @@ function renderGroups() {
                   <div>
                     <div class="group-device-label">&#128267; ${d.name}</div>
                     <div class="group-device-uid">${d.battAsset?.integration||"Battery"} &bull; ${d.battAsset?.capacity_kwh||""}kWh</div>
+                  </div>
+                </label>`).join("");
+            }
+            const genDevs = DEVICES.filter(d => d.type === "generator");
+            if (genDevs.length) {
+              html += `<div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;padding:8px 0 4px;font-family:monospace;border-top:0.5px solid var(--border);margin-top:6px;">Generators</div>`;
+              html += genDevs.map(d => `
+                <label class="group-device-row ${(groupAssignments[d.uid] || []).includes(gn) ? "group-member" : ""}">
+                  <input type="checkbox" ${(groupAssignments[d.uid] || []).includes(gn) ? "checked" : ""}
+                    onchange="assignDevice('${d.uid}', ${gn}, this.checked)" />
+                  <div>
+                    <div class="group-device-label">&#9889; ${d.name}</div>
+                    <div class="group-device-uid">${d.genAsset?.make||"Generator"} &bull; ${d.genAsset?.rated_kw||""}kW &bull; ${(d.genAsset?.integration||"relay").replace(/_/g," ")}</div>
                   </div>
                 </label>`).join("");
             }
@@ -12493,6 +12879,12 @@ function onRuleTargetChange() {
       evDevs.forEach(d => { const o = document.createElement("option"); o.value=d.uid; o.textContent="⚡ "+d.name; grp.appendChild(o); });
       sel.appendChild(grp);
     }
+    const genDevs = DEVICES.filter(d => d.type === "generator");
+    if (genDevs.length) {
+      const grp = document.createElement("optgroup"); grp.label = "Generators";
+      genDevs.forEach(d => { const o = document.createElement("option"); o.value=d.uid; o.textContent="⚡ "+d.name; grp.appendChild(o); });
+      sel.appendChild(grp);
+    }
   }
 }
 
@@ -13596,6 +13988,12 @@ function onInlineTargetChange() {
     if (evDevs.length) {
       const grp = document.createElement("optgroup"); grp.label = "EV Chargers";
       evDevs.forEach(d => { const o = document.createElement("option"); o.value=d.uid; o.textContent="⚡ "+d.name; grp.appendChild(o); });
+      sel.appendChild(grp);
+    }
+    const genDevs = DEVICES.filter(d => d.type === "generator");
+    if (genDevs.length) {
+      const grp = document.createElement("optgroup"); grp.label = "Generators";
+      genDevs.forEach(d => { const o = document.createElement("option"); o.value=d.uid; o.textContent="⚡ "+d.name; grp.appendChild(o); });
       sel.appendChild(grp);
     }
   }
@@ -17087,6 +17485,497 @@ async function loadBatteryLog() {
       </tr>`).join("")}</tbody></table>`;
   } catch(e) {
     list.innerHTML = '<div class="sched-empty">Run SQL to create battery_dr_log table.</div>';
+  }
+}
+
+
+
+// ── Generator Assets ──────────────────────────────────────────────────────────
+
+let generatorAssets    = [];
+let generatorLiveData  = {}; // { assetId: { status, kw, runtime, alarms } }
+let genSelectedInteg   = null;
+let genRefreshTimer    = null;
+const GEN_STORAGE_KEY  = "lcp_generator_assets_v1";
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function initGeneratorsTab() {
+  const relayDev = document.getElementById("gen-relay-device");
+  if (relayDev) {
+    relayDev.innerHTML = '<option value="">-- Select relay device --</option>' +
+      (DEVICES || []).filter(d => d.type !== "ev" && d.type !== "battery" && !d.uid.includes("PLACEHOLDER"))
+        .map(d => `<option value="${d.uid}">${d.name}</option>`).join("");
+  }
+  await refreshGenerators();
+  await loadGeneratorLog();
+  if (!genRefreshTimer) {
+    genRefreshTimer = setInterval(() => refreshGenerators(), 60000);
+  }
+}
+
+// ── Form UI ───────────────────────────────────────────────────────────────────
+function toggleGenEnrollForm() {
+  const form = document.getElementById("gen-enroll-form");
+  if (!form) return;
+  const isOpen = form.style.display !== "none";
+  form.style.display = isOpen ? "none" : "block";
+  if (!isOpen) {
+    genSelectedInteg = null;
+    document.querySelectorAll(".gen-integ-opt").forEach(b => {
+      b.style.borderColor = "var(--border-md)";
+      b.style.background  = "var(--surface)";
+    });
+    document.querySelectorAll(".gen-integ-panel").forEach(p => p.style.display = "none");
+    ["gen-asset-id","gen-name","gen-location",
+     "gen-modbus-host","gen-modbus-proxy","gen-modbus-token",
+     "gen-ml-user","gen-ml-pass","gen-ml-id",
+     "gen-snmp-url","gen-snmp-community","gen-snmp-host"
+    ].forEach(id => { const el = document.getElementById(id); if(el) el.value = ""; });
+  }
+}
+
+function selectGenInteg(integ, el) {
+  genSelectedInteg = integ;
+  document.querySelectorAll(".gen-integ-opt").forEach(b => {
+    b.style.borderColor = "var(--border-md)";
+    b.style.background  = "var(--surface)";
+  });
+  if (el) { el.style.borderColor = "var(--green)"; el.style.background = "var(--green-bg)"; }
+  document.querySelectorAll(".gen-integ-panel").forEach(p => p.style.display = "none");
+  const panel = document.getElementById(`gen-integ-${integ}`);
+  if (panel) panel.style.display = "block";
+}
+
+// ── Save Asset ────────────────────────────────────────────────────────────────
+async function saveGeneratorAsset() {
+  if (!genSelectedInteg) { setStatus("error", "Select a control / integration method."); return; }
+  const assetId = document.getElementById("gen-asset-id")?.value?.trim().toUpperCase().replace(/\s+/g,"_");
+  const name    = document.getElementById("gen-name")?.value?.trim();
+  if (!assetId) { setStatus("error", "Asset ID required."); return; }
+  if (!name)    { setStatus("error", "Display name required."); return; }
+
+  const integConfig = { type: genSelectedInteg };
+
+  if (genSelectedInteg === "relay") {
+    integConfig.relay_uid = document.getElementById("gen-relay-device")?.value;
+    integConfig.relay_num = parseInt(document.getElementById("gen-relay-num")?.value || "1");
+    integConfig.warmup    = parseInt(document.getElementById("gen-warmup")?.value || "30");
+    integConfig.cooldown  = parseInt(document.getElementById("gen-cooldown")?.value || "60");
+    if (!integConfig.relay_uid) { setStatus("error", "Select a relay device."); return; }
+
+  } else if (genSelectedInteg === "modbus") {
+    integConfig.host       = document.getElementById("gen-modbus-host")?.value?.trim();
+    integConfig.port       = parseInt(document.getElementById("gen-modbus-port")?.value || "502");
+    integConfig.unit       = parseInt(document.getElementById("gen-modbus-unit")?.value || "1");
+    integConfig.controller = document.getElementById("gen-modbus-controller")?.value || "generic";
+    integConfig.proxy      = document.getElementById("gen-modbus-proxy")?.value?.trim();
+    integConfig.token      = document.getElementById("gen-modbus-token")?.value?.trim();
+    if (!integConfig.host && !integConfig.proxy) {
+      setStatus("error", "Modbus gateway host or REST proxy URL required."); return;
+    }
+
+  } else if (genSelectedInteg === "generac_ml") {
+    integConfig.username     = document.getElementById("gen-ml-user")?.value?.trim();
+    integConfig.password     = document.getElementById("gen-ml-pass")?.value?.trim();
+    integConfig.generator_id = document.getElementById("gen-ml-id")?.value?.trim();
+    if (!integConfig.username || !integConfig.generator_id) {
+      setStatus("error", "Mobile Link username and generator ID required."); return;
+    }
+
+  } else if (genSelectedInteg === "snmp") {
+    integConfig.url       = document.getElementById("gen-snmp-url")?.value?.trim();
+    integConfig.community = document.getElementById("gen-snmp-community")?.value?.trim() || "public";
+    integConfig.host      = document.getElementById("gen-snmp-host")?.value?.trim();
+    integConfig.version   = document.getElementById("gen-snmp-version")?.value || "2c";
+    if (!integConfig.url && !integConfig.host) {
+      setStatus("error", "SNMP proxy URL or host required."); return;
+    }
+  }
+
+  const record = {
+    asset_id:    assetId,
+    name,
+    integration: genSelectedInteg,
+    location:    document.getElementById("gen-location")?.value?.trim() || null,
+    make:        document.getElementById("gen-make")?.value || null,
+    rated_kw:    parseFloat(document.getElementById("gen-rated-kw")?.value || "22"),
+    fuel:        document.getElementById("gen-fuel")?.value || "natural_gas",
+    transfer:    document.getElementById("gen-transfer")?.value || "auto",
+    dr_enrolled: document.getElementById("gen-dr")?.value === "true",
+    integ_config:JSON.stringify(integConfig),
+    status:      "standby",
+    enabled:     true,
+    enrolled_at: new Date().toISOString()
+  };
+
+  let saved = false;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/generator_assets`, {
+      method:"POST",
+      headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+        "Content-Type":"application/json","Prefer":"return=representation"},
+      body: JSON.stringify(record)
+    });
+    if (res.ok) saved = true;
+    else console.warn("Generator save Supabase:", res.status, await res.text());
+  } catch(e) { console.warn("Generator save:", e.message); }
+
+  if (!saved) {
+    const existing = JSON.parse(localStorage.getItem(GEN_STORAGE_KEY) || "[]");
+    const filtered = existing.filter(a => a.asset_id !== assetId);
+    filtered.push({ ...record, id: Date.now(), integ_config: integConfig });
+    localStorage.setItem(GEN_STORAGE_KEY, JSON.stringify(filtered));
+  }
+
+  setStatus("ready", `${name} saved as generator asset.`);
+  toggleGenEnrollForm();
+  await refreshGenerators();
+}
+
+// ── Load & Render ─────────────────────────────────────────────────────────────
+async function refreshGenerators() {
+  let dbRows = [], localRows = [];
+  try {
+    const rows = await supabaseGet("generator_assets?enabled=eq.true&order=enrolled_at.asc");
+    if (Array.isArray(rows) && rows.length) dbRows = rows;
+  } catch(e) {}
+  try {
+    const saved = localStorage.getItem(GEN_STORAGE_KEY);
+    if (saved) localRows = JSON.parse(saved);
+  } catch(e) {}
+
+  const dbIds   = new Set(dbRows.map(r => r.asset_id));
+  const local   = localRows.filter(r => !dbIds.has(r.asset_id));
+  generatorAssets = [...dbRows, ...local].map(a => ({
+    ...a,
+    integ_config: typeof a.integ_config === "string"
+      ? (() => { try { return JSON.parse(a.integ_config); } catch(e) { return {}; } })()
+      : (a.integ_config || {})
+  }));
+
+  // Poll status for monitoring-capable integrations
+  for (const a of generatorAssets) {
+    await pollGeneratorStatus(a).catch(() => {});
+  }
+
+  renderGenerators();
+  updateGeneratorFleetStats();
+  injectGeneratorsIntoDevices();
+}
+
+async function pollGeneratorStatus(asset) {
+  const integ = asset.integ_config?.type || asset.integration;
+  try {
+    if (integ === "generac_ml") {
+      const res  = await fetch(PROXY_URL + "generator/mobilelink/status", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          username:     asset.integ_config.username,
+          password:     asset.integ_config.password,
+          generator_id: asset.integ_config.generator_id
+        })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        generatorLiveData[asset.asset_id] = {
+          status:       data.status || "unknown",
+          kw:           data.kw,
+          runtime_hrs:  data.runtime_hrs,
+          last_alarm:   data.last_alarm,
+          battery_v:    data.battery_v,
+          last_updated: new Date().toISOString()
+        };
+      }
+    } else if (integ === "modbus" && asset.integ_config.proxy) {
+      const res  = await fetch(PROXY_URL + "generator/modbus/status", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          proxy:      asset.integ_config.proxy,
+          token:      asset.integ_config.token,
+          controller: asset.integ_config.controller,
+          host:       asset.integ_config.host,
+          port:       asset.integ_config.port,
+          unit:       asset.integ_config.unit
+        })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        generatorLiveData[asset.asset_id] = {
+          status:       data.status,
+          kw:           data.kw,
+          runtime_hrs:  data.runtime_hrs,
+          voltage:      data.voltage,
+          frequency:    data.frequency,
+          last_updated: new Date().toISOString()
+        };
+      }
+    }
+  } catch(e) {}
+}
+
+function renderGenerators() {
+  const list = document.getElementById("gen-asset-list");
+  if (!list) return;
+  if (!generatorAssets.length) {
+    list.innerHTML = '<div class="sched-empty">No generator assets registered. Click + Add Generator to begin.</div>';
+    return;
+  }
+
+  const INTEG_LABELS = {
+    relay:"Relay / Dry Contact", modbus:"Modbus TCP",
+    generac_ml:"Generac Mobile Link", snmp:"SNMP"
+  };
+  const INTEG_COLORS = {
+    relay:"var(--green-dark)", modbus:"var(--blue-dark)",
+    generac_ml:"#e87722", snmp:"var(--text-secondary)"
+  };
+  const FUEL_ICONS = {
+    natural_gas:"🔥", propane:"🔥", diesel:"⛽", dual_fuel:"⛽", gasoline:"⛽"
+  };
+
+  list.innerHTML = generatorAssets.map(a => {
+    const integ  = a.integ_config?.type || a.integration;
+    const live   = generatorLiveData[a.asset_id] || {};
+    const status = live.status || a.status || "standby";
+    const dotCls = status === "running" ? "running"
+                 : status === "fault"   ? "fault"
+                 : status === "offline" ? "offline" : "standby";
+    const canControl = integ === "relay" || integ === "modbus";
+    const monitorOnly = integ === "generac_ml" || integ === "snmp";
+
+    return `<div class="gen-card">
+      <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
+        <div class="gen-status-dot ${dotCls}" style="margin-top:4px;"></div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px;">
+            <span style="font-size:13px;font-weight:600;color:var(--text-primary);">&#9889; ${a.name}</span>
+            <span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;font-family:monospace;border:0.5px solid ${INTEG_COLORS[integ]||"var(--border-md)"};color:${INTEG_COLORS[integ]||"var(--text-hint)"};background:${INTEG_COLORS[integ]||"var(--border-md)"}18;">${INTEG_LABELS[integ]||integ}</span>
+            ${monitorOnly ? '<span style="font-size:10px;color:var(--amber);background:var(--amber-bg);padding:2px 8px;border-radius:10px;font-weight:600;">Monitor Only</span>' : ""}
+            ${a.dr_enrolled && canControl ? '<span style="font-size:10px;font-weight:700;color:var(--green-dark);background:var(--green-bg);padding:2px 8px;border-radius:10px;">DR</span>' : ""}
+          </div>
+          <div style="font-size:11px;color:var(--text-hint);">
+            ${a.make||"Generator"} &bull; ${a.rated_kw} kW &bull; ${FUEL_ICONS[a.fuel]||""} ${(a.fuel||"").replace(/_/g," ")} &bull; ${(a.transfer||"auto").replace(/_/g," ")} transfer
+            ${a.location ? ` &bull; ${a.location}` : ""}
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end;flex-shrink:0;">
+          ${a.dr_enrolled && canControl ? `
+          <div style="display:flex;gap:4px;">
+            <button onclick="startGeneratorSingle('${a.asset_id}')"
+              style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--green-dark);background:var(--green-bg);color:var(--green-dark);font-size:10px;font-weight:600;cursor:pointer;">&#9654; Start</button>
+            <button onclick="stopGeneratorSingle('${a.asset_id}')"
+              style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--red);background:var(--red-lt);color:var(--red);font-size:10px;font-weight:600;cursor:pointer;">&#9646;&#9646; Stop</button>
+          </div>` : ""}
+          <button onclick="removeGeneratorAsset('${a.asset_id}')"
+            style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--border-md);background:none;color:var(--text-hint);font-size:10px;cursor:pointer;">Remove</button>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+        <div class="ev-meter-tile">
+          <div class="ev-meter-val" style="font-size:13px;color:${status==="running"?"var(--green-dark)":status==="fault"?"var(--red)":"var(--text-hint)"};">${status.charAt(0).toUpperCase()+status.slice(1)}</div>
+          <div class="ev-meter-lbl">Status</div>
+        </div>
+        <div class="ev-meter-tile">
+          <div class="ev-meter-val">${live.kw != null ? live.kw.toFixed(1) : "—"}<span style="font-size:11px;font-weight:400;"> kW</span></div>
+          <div class="ev-meter-lbl">Output</div>
+        </div>
+        <div class="ev-meter-tile">
+          <div class="ev-meter-val">${live.runtime_hrs != null ? live.runtime_hrs : "—"}</div>
+          <div class="ev-meter-lbl">Hours</div>
+        </div>
+        <div class="ev-meter-tile">
+          <div class="ev-meter-val" style="font-size:11px;color:var(--text-hint);">${live.last_alarm || "No alarms"}</div>
+          <div class="ev-meter-lbl">Last Alarm</div>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function updateGeneratorFleetStats() {
+  const total   = generatorAssets.length;
+  const running = generatorAssets.filter(a => generatorLiveData[a.asset_id]?.status === "running").length;
+  const standby = generatorAssets.filter(a =>
+    !generatorLiveData[a.asset_id] || generatorLiveData[a.asset_id]?.status === "standby").length;
+  const totalKw = generatorAssets.reduce((s,a) => s + (generatorLiveData[a.asset_id]?.kw || 0), 0);
+  const drCount = generatorAssets.filter(a => a.dr_enrolled).length;
+  const faults  = generatorAssets.filter(a => generatorLiveData[a.asset_id]?.status === "fault").length;
+
+  const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+  set("gen-stat-total",   total);
+  set("gen-stat-running", running);
+  set("gen-stat-standby", standby);
+  set("gen-stat-kw",      totalKw.toFixed(1));
+  set("gen-stat-dr",      drCount);
+  set("gen-stat-faults",  faults);
+
+  const badge = document.getElementById("gen-status-badge");
+  if (badge) {
+    badge.textContent  = running > 0 ? `${running} running` : total > 0 ? "All standby" : "No assets";
+    badge.style.background = running > 0 ? "var(--green-bg)" : "var(--surface2)";
+    badge.style.color      = running > 0 ? "var(--green-dark)" : "var(--text-hint)";
+  }
+}
+
+async function removeGeneratorAsset(assetId) {
+  if (!confirm("Remove this generator asset?")) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/generator_assets?asset_id=eq.${encodeURIComponent(assetId)}`, {
+      method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+    });
+  } catch(e) {}
+  const local = JSON.parse(localStorage.getItem(GEN_STORAGE_KEY) || "[]");
+  localStorage.setItem(GEN_STORAGE_KEY, JSON.stringify(local.filter(a => a.asset_id !== assetId)));
+  await refreshGenerators();
+}
+
+// ── Inject generators into DEVICES ───────────────────────────────────────────
+function injectGeneratorsIntoDevices() {
+  DEVICES = DEVICES.filter(d => d.type !== "generator");
+  generatorAssets.forEach(a => {
+    DEVICES.push({
+      id:       `gen_${a.asset_id}`,
+      uid:      `gen_${a.asset_id}`,
+      name:     a.name,
+      type:     "generator",
+      genAsset: a
+    });
+    if (!relayState[`gen_${a.asset_id}`]) {
+      relayState[`gen_${a.asset_id}`] = { 1:false, 2:false, 3:false, 4:false, all:false };
+    }
+  });
+  if (typeof refreshGroupSelectors === "function") refreshGroupSelectors();
+  if (typeof populateTargetSelector === "function") populateTargetSelector();
+}
+
+// ── DR Dispatch ───────────────────────────────────────────────────────────────
+async function dispatchGeneratorDR(action) {
+  const enrolled = generatorAssets.filter(a => a.dr_enrolled);
+  if (!enrolled.length) { setStatus("error", "No DR-enrolled generators."); return; }
+
+  const results = await Promise.all(enrolled.map(a =>
+    action === "stop" ? stopGeneratorSingle(a.asset_id) : startGeneratorSingle(a.asset_id, action === "test")
+  ));
+  const ok = results.filter(Boolean).length;
+
+  const logEl = document.getElementById("gen-dr-log");
+  const label = action === "stop" ? "STOP" : action === "test" ? "TEST RUN" : "START";
+  if (logEl) logEl.innerHTML = `<span style="color:var(--green-dark);font-weight:600;">&#9889; ${label} dispatched</span> — ${ok}/${enrolled.length} responded &bull; ${new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}`;
+
+  await logGeneratorDREvent(action, enrolled.map(a => a.asset_id));
+  setStatus("ready", `Generator ${label} sent to ${enrolled.length} asset${enrolled.length!==1?"s":""}.`);
+}
+
+async function startGeneratorSingle(assetId, testOnly = false) {
+  const asset = generatorAssets.find(a => a.asset_id === assetId);
+  if (!asset) return false;
+  const integ   = asset.integ_config?.type || asset.integration;
+  const warmup  = asset.integ_config?.warmup || 30;
+
+  try {
+    if (integ === "relay") {
+      // Close relay to start — then open after warmup for test run
+      await sendLCToDevice(asset.integ_config.relay_uid, buildLCHex("all_on","dlc",5,1,Math.floor(Date.now()/1000)));
+      generatorLiveData[assetId] = { ...generatorLiveData[assetId], status:"running" };
+      if (testOnly) {
+        setTimeout(async () => {
+          await sendLCToDevice(asset.integ_config.relay_uid, buildLCHex("all_on","dlc",19,2,Math.floor(Date.now()/1000)));
+          generatorLiveData[assetId] = { ...generatorLiveData[assetId], status:"standby" };
+        }, 30000); // 30s test run
+      }
+      return true;
+
+    } else if (integ === "modbus") {
+      const res = await fetch(PROXY_URL + "generator/modbus/start", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          proxy:      asset.integ_config.proxy,
+          token:      asset.integ_config.token,
+          host:       asset.integ_config.host,
+          port:       asset.integ_config.port,
+          unit:       asset.integ_config.unit,
+          controller: asset.integ_config.controller,
+          test:       testOnly
+        })
+      });
+      return (await res.json()).ok;
+    }
+  } catch(e) {
+    console.warn(`startGeneratorSingle ${assetId}:`, e.message);
+    return false;
+  }
+  return false;
+}
+
+async function stopGeneratorSingle(assetId) {
+  const asset = generatorAssets.find(a => a.asset_id === assetId);
+  if (!asset) return false;
+  const integ = asset.integ_config?.type || asset.integration;
+
+  try {
+    if (integ === "relay") {
+      // Open relay to stop
+      await sendLCToDevice(asset.integ_config.relay_uid, buildLCHex("all_on","dlc",19,2,Math.floor(Date.now()/1000)));
+      generatorLiveData[assetId] = { ...generatorLiveData[assetId], status:"standby" };
+      return true;
+
+    } else if (integ === "modbus") {
+      const res = await fetch(PROXY_URL + "generator/modbus/stop", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          proxy:      asset.integ_config.proxy,
+          token:      asset.integ_config.token,
+          host:       asset.integ_config.host,
+          port:       asset.integ_config.port,
+          unit:       asset.integ_config.unit,
+          controller: asset.integ_config.controller
+        })
+      });
+      return (await res.json()).ok;
+    }
+  } catch(e) { console.warn(`stopGeneratorSingle ${assetId}:`, e.message); return false; }
+  return false;
+}
+
+async function logGeneratorDREvent(action, assetIds) {
+  try {
+    await supabasePost("generator_dr_log", {
+      action,
+      asset_ids: JSON.stringify(assetIds),
+      fired_at:  new Date().toISOString(),
+      fired_by:  currentUser?.email || "manual"
+    });
+  } catch(e) {}
+}
+
+// Generator routing merged into unified sendToDevice below
+
+// ── Event Log ─────────────────────────────────────────────────────────────────
+async function loadGeneratorLog() {
+  const list = document.getElementById("gen-log-list");
+  if (!list) return;
+  try {
+    const rows = await supabaseGet("generator_dr_log?order=fired_at.desc&limit=50");
+    if (!Array.isArray(rows) || !rows.length) {
+      list.innerHTML = '<div class="sched-empty">No generator DR events recorded yet.</div>';
+      return;
+    }
+    list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead><tr>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Action</th>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Assets</th>
+        <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">By</th>
+        <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Time</th>
+      </tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-weight:600;color:${r.action==="stop"?"var(--red)":r.action==="test"?"var(--blue-dark)":"var(--green-dark)"};">${(r.action||"").toUpperCase()}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-size:10px;font-family:monospace;">${(() => { try { return JSON.parse(r.asset_ids||"[]").join(", "); } catch(e) { return r.asset_ids||""; } })()}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;color:var(--text-hint);">${r.fired_by||"—"}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;color:var(--text-hint);">${new Date(r.fired_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</td>
+      </tr>`).join("")}</tbody></table>`;
+  } catch(e) {
+    list.innerHTML = '<div class="sched-empty">Run SQL to create generator_dr_log table to see logs.</div>';
   }
 }
 
