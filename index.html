@@ -4150,6 +4150,28 @@ async function loadDevicesFromDB() {
   DEVICES.forEach(d => {
     if (!relayState[d.id]) relayState[d.id] = { 1:false, 2:false, 3:false, 4:false, all:false };
   });
+  // Inject EV charger assets as device entries so they appear in groups and target selectors
+  injectEVIntoDevices();
+}
+
+function injectEVIntoDevices() {
+  // Remove any previously injected EV devices to avoid duplicates
+  DEVICES = DEVICES.filter(d => d.type !== "ev");
+  // Add current EV assets
+  if (typeof evDevAssets !== "undefined" && evDevAssets.length) {
+    evDevAssets.forEach(a => {
+      DEVICES.push({
+        id:   `ev_${a.station_id}`,
+        uid:  `ev_${a.station_id}`,
+        name: a.name,
+        type: "ev",
+        evAsset: a
+      });
+      if (!relayState[`ev_${a.station_id}`]) {
+        relayState[`ev_${a.station_id}`] = { 1:false, 2:false, 3:false, 4:false, all:false };
+      }
+    });
+  }
 }
 
 const COMMANDS = {
@@ -4566,12 +4588,32 @@ function populateTzSelector() {
 
 function populateTargetSelector() {
   const type = document.getElementById("sf-target-type").value;
-  const sel = document.getElementById("sf-target");
+  const sel  = document.getElementById("sf-target");
   const placeholder = `<option value="" disabled selected>— Choose One —</option>`;
+
   if (type === "group") {
-    sel.innerHTML = placeholder + Object.keys(groupNames).map(Number).sort((a,b)=>a-b).map(n => `<option value="group_${n}">${groupNames[n] || "Group " + n}</option>`).join("");
+    // Show group number, name, and tag if set
+    sel.innerHTML = placeholder + Object.keys(groupNames).map(Number).sort((a,b)=>a-b).map(n => {
+      const name = groupNames[n] || `Group ${n}`;
+      const tag  = groupTags?.[n] ? ` — ${groupTags[n]}` : "";
+      return `<option value="group_${n}">Group ${n}: ${name}${tag}</option>`;
+    }).join("");
   } else {
-    sel.innerHTML = placeholder + DEVICES.map(d => `<option value="${d.uid}">${d.name}</option>`).join("");
+    // Separate relay devices from EV chargers with optgroups
+    const relayDevs = DEVICES.filter(d => d.type !== "ev" && !d.uid.includes("PLACEHOLDER"));
+    const evDevs    = DEVICES.filter(d => d.type === "ev");
+    let html = placeholder;
+    if (relayDevs.length) {
+      html += `<optgroup label="Relay Devices">` +
+        relayDevs.map(d => `<option value="${d.uid}">${d.name}</option>`).join("") +
+        `</optgroup>`;
+    }
+    if (evDevs.length) {
+      html += `<optgroup label="EV Chargers">` +
+        evDevs.map(d => `<option value="${d.uid}">⚡ ${d.name}</option>`).join("") +
+        `</optgroup>`;
+    }
+    sel.innerHTML = html;
   }
   sel.value = ""; // ensure placeholder is shown
 }
@@ -10428,6 +10470,14 @@ async function send(deviceId, key, label) {
   } catch(e) { setStatus("error", "Network error — check connection."); busy = false; setDeviceDisabled(deviceId, false); return false; }
 }
 async function sendToDevice(uid, key) {
+  // Route EV chargers to DR dispatch instead of Notehub relay
+  if (uid.startsWith("ev_")) {
+    const stationId = uid.replace("ev_", "");
+    const isShed    = key === "all_off" || key.endsWith("_off");
+    if (isShed) await dispatchEVDRSingle(stationId, 0.75);
+    else        await restoreEVSingle(stationId);
+    return;
+  }
   try {
     await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(COMMANDS[key]) });
   } catch(e) { console.error("Send error", uid, e); }
@@ -10451,12 +10501,24 @@ async function toggleAll(deviceId) {
 async function sendGroupCommand(groupNum, key) {
   const members = DEVICES.filter(d => (groupAssignments[d.uid] || []).includes(groupNum));
   if (members.length === 0) { setStatus("error", "No devices in this group."); return; }
-  const gname = groupNames[groupNum];
+  const gname   = groupNames[groupNum];
+  const isShed  = key === "all_off" || key.endsWith("_off");
+  const relayMembers = members.filter(d => d.type !== "ev");
+  const evMembers    = members.filter(d => d.type === "ev");
   setStatus("sending", `${gname} — sending ${key.replace("_"," ").toUpperCase()}...`);
-  for (const device of members) {
+
+  // Send relay commands to Notecard devices
+  for (const device of relayMembers) {
     await sendToDevice(device.uid, key);
   }
-  setStatus("ready", `${gname} — ${key.replace("_"," ").toUpperCase()} sent to ${members.length} device(s).`);
+  // Dispatch EV chargers via their integration
+  for (const device of evMembers) {
+    const stationId = device.uid.replace("ev_","");
+    if (isShed) await dispatchEVDRSingle(stationId, 0.75);
+    else        await restoreEVSingle(stationId);
+  }
+
+  setStatus("ready", `${gname} — ${key.replace("_"," ").toUpperCase()} sent to ${relayMembers.length} relay device${relayMembers.length!==1?"s":""} + ${evMembers.length} EV charger${evMembers.length!==1?"s":""}.`);
 }
 
 // ── Groups Tab ────────────────────────────────────────────────────────────────
@@ -10534,15 +10596,36 @@ function renderGroups() {
           <button class="group-cmd-btn off" onclick="sendGroupCommand(${gn}, 'all_off')">All Relays OFF</button>
         </div>
         <div class="group-devices">
-          ${DEVICES.filter(d => !d.uid.includes("PLACEHOLDER")).map(d => `
-            <label class="group-device-row ${(groupAssignments[d.uid] || []).includes(gn) ? "group-member" : ""}">
-              <input type="checkbox" ${(groupAssignments[d.uid] || []).includes(gn) ? "checked" : ""}
-                onchange="assignDevice('${d.uid}', ${gn}, this.checked)" />
-              <div>
-                <div class="group-device-label">${d.name}</div>
-                <div class="group-device-uid">${d.uid}</div>
-              </div>
-            </label>`).join("")}
+          ${(() => {
+            const relayDevs = DEVICES.filter(d => d.type !== "ev" && !d.uid.includes("PLACEHOLDER"));
+            const evDevs    = DEVICES.filter(d => d.type === "ev");
+            let html = "";
+            if (relayDevs.length) {
+              html += `<div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;padding:6px 0 4px;font-family:monospace;">Relay Devices</div>`;
+              html += relayDevs.map(d => `
+                <label class="group-device-row ${(groupAssignments[d.uid] || []).includes(gn) ? "group-member" : ""}">
+                  <input type="checkbox" ${(groupAssignments[d.uid] || []).includes(gn) ? "checked" : ""}
+                    onchange="assignDevice('${d.uid}', ${gn}, this.checked)" />
+                  <div>
+                    <div class="group-device-label">${d.name}</div>
+                    <div class="group-device-uid">${d.uid}</div>
+                  </div>
+                </label>`).join("");
+            }
+            if (evDevs.length) {
+              html += `<div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;padding:8px 0 4px;font-family:monospace;border-top:0.5px solid var(--border);margin-top:6px;">EV Chargers</div>`;
+              html += evDevs.map(d => `
+                <label class="group-device-row ${(groupAssignments[d.uid] || []).includes(gn) ? "group-member" : ""}">
+                  <input type="checkbox" ${(groupAssignments[d.uid] || []).includes(gn) ? "checked" : ""}
+                    onchange="assignDevice('${d.uid}', ${gn}, this.checked)" />
+                  <div>
+                    <div class="group-device-label">&#9889; ${d.name}</div>
+                    <div class="group-device-uid">${d.evAsset?.integration||"OCPP"} &bull; ${d.uid.replace("ev_","")}</div>
+                  </div>
+                </label>`).join("");
+            }
+            return html;
+          })()}
         </div>
       </div>`).join("")}
     </div>`;
@@ -10633,15 +10716,16 @@ function refreshGroupSelectors() {
     });
     // Re-add updated groups
     groupNums.forEach(n => {
-      const exists = Array.from(sel.options).some(o => o.value === `group_${n}`);
+      const label   = `Group ${n}: ${groupNames[n]||"Group "+n}${groupTags?.[n]?" — "+groupTags[n]:""}`;
+      const exists  = Array.from(sel.options).some(o => o.value === `group_${n}`);
       if (!exists) {
         const o = document.createElement("option");
         o.value = `group_${n}`;
-        o.textContent = groupNames[n] || `Group ${n}`;
+        o.textContent = label;
         sel.appendChild(o);
       } else {
         const o = Array.from(sel.options).find(o => o.value === `group_${n}`);
-        if (o) o.textContent = groupNames[n] || `Group ${n}`;
+        if (o) o.textContent = label;
       }
     });
     sel.value = prevVal;
@@ -11933,9 +12017,26 @@ function onRuleTargetChange() {
   if (!sel || !type) return;
   sel.innerHTML = '<option value="" disabled selected>-- Choose One --</option>';
   if (type === "group") {
-    Object.keys(groupNames).map(Number).sort((a,b)=>a-b).forEach(n => { const o = document.createElement("option"); o.value=`group_${n}`; o.textContent=groupNames[n]||`Group ${n}`; sel.appendChild(o); });
+    Object.keys(groupNames).map(Number).sort((a,b)=>a-b).forEach(n => {
+      const o   = document.createElement("option");
+      o.value   = `group_${n}`;
+      const tag = groupTags?.[n] ? ` — ${groupTags[n]}` : "";
+      o.textContent = `Group ${n}: ${groupNames[n]||"Group "+n}${tag}`;
+      sel.appendChild(o);
+    });
   } else {
-    DEVICES.filter(d => !d.uid.includes("PLACEHOLDER")).forEach(d => { const o = document.createElement("option"); o.value=d.uid; o.textContent=d.name; sel.appendChild(o); });
+    const relayDevs = DEVICES.filter(d => d.type !== "ev" && !d.uid.includes("PLACEHOLDER"));
+    const evDevs    = DEVICES.filter(d => d.type === "ev");
+    if (relayDevs.length) {
+      const grp = document.createElement("optgroup"); grp.label = "Relay Devices";
+      relayDevs.forEach(d => { const o = document.createElement("option"); o.value=d.uid; o.textContent=d.name; grp.appendChild(o); });
+      sel.appendChild(grp);
+    }
+    if (evDevs.length) {
+      const grp = document.createElement("optgroup"); grp.label = "EV Chargers";
+      evDevs.forEach(d => { const o = document.createElement("option"); o.value=d.uid; o.textContent="⚡ "+d.name; grp.appendChild(o); });
+      sel.appendChild(grp);
+    }
   }
 }
 
@@ -13025,16 +13126,22 @@ function onInlineTargetChange() {
     Object.keys(groupNames).map(Number).sort((a,b)=>a-b).forEach(n => {
       const o = document.createElement("option");
       o.value = `group_${n}`;
-      o.textContent = groupNames[n] || `Group ${n}`;
+      o.textContent = `Group ${n}: ${groupNames[n]||"Group "+n}${groupTags?.[n]?" — "+groupTags[n]:""}`;
       sel.appendChild(o);
     });
   } else {
-    DEVICES.filter(d => !d.uid.includes("PLACEHOLDER")).forEach(d => {
-      const o = document.createElement("option");
-      o.value = d.uid;
-      o.textContent = d.name;
-      sel.appendChild(o);
-    });
+    const relayDevs = DEVICES.filter(d => d.type !== "ev" && !d.uid.includes("PLACEHOLDER"));
+    const evDevs    = DEVICES.filter(d => d.type === "ev");
+    if (relayDevs.length) {
+      const grp = document.createElement("optgroup"); grp.label = "Relay Devices";
+      relayDevs.forEach(d => { const o = document.createElement("option"); o.value=d.uid; o.textContent=d.name; grp.appendChild(o); });
+      sel.appendChild(grp);
+    }
+    if (evDevs.length) {
+      const grp = document.createElement("optgroup"); grp.label = "EV Chargers";
+      evDevs.forEach(d => { const o = document.createElement("option"); o.value=d.uid; o.textContent="⚡ "+d.name; grp.appendChild(o); });
+      sel.appendChild(grp);
+    }
   }
 }
 
@@ -15580,6 +15687,11 @@ async function refreshEVDevAssets() {
 
   renderEVDevAssets();
   updateEVDevFleetStats();
+  // Keep DEVICES in sync so groups and scheduler see EV chargers
+  injectEVIntoDevices();
+  // Refresh selectors if groups tab is loaded
+  if (typeof refreshGroupSelectors === "function") refreshGroupSelectors();
+  if (typeof populateTargetSelector === "function") populateTargetSelector();
 }
 
 function renderEVDevAssets() {
