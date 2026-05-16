@@ -489,6 +489,28 @@
   .scada-source-status.inactive { background:var(--border-md); }
   .scada-source-status.error    { background:var(--red); }
   .scada-hier-node { padding:4px 8px;border-radius:4px;font-size:11px;background:var(--surface2);border:0.5px solid var(--border);display:inline-block;margin:2px; }
+
+  /* ── EV Charging CSMS ── */
+  .ev-charger-card { border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:14px;background:var(--surface);margin-bottom:8px; }
+  .ev-charger-header { display:flex;align-items:center;gap:10px;margin-bottom:8px; }
+  .ev-status-dot { width:10px;height:10px;border-radius:50%;flex-shrink:0; }
+  .ev-status-dot.available   { background:var(--green-dark); }
+  .ev-status-dot.charging    { background:var(--blue-dark); }
+  .ev-status-dot.faulted     { background:var(--red); }
+  .ev-status-dot.offline     { background:var(--border-md); }
+  .ev-status-dot.preparing   { background:var(--amber); }
+  .ev-connector-row { display:flex;align-items:center;gap:8px;padding:6px 0;border-top:0.5px solid var(--border);font-size:12px; }
+  .ev-proto-badge { padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;font-family:monospace; }
+  .ev-proto-badge.ocpp16  { background:#e8f0fb;color:#1d5fa8; }
+  .ev-proto-badge.ocpp201 { background:var(--green-bg);color:var(--green-dark); }
+  .ev-proto-badge.api     { background:var(--amber-bg);color:var(--amber); }
+  .ev-session-bar { height:6px;border-radius:3px;background:var(--surface2);overflow:hidden;margin-top:4px; }
+  .ev-session-fill { height:100%;border-radius:3px;background:var(--blue-dark);transition:width 1s; }
+  .ev-shed-active { background:var(--red-lt);border-color:var(--red) !important; }
+  .ev-meter-grid { display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px; }
+  .ev-meter-tile { background:var(--surface2);border-radius:4px;padding:8px;text-align:center; }
+  .ev-meter-val  { font-size:16px;font-weight:700;color:var(--text-primary);font-family:monospace; }
+  .ev-meter-lbl  { font-size:10px;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em; }
 </style>
 </head>
 <body>
@@ -622,6 +644,7 @@
     <button class="sub-tab-btn" id="sub-monitor-feeds" onclick="switchSub('monitor','monitor-feeds',this)">Data Feeds</button>
     <button class="sub-tab-btn" id="sub-monitor-outage" onclick="switchSub('monitor','monitor-outage',this)">&#9889; Outage Tracker</button>
     <button class="sub-tab-btn" id="sub-monitor-scada" onclick="switchSub('monitor','monitor-scada',this)">&#128268; SCADA Data</button>
+    <button class="sub-tab-btn" id="sub-monitor-ev" onclick="switchSub('monitor','monitor-ev',this)">&#128268; EV Charging</button>
   </div>
   <div class="sub-tabs" id="sub-tabs-admin" style="display:none;">
     <button class="sub-tab-btn active" id="sub-admin-users" onclick="switchSub('admin','admin-users',this)">User Management</button>
@@ -3608,6 +3631,193 @@
   </div>
 </div>
 
+
+<!-- ── MONITOR EV CHARGING CSMS TAB ── -->
+<div class="tab-pane" id="tab-monitor-ev">
+  <div class="scroll-content">
+    <div style="max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <!-- CSMS Status Banner -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128268; OCPP Charging Station Management</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span id="ev-csms-status" style="font-size:11px;font-family:monospace;padding:2px 8px;border-radius:10px;background:var(--surface2);color:var(--text-hint);">Not configured</span>
+            <button class="queue-refresh" onclick="refreshEVStatus()">Refresh</button>
+            <button class="queue-refresh" onclick="toggleEVShedAll()">&#9889; DR Shed All</button>
+          </div>
+        </div>
+
+        <!-- Fleet stats row -->
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px;" id="ev-fleet-stats">
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="ev-stat-total">0</div><div class="ev-meter-lbl">Chargers</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="ev-stat-online">0</div><div class="ev-meter-lbl">Online</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="ev-stat-charging" style="color:var(--blue-dark);">0</div><div class="ev-meter-lbl">Charging</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="ev-stat-kw" style="color:var(--green-dark);">0</div><div class="ev-meter-lbl">Total kW</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="ev-stat-shed" style="color:var(--red);">0</div><div class="ev-meter-lbl">Shed Active</div></div>
+        </div>
+
+        <!-- OCPP WebSocket endpoint -->
+        <div style="background:var(--ink);border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:12px;">
+          <div style="font-size:10px;font-weight:600;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;font-family:monospace;">OCPP WebSocket Endpoints</div>
+          <div style="font-size:12px;font-family:monospace;color:#a8e6cf;line-height:2;">
+            <div>OCPP 1.6J: &nbsp; <span id="ev-ocpp16-url" style="color:#fff;"></span></div>
+            <div>OCPP 2.0.1: <span id="ev-ocpp201-url" style="color:#fff;"></span></div>
+          </div>
+          <div style="font-size:11px;color:rgba(255,255,255,.4);margin-top:8px;">Configure your charger to connect to these URLs. The station ID is appended automatically.</div>
+        </div>
+
+        <!-- Active shed banner -->
+        <div id="ev-shed-banner" style="display:none;background:var(--red-lt);border:0.5px solid var(--red);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--red);display:flex;align-items:center;gap:10px;">
+          <span style="font-size:18px;">⚡</span>
+          <div style="flex:1;"><strong>DR Shed Active</strong> — All enrolled chargers are operating at reduced capacity.</div>
+          <button onclick="restoreEVShed()" style="padding:5px 14px;border-radius:var(--radius-sm);border:0.5px solid var(--red);background:none;color:var(--red);font-size:12px;font-weight:600;cursor:pointer;">Restore</button>
+        </div>
+      </div>
+
+      <!-- Charger Fleet -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128268; Enrolled Chargers</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="queue-refresh" onclick="toggleEnrollChargerForm()">+ Enroll Charger</button>
+          </div>
+        </div>
+
+        <!-- Enroll form -->
+        <div id="ev-enroll-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px;border:0.5px solid var(--border-md);">
+          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;font-family:monospace;">Enroll Charging Station</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Station ID</label>
+              <input type="text" id="ev-new-station-id" placeholder="e.g. CS001 (used in OCPP URL)" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;font-family:monospace;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Display Name</label>
+              <input type="text" id="ev-new-station-name" placeholder="e.g. Parking Lot A - Station 1" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Protocol</label>
+              <select id="ev-new-protocol" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="ocpp201">OCPP 2.0.1 (recommended)</option>
+                <option value="ocpp16">OCPP 1.6J</option>
+                <option value="api">Proprietary API</option>
+                <option value="relay">Relay Fallback (no API)</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Manufacturer</label>
+              <select id="ev-new-make" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="">Unknown / Generic</option>
+                <option value="chargepoint">ChargePoint</option>
+                <option value="evbox">EVBox</option>
+                <option value="blink">Blink</option>
+                <option value="enelx">Enel X (JuiceNet)</option>
+                <option value="wallbox">Wallbox</option>
+                <option value="abb">ABB</option>
+                <option value="btcpower">BTC Power</option>
+                <option value="tritium">Tritium</option>
+                <option value="tesla">Tesla</option>
+                <option value="webasto">Webasto</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Max Power (kW)</label>
+              <input type="number" id="ev-new-max-kw" value="7.2" min="1" max="350" step="0.1" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Connectors</label>
+              <input type="number" id="ev-new-connectors" value="1" min="1" max="10" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">DR Enrolled</label>
+              <select id="ev-new-dr-enrolled" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="true">Yes — participates in DR</option>
+                <option value="false">No — monitoring only</option>
+              </select>
+            </div>
+          </div>
+          <!-- Shed limit config -->
+          <div style="padding:10px 12px;background:var(--surface);border-radius:var(--radius-sm);border:0.5px solid var(--border);margin-bottom:12px;">
+            <div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">DR Shed Limits</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Emergency (A)</label>
+                <input type="number" id="ev-shed-emergency" value="0" min="0" max="80" style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">High Shed (A)</label>
+                <input type="number" id="ev-shed-high" value="8" min="0" max="80" style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Medium Shed (A)</label>
+                <input type="number" id="ev-shed-medium" value="16" min="0" max="80" style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Low Shed (A)</label>
+                <input type="number" id="ev-shed-low" value="24" min="0" max="80" style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+              </div>
+            </div>
+            <div style="font-size:10px;color:var(--text-hint);margin-top:6px;">Amps limit sent via SetChargingProfile during DR events. 0A = suspend charging entirely.</div>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button onclick="toggleEnrollChargerForm()" style="padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-secondary);">Cancel</button>
+            <button onclick="enrollCharger()" style="padding:7px 20px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Enroll Station</button>
+          </div>
+        </div>
+
+        <!-- Charger fleet list -->
+        <div id="ev-charger-list"><div class="sched-empty">No chargers enrolled. Click + Enroll Charger to add a charging station.</div></div>
+      </div>
+
+      <!-- DR Control Panel -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#9889; Demand Response Control</div>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:12px;">Send load shed commands to all DR-enrolled chargers via OCPP SetChargingProfile or relay fallback.</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px;">
+          <button onclick="shedEVChargers(0,1.0)" style="padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--red);background:var(--red-lt);color:var(--red);font-size:13px;font-weight:700;cursor:pointer;">
+            &#128308; Emergency<br/><span style="font-size:10px;font-weight:400;">Suspend all charging</span>
+          </button>
+          <button onclick="shedEVChargers(null,0.75)" style="padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--amber);background:var(--amber-bg);color:var(--amber);font-size:13px;font-weight:700;cursor:pointer;">
+            &#128992; High Shed<br/><span style="font-size:10px;font-weight:400;">Reduce to low limit</span>
+          </button>
+          <button onclick="shedEVChargers(null,0.5)" style="padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--blue-dark);background:var(--blue-lt);color:var(--blue-dark);font-size:13px;font-weight:700;cursor:pointer;">
+            &#128993; Medium Shed<br/><span style="font-size:10px;font-weight:400;">Reduce to medium limit</span>
+          </button>
+          <button onclick="restoreEVShed()" style="padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--green);background:var(--green-bg);color:var(--green-dark);font-size:13px;font-weight:700;cursor:pointer;">
+            &#9989; Restore<br/><span style="font-size:10px;font-weight:400;">Full power all chargers</span>
+          </button>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);">
+          OCPP chargers receive <code>SetChargingProfile</code> with the configured amp limit. Relay fallback chargers receive a relay command from your Notecard devices. OpenADR signals automatically trigger the corresponding shed level.
+        </div>
+      </div>
+
+      <!-- Session Log -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128203; Session Log</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select id="ev-log-range" onchange="loadEVSessionLog()" style="padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="24">Last 24 hours</option>
+              <option value="72">Last 3 days</option>
+              <option value="168">Last 7 days</option>
+            </select>
+            <button class="queue-refresh" onclick="loadEVSessionLog()">Refresh</button>
+          </div>
+        </div>
+        <div id="ev-session-log"><div class="sched-empty">No sessions recorded.</div></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- ── DRILL DOWN SIDE PANEL ── -->
 <div id="fh-drill-panel" style="position:fixed;top:0;right:-480px;width:480px;height:100vh;background:var(--surface);border-left:0.5px solid var(--border-md);z-index:1000;transition:right 0.3s ease;display:flex;flex-direction:column;box-shadow:-4px 0 20px rgba(0,0,0,0.15);">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:0.5px solid var(--border-md);">
@@ -3825,6 +4035,7 @@ function runTabInit(name) {
   if (name === "monitor-feeds")    { initFeedCharts(); }
   if (name === "monitor-outage")   { initOutageTracker(); }
   if (name === "monitor-scada")    { initSCADA(); }
+  if (name === "monitor-ev")       { initEVCharging(); }
 }
 
 function switchTab(name, btn) { switchMain(name, btn); }
@@ -11849,6 +12060,9 @@ async function fireAutopilotEvent(rule, fv) {
     await sendLCToDevice(rule.target_id, hex);
   }
 
+  // Dispatch to EV chargers if any are enrolled
+  if (typeof dispatchEVChargersDR === "function") await dispatchEVChargersDR(parseFloat(rule?.signal_level || "0.75"));
+
   // Log to schedule_queue for audit trail
   try {
     await supabasePost("schedule_queue", {
@@ -14367,6 +14581,425 @@ async function loadSCADATrend() {
   } catch(e) {
     if (metaEl) metaEl.innerHTML = `<span style="color:var(--red);">Error: ${e.message}</span>`;
   }
+}
+
+
+
+// ── EV Charging CSMS ─────────────────────────────────────────────────────────
+
+let evChargers     = [];   // enrolled chargers from Supabase
+let evSessions     = {};   // live session data { stationId: { connectorId, status, power, energy, idTag } }
+let evShedActive   = false;
+let evRefreshTimer = null;
+const EV_STORAGE_KEY = "lcp_ev_chargers_v1";
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+async function initEVCharging() {
+  // Show OCPP endpoint URLs
+  const base = PROXY_URL.replace(/\/$/, "");
+  const url16  = document.getElementById("ev-ocpp16-url");
+  const url201 = document.getElementById("ev-ocpp201-url");
+  if (url16)  url16.textContent  = `${base}/ocpp16/{stationId}`;
+  if (url201) url201.textContent = `${base}/ocpp201/{stationId}`;
+
+  await loadEVChargers();
+  await refreshEVStatus();
+  await loadEVSessionLog();
+
+  if (!evRefreshTimer) {
+    evRefreshTimer = setInterval(() => {
+      refreshEVStatus();
+    }, 30000);
+  }
+}
+
+// ── Charger Enrollment ────────────────────────────────────────────────────────
+function toggleEnrollChargerForm() {
+  const form = document.getElementById("ev-enroll-form");
+  if (!form) return;
+  form.style.display = form.style.display === "none" ? "block" : "none";
+}
+
+async function enrollCharger() {
+  const stationId  = document.getElementById("ev-new-station-id")?.value?.trim().toUpperCase().replace(/\s+/g, "_");
+  const name       = document.getElementById("ev-new-station-name")?.value?.trim();
+  const protocol   = document.getElementById("ev-new-protocol")?.value || "ocpp201";
+  const make       = document.getElementById("ev-new-make")?.value || "";
+  const maxKw      = parseFloat(document.getElementById("ev-new-max-kw")?.value || "7.2");
+  const connectors = parseInt(document.getElementById("ev-new-connectors")?.value || "1");
+  const drEnrolled = document.getElementById("ev-new-dr-enrolled")?.value === "true";
+
+  if (!stationId) { setStatus("error", "Station ID required."); return; }
+  if (!name)      { setStatus("error", "Display name required."); return; }
+
+  const shedLimits = {
+    emergency: parseInt(document.getElementById("ev-shed-emergency")?.value || "0"),
+    high:      parseInt(document.getElementById("ev-shed-high")?.value || "8"),
+    medium:    parseInt(document.getElementById("ev-shed-medium")?.value || "16"),
+    low:       parseInt(document.getElementById("ev-shed-low")?.value || "24")
+  };
+
+  const record = {
+    station_id:  stationId,
+    name,
+    protocol,
+    make:        make || null,
+    max_kw:      maxKw,
+    connectors,
+    dr_enrolled: drEnrolled,
+    shed_limits: JSON.stringify(shedLimits),
+    status:      "offline",
+    enabled:     true,
+    enrolled_at: new Date().toISOString()
+  };
+
+  // Try Supabase, fall back to localStorage
+  let saved = false;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/ev_chargers`, {
+      method: "POST",
+      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", "Prefer":"return=representation" },
+      body: JSON.stringify(record)
+    });
+    if (res.ok) saved = true;
+    else console.warn("EV enroll Supabase:", res.status, await res.text());
+  } catch(e) { console.warn("EV enroll:", e.message); }
+
+  if (!saved) {
+    const existing = JSON.parse(localStorage.getItem(EV_STORAGE_KEY) || "[]");
+    existing.push({ ...record, id: Date.now(), shed_limits: shedLimits });
+    localStorage.setItem(EV_STORAGE_KEY, JSON.stringify(existing));
+  }
+
+  setStatus("ready", `${name} enrolled.`);
+  const form = document.getElementById("ev-enroll-form");
+  if (form) form.style.display = "none";
+  await loadEVChargers();
+  await refreshEVStatus();
+}
+
+async function loadEVChargers() {
+  let dbRows = [], localRows = [];
+  try {
+    const rows = await supabaseGet("ev_chargers?enabled=eq.true&order=enrolled_at.asc");
+    if (Array.isArray(rows) && rows.length) dbRows = rows;
+  } catch(e) {}
+  try {
+    const saved = localStorage.getItem(EV_STORAGE_KEY);
+    if (saved) localRows = JSON.parse(saved);
+  } catch(e) {}
+
+  const dbIds = new Set(dbRows.map(r => r.station_id));
+  const localOnly = localRows.filter(r => !dbIds.has(r.station_id));
+  evChargers = [...dbRows, ...localOnly].map(c => ({
+    ...c,
+    shed_limits: typeof c.shed_limits === "string"
+      ? (() => { try { return JSON.parse(c.shed_limits); } catch(e) { return {emergency:0,high:8,medium:16,low:24}; } })()
+      : (c.shed_limits || {emergency:0,high:8,medium:16,low:24})
+  }));
+}
+
+// ── Live Status Refresh ────────────────────────────────────────────────────────
+async function refreshEVStatus() {
+  if (!evChargers.length) {
+    const list = document.getElementById("ev-charger-list");
+    if (list) list.innerHTML = '<div class="sched-empty">No chargers enrolled. Click + Enroll Charger to add a charging station.</div>';
+    return;
+  }
+
+  // Fetch latest status from Supabase ev_sessions table
+  try {
+    const since = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // last 1 hour
+    const rows  = await supabaseGet(`ev_sessions?updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=200`);
+    if (Array.isArray(rows)) {
+      rows.forEach(r => {
+        if (!evSessions[r.station_id] || new Date(r.updated_at) > new Date(evSessions[r.station_id].updated_at || 0)) {
+          evSessions[r.station_id] = r;
+        }
+      });
+    }
+  } catch(e) {}
+
+  renderEVChargerList();
+  updateEVFleetStats();
+}
+
+function renderEVChargerList() {
+  const list = document.getElementById("ev-charger-list");
+  if (!list || !evChargers.length) return;
+
+  const PROTO_LABELS = { ocpp201:"OCPP 2.0.1", ocpp16:"OCPP 1.6J", api:"API", relay:"Relay" };
+  const STATUS_COLORS = { available:"available", charging:"charging", faulted:"faulted", offline:"offline", preparing:"preparing", unavailable:"faulted" };
+
+  list.innerHTML = evChargers.map(c => {
+    const sess       = evSessions[c.station_id];
+    const status     = sess?.status || c.status || "offline";
+    const dotClass   = STATUS_COLORS[status.toLowerCase()] || "offline";
+    const powerKw    = sess?.power_kw != null ? parseFloat(sess.power_kw).toFixed(1) : "—";
+    const energyKwh  = sess?.energy_kwh != null ? parseFloat(sess.energy_kwh).toFixed(2) : "—";
+    const soc        = sess?.soc_pct || null;
+    const shedActive = sess?.shed_active || false;
+    const protoClass = c.protocol === "ocpp201" ? "ocpp201" : c.protocol === "ocpp16" ? "ocpp16" : "api";
+    const base       = PROXY_URL.replace(/\/$/, "");
+
+    return `<div class="ev-charger-card${shedActive ? " ev-shed-active" : ""}">
+      <div class="ev-charger-header">
+        <div class="ev-status-dot ${dotClass}"></div>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:600;color:var(--text-primary);">${c.name}</div>
+          <div style="font-size:10px;color:var(--text-hint);font-family:monospace;">${c.station_id} &bull; ${c.make || "Unknown"} &bull; ${c.max_kw} kW max</div>
+        </div>
+        <span class="ev-proto-badge ${protoClass}">${PROTO_LABELS[c.protocol]||c.protocol}</span>
+        ${c.dr_enrolled ? '<span style="font-size:10px;font-weight:600;color:var(--green-dark);background:var(--green-bg);padding:2px 8px;border-radius:10px;">DR</span>' : ""}
+        ${shedActive ? '<span style="font-size:10px;font-weight:600;color:var(--red);background:var(--red-lt);padding:2px 8px;border-radius:10px;">SHED</span>' : ""}
+      </div>
+
+      <div class="ev-meter-grid">
+        <div class="ev-meter-tile"><div class="ev-meter-val" style="color:${status==="charging"?"var(--blue-dark)":"var(--text-hint)"};">${status.charAt(0).toUpperCase()+status.slice(1)}</div><div class="ev-meter-lbl">Status</div></div>
+        <div class="ev-meter-tile"><div class="ev-meter-val">${powerKw} <span style="font-size:11px;font-weight:400;">kW</span></div><div class="ev-meter-lbl">Power</div></div>
+        <div class="ev-meter-tile"><div class="ev-meter-val">${energyKwh} <span style="font-size:11px;font-weight:400;">kWh</span></div><div class="ev-meter-lbl">Session</div></div>
+        <div class="ev-meter-tile"><div class="ev-meter-val">${soc != null ? soc+"%" : "—"}</div><div class="ev-meter-lbl">SOC</div></div>
+      </div>
+
+      ${soc != null ? `<div class="ev-session-bar"><div class="ev-session-fill" style="width:${soc}%;"></div></div>` : ""}
+
+      <div class="ev-connector-row" style="margin-top:8px;border-top:0.5px solid var(--border);">
+        <div style="font-size:10px;color:var(--text-hint);font-family:monospace;flex:1;">
+          OCPP: ${base}/${c.protocol === "ocpp201" ? "ocpp201" : "ocpp16"}/${c.station_id}
+        </div>
+        <div style="display:flex;gap:6px;">
+          ${c.dr_enrolled && c.protocol !== "relay" ? `
+          <button onclick="shedSingleCharger('${c.station_id}', 0.75)" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--amber);background:var(--amber-bg);color:var(--amber);font-size:10px;cursor:pointer;">Shed</button>
+          <button onclick="restoreSingleCharger('${c.station_id}')" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--green);background:var(--green-bg);color:var(--green-dark);font-size:10px;cursor:pointer;">Restore</button>` : ""}
+          <button onclick="removeEVCharger('${c.station_id}')" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">Remove</button>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function updateEVFleetStats() {
+  const total    = evChargers.length;
+  const online   = evChargers.filter(c => evSessions[c.station_id]?.status && evSessions[c.station_id].status !== "offline").length;
+  const charging = evChargers.filter(c => evSessions[c.station_id]?.status === "charging").length;
+  const totalKw  = evChargers.reduce((sum, c) => sum + (parseFloat(evSessions[c.station_id]?.power_kw || 0)), 0);
+  const shed     = evChargers.filter(c => evSessions[c.station_id]?.shed_active).length;
+
+  document.getElementById("ev-stat-total").textContent   = total;
+  document.getElementById("ev-stat-online").textContent  = online;
+  document.getElementById("ev-stat-charging").textContent= charging;
+  document.getElementById("ev-stat-kw").textContent      = totalKw.toFixed(1);
+  document.getElementById("ev-stat-shed").textContent    = shed;
+
+  const badge = document.getElementById("ev-csms-status");
+  if (badge) {
+    badge.textContent  = online > 0 ? `${online}/${total} online` : total > 0 ? "All offline" : "No chargers";
+    badge.style.background = online > 0 ? "var(--green-bg)" : "var(--surface2)";
+    badge.style.color      = online > 0 ? "var(--green-dark)" : "var(--text-hint)";
+  }
+}
+
+async function removeEVCharger(stationId) {
+  if (!confirm(`Remove ${stationId} from enrollment?`)) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/ev_chargers?station_id=eq.${encodeURIComponent(stationId)}`, {
+      method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+    });
+  } catch(e) {}
+  // Also remove from localStorage
+  const local = JSON.parse(localStorage.getItem(EV_STORAGE_KEY) || "[]");
+  localStorage.setItem(EV_STORAGE_KEY, JSON.stringify(local.filter(c => c.station_id !== stationId)));
+  await loadEVChargers();
+  renderEVChargerList();
+}
+
+// ── OCPP Smart Charging — SetChargingProfile ────────────────────────────────────
+async function shedEVChargers(limitAmps, signalLevel) {
+  const enrolled = evChargers.filter(c => c.dr_enrolled);
+  if (!enrolled.length) { setStatus("error", "No DR-enrolled chargers."); return; }
+
+  evShedActive = true;
+  const shedBanner = document.getElementById("ev-shed-banner");
+  if (shedBanner) shedBanner.style.display = "flex";
+
+  const results = await Promise.all(enrolled.map(c => shedSingleCharger(c.station_id, signalLevel, limitAmps)));
+  setStatus("ready", `EV DR shed sent to ${enrolled.length} charger${enrolled.length!==1?"s":""}.`);
+
+  // Log to ev_sessions
+  await logEVDREvent("shed", signalLevel, enrolled.map(c => c.station_id));
+}
+
+async function shedSingleCharger(stationId, signalLevel, limitAmps = null) {
+  const charger = evChargers.find(c => c.station_id === stationId);
+  if (!charger) return;
+
+  // Determine amp limit from shed_limits if not specified
+  const limits = charger.shed_limits || {emergency:0, high:8, medium:16, low:24};
+  if (limitAmps === null) {
+    if (signalLevel >= 1.0)       limitAmps = limits.emergency;
+    else if (signalLevel >= 0.75) limitAmps = limits.high;
+    else if (signalLevel >= 0.5)  limitAmps = limits.medium;
+    else                          limitAmps = limits.low;
+  }
+
+  if (charger.protocol === "relay") {
+    // Relay fallback — send LC hex via existing relay system
+    const matchedDevice = DEVICES.find(d => d.uid === charger.relay_uid || d.name === charger.name);
+    if (matchedDevice) await sendLCToDevice(matchedDevice.uid, buildLCHex("all_on","dlc",19,2,0));
+    return;
+  }
+
+  // OCPP — send SetChargingProfile via Worker
+  try {
+    const profileId = Math.floor(Math.random() * 99999) + 1;
+    const endpoint  = charger.protocol === "ocpp201" ? "ocpp201/send" : "ocpp16/send";
+    const payload   = charger.protocol === "ocpp201"
+      ? buildOCPP201ChargingProfile(stationId, profileId, limitAmps)
+      : buildOCPP16ChargingProfile(stationId, profileId, limitAmps);
+
+    await fetch(PROXY_URL + endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ station_id: stationId, action: "SetChargingProfile", payload })
+    });
+  } catch(e) { console.warn(`shedSingleCharger ${stationId}:`, e.message); }
+}
+
+async function restoreEVShed() {
+  evShedActive = false;
+  const shedBanner = document.getElementById("ev-shed-banner");
+  if (shedBanner) shedBanner.style.display = "none";
+
+  const enrolled = evChargers.filter(c => c.dr_enrolled);
+  await Promise.all(enrolled.map(c => restoreSingleCharger(c.station_id)));
+  setStatus("ready", "EV chargers restored to full power.");
+  await logEVDREvent("restore", 0, enrolled.map(c => c.station_id));
+}
+
+async function restoreSingleCharger(stationId) {
+  const charger = evChargers.find(c => c.station_id === stationId);
+  if (!charger) return;
+  if (charger.protocol === "relay") return;
+
+  try {
+    const profileId = Math.floor(Math.random() * 99999) + 1;
+    const maxAmps   = Math.round((charger.max_kw * 1000) / 230); // approx
+    const endpoint  = charger.protocol === "ocpp201" ? "ocpp201/send" : "ocpp16/send";
+    const payload   = charger.protocol === "ocpp201"
+      ? buildOCPP201ChargingProfile(stationId, profileId, maxAmps)
+      : buildOCPP16ChargingProfile(stationId, profileId, maxAmps);
+
+    await fetch(PROXY_URL + endpoint, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ station_id:stationId, action:"SetChargingProfile", payload })
+    });
+    // Also clear the DR profile
+    await fetch(PROXY_URL + endpoint, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ station_id:stationId, action:"ClearChargingProfile", payload:{ id:profileId, connectorId:0 } })
+    });
+  } catch(e) { console.warn(`restoreSingleCharger ${stationId}:`, e.message); }
+}
+
+function toggleEVShedAll() {
+  if (evShedActive) restoreEVShed();
+  else shedEVChargers(null, 0.75);
+}
+
+// ── OCPP Message Builders ────────────────────────────────────────────────────
+function buildOCPP16ChargingProfile(stationId, profileId, limitAmps) {
+  // OCPP 1.6J — SetChargingProfile payload
+  return {
+    connectorId: 0,  // 0 = entire charge point
+    csChargingProfiles: {
+      chargingProfileId:      profileId,
+      stackLevel:             9,          // high stack level to override defaults
+      chargingProfilePurpose: "ChargePointMaxProfile",
+      chargingProfileKind:    "Absolute",
+      chargingSchedule: {
+        chargingRateUnit: "A",
+        chargingSchedulePeriod: [
+          { startPeriod: 0, limit: parseFloat(limitAmps.toFixed(1)) }
+        ]
+      }
+    }
+  };
+}
+
+function buildOCPP201ChargingProfile(stationId, profileId, limitAmps) {
+  // OCPP 2.0.1 — SetChargingProfile payload
+  return {
+    evseId: 0,  // 0 = entire charging station
+    chargingProfile: {
+      id:                     profileId,
+      stackLevel:             9,
+      chargingProfilePurpose: "ChargingStationExternalConstraints",
+      chargingProfileKind:    "Absolute",
+      chargingSchedule: [{
+        id:               1,
+        chargingRateUnit: "A",
+        chargingSchedulePeriod: [
+          { startPeriod: 0, limit: parseFloat(limitAmps.toFixed(1)) }
+        ]
+      }]
+    }
+  };
+}
+
+// ── DR Log ───────────────────────────────────────────────────────────────────
+async function logEVDREvent(action, signalLevel, stationIds) {
+  try {
+    await supabasePost("ev_dr_log", {
+      action,
+      signal_level: signalLevel,
+      station_ids:  JSON.stringify(stationIds),
+      fired_at:     new Date().toISOString(),
+      fired_by:     currentUser?.email || "manual"
+    });
+  } catch(e) {}
+}
+
+// ── Session Log ──────────────────────────────────────────────────────────────
+async function loadEVSessionLog() {
+  const list   = document.getElementById("ev-session-log");
+  if (!list) return;
+  const rangeHrs = parseInt(document.getElementById("ev-log-range")?.value || "24");
+  const since  = new Date(Date.now() - rangeHrs * 60 * 60 * 1000).toISOString();
+  try {
+    const rows = await supabaseGet(`ev_sessions?updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=100`);
+    if (!Array.isArray(rows) || !rows.length) {
+      list.innerHTML = '<div class="sched-empty">No sessions in this period. Sessions are recorded as chargers connect and report via OCPP.</div>';
+      return;
+    }
+    list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead><tr>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Station</th>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Status</th>
+        <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Power</th>
+        <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Energy</th>
+        <th style="text-align:center;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Shed</th>
+        <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Updated</th>
+      </tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-weight:600;">${r.station_name||r.station_id}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);">${r.status||"—"}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;font-family:monospace;">${r.power_kw!=null?r.power_kw+" kW":"—"}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;font-family:monospace;">${r.energy_kwh!=null?r.energy_kwh+" kWh":"—"}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:center;">${r.shed_active?"⚡ Yes":""}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;color:var(--text-hint);">${new Date(r.updated_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</td>
+      </tr>`).join("")}</tbody></table>`;
+  } catch(e) {
+    list.innerHTML = '<div class="sched-empty">Session data not yet available. Run the SQL to create ev_sessions table.</div>';
+  }
+}
+
+// ── Wire OpenADR → EV Chargers ───────────────────────────────────────────────
+// Called from fireAutopilotEvent and OpenADR dispatch — extends existing DR to EV chargers
+async function dispatchEVChargersDR(signalLevel) {
+  const enrolled = evChargers.filter(c => c.dr_enrolled);
+  if (!enrolled.length) return;
+  console.log(`EV DR dispatch: ${enrolled.length} chargers, signal ${signalLevel}`);
+  await shedEVChargers(null, signalLevel);
 }
 
 
