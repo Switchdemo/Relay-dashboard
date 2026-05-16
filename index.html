@@ -758,13 +758,17 @@
         </div>
       </div>
 
-
-
-
-
-
-
-
+      <!-- Live Feed Values Card -->
+      <div class="sched-card" id="summary-feeds-card" style="display:none;">
+        <div class="sched-card-header">
+          <div class="sched-card-title">&#128225; Live Data Feeds</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span id="summary-feeds-updated" style="font-size:10px;color:var(--text-hint);font-family:monospace;"></span>
+            <button class="queue-refresh" onclick="refreshSummaryFeeds()">Refresh</button>
+          </div>
+        </div>
+        <div id="summary-feeds-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;"></div>
+      </div>
 
     </div>
   </div>
@@ -1613,6 +1617,29 @@
       </div>
 
       <!-- Save -->
+      <!-- Email Notifications -->
+      <div class="rule-form-section" id="rule-notify-section">
+        <label class="rule-form-label">Email Notifications</label>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;line-height:1.6;">
+          Email users with <strong>Alerts</strong> enabled in User Management when this rule triggers.
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;">
+            <input type="checkbox" id="rule-notify-alert" checked />
+            Send on <strong>Alert</strong> trigger
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;" id="rule-notify-cancel-row" style="display:none;">
+            <input type="checkbox" id="rule-notify-cancel-link" checked />
+            Include <strong>cancel link</strong> in email
+          </label>
+        </div>
+        <div style="margin-top:8px;">
+          <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;">Custom message (optional)</label>
+          <input type="text" id="rule-notify-message" placeholder="e.g. High price event — consider load shed"
+            style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+        </div>
+      </div>
+
       <div style="display:flex;gap:10px;justify-content:flex-end;">
         <button onclick="closeRuleModal()" style="padding:9px 20px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:13px;cursor:pointer;color:var(--text-secondary);">Cancel</button>
         <button onclick="saveRule()" style="padding:9px 24px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save Rule</button>
@@ -5146,6 +5173,7 @@ function viewDeviceHistory(uid) {
 let summaryRefreshInterval = null;
 
 async function initSummaryTab() {
+  refreshSummaryFeeds();
   await loadProgramSummary();
   await populateParticipationEventSelect();
   // Auto-refresh every 10 seconds
@@ -6711,7 +6739,7 @@ async function loadUsersTable() {
   // Header
   const thead = table.createTHead();
   const hrow  = thead.insertRow();
-  ["Name","Email","Role","2FA","Status","Last Login",""].forEach(h => {
+  ["Name","Email","Role","2FA","Alerts","Status","Last Login",""].forEach(h => {
     const th = document.createElement("th");
     th.textContent = h;
     th.style.cssText = "text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);";
@@ -6766,6 +6794,17 @@ async function loadUsersTable() {
     chk.addEventListener("change", () => updateUser2FA(u.id, chk.checked));
     td2fa.appendChild(chk);
 
+    // Alerts
+    const tdAlerts = tr.insertCell();
+    tdAlerts.style.cssText = "padding:8px;border-bottom:0.5px solid var(--border);";
+    const alertChk = document.createElement("input");
+    alertChk.type = "checkbox";
+    alertChk.checked = !!u.receive_alerts;
+    alertChk.style.cursor = "pointer";
+    alertChk.title = "Receive email notifications for alerts, suggestions, and autopilot events";
+    alertChk.addEventListener("change", () => updateUserAlerts(u.id, alertChk.checked));
+    tdAlerts.appendChild(alertChk);
+
     // Status
     const tdStatus = tr.insertCell();
     tdStatus.style.cssText = "padding:8px;border-bottom:0.5px solid var(--border);color:" + (u.is_active ? "var(--green-dark)" : "var(--red)") + ";";
@@ -6800,6 +6839,11 @@ async function updateUserRole(userId, role) {
 
 async function updateUser2FA(userId, required) {
   await updateUserProfile(userId, { two_fa_required: required });
+}
+
+async function updateUserAlerts(userId, receive) {
+  await updateUserProfile(userId, { receive_alerts: receive });
+  setStatus("ready", `Alert notification ${receive ? "enabled" : "disabled"} for user.`);
 }
 
 async function toggleUserActive(userId, currentlyActive) {
@@ -10647,6 +10691,8 @@ function showAddRuleModal() {
   document.getElementById("rule-condition2").style.display = "none";
   document.getElementById("rule-grace-row").style.display = "none";
   document.getElementById("autopilot-warning").style.display = "none";
+  if (document.getElementById("rule-action-section")) document.getElementById("rule-action-section").style.display = "none";
+  if (document.getElementById("rule-notify-cancel-row")) document.getElementById("rule-notify-cancel-row").style.display = "none";
   ["tier-alert","tier-suggest","tier-autopilot"].forEach(id => document.getElementById(id)?.classList.remove("selected"));
   document.getElementById("rule-modal").classList.add("active");
 }
@@ -10741,9 +10787,12 @@ async function saveRule() {
     grace_mins:     selectedTier === "autopilot" ? parseInt(document.getElementById("rule-grace")?.value) || 5 : null,
     blackout_start: document.getElementById("rule-blackout-start")?.value || null,
     blackout_end:   document.getElementById("rule-blackout-end")?.value   || null,
-    enabled:        true,
-    created_by:     currentUser?.email || null,
-    created_at:     new Date().toISOString()
+    enabled:             true,
+    notify:              document.getElementById("rule-notify-alert")?.checked !== false,
+    notify_cancel_link:  document.getElementById("rule-notify-cancel-link")?.checked !== false,
+    notify_message:      document.getElementById("rule-notify-message")?.value?.trim() || null,
+    created_by:          currentUser?.email || null,
+    created_at:          new Date().toISOString()
   };
 
   try {
@@ -10786,6 +10835,7 @@ async function editRule(id) {
       document.getElementById("rule-threshold2").value = rule.threshold2;
     }
     selectRuleTier(rule.tier);
+    applyRuleTierVisibility(rule.tier);
     onRuleFeedChange();
     onRuleTargetChange();
     setTimeout(() => {
@@ -11048,20 +11098,35 @@ async function evaluateRule(rule) {
 
   console.log(`Rule triggered: "${rule.name}" — ${def.label} = ${fv?.value} ${def.unit} — Tier: ${rule.tier}`);
 
+  const recipients = await getAlertRecipients();
+  const fvUnit  = FEED_DEFS[rule.feed_key]?.unit || "";
+  const fvLabel = FEED_DEFS[rule.feed_key]?.label || rule.feed_key;
+  const notify  = rule.notify !== false; // default true
+
   if (rule.tier === "alert") {
     await fireTrigger(rule, fv, "alert", "notified", actionDesc);
-    // Show dashboard notification
     setStatus("ready", `⚠️ Monitor Alert: ${rule.name || def.label + " threshold crossed"} — ${fv?.value} ${def.unit}`);
+    if (notify) {
+      await sendNotificationEmail({ recipients, rule, tier:"alert", feedValue:fv?.value, feedUnit:fvUnit, feedLabel:fvLabel, eventDesc:actionDesc, cancelToken:null, graceMins:null });
+    }
 
   } else if (rule.tier === "suggest") {
     await fireTrigger(rule, fv, "suggest", "suggested", actionDesc);
-    showSuggestModal(rule, fv);
+    const token = rule.notify_cancel_link !== false ? await createCancelToken(rule.id, actionDesc, rule.grace_mins || 5) : null;
+    showCancellationBanner(rule, fv, "suggest", token);
+    if (notify) {
+      await sendNotificationEmail({ recipients, rule, tier:"suggest", feedValue:fv?.value, feedUnit:fvUnit, feedLabel:fvLabel, eventDesc:actionDesc, cancelToken:token, graceMins:rule.grace_mins||5 });
+    }
 
   } else if (rule.tier === "autopilot") {
     if (currentUserRole !== "administrator") return;
-    // Check no pending timer already running for this rule
     if (pendingAutopilotEvents[rule.id]) return;
+    const token = rule.notify_cancel_link !== false ? await createCancelToken(rule.id, actionDesc, rule.grace_mins || 5) : null;
     await fireTrigger(rule, fv, "autopilot", "pending", actionDesc);
+    showCancellationBanner(rule, fv, "autopilot", token);
+    if (notify) {
+      await sendNotificationEmail({ recipients, rule, tier:"autopilot", feedValue:fv?.value, feedUnit:fvUnit, feedLabel:fvLabel, eventDesc:actionDesc, cancelToken:token, graceMins:rule.grace_mins||5 });
+    }
     startAutopilotGrace(rule, fv);
   }
 }
@@ -11931,6 +11996,336 @@ async function testVTNConnection() {
 }
 
 
+
+// ── Summary Feed Values ───────────────────────────────────────────────────────
+
+async function refreshSummaryFeeds() {
+  const grid    = document.getElementById("summary-feeds-grid");
+  const card    = document.getElementById("summary-feeds-card");
+  const updated = document.getElementById("summary-feeds-updated");
+  if (!grid) return;
+
+  // Fetch latest reading per active feed from Supabase
+  try {
+    const feeds = await supabaseGet("monitor_feeds?enabled=eq.true&order=added_at.asc");
+    if (!Array.isArray(feeds) || !feeds.length) {
+      if (card) card.style.display = "none";
+      return;
+    }
+
+    if (card) card.style.display = "block";
+
+    const results = await Promise.all(feeds.map(async f => {
+      const rows = await supabaseGet(
+        `monitor_feed_readings?feed_key=eq.${encodeURIComponent(f.feed_key)}&order=recorded_at.desc&limit=1`
+      ).catch(() => []);
+      const latest = Array.isArray(rows) && rows.length ? rows[0] : null;
+      return { feed: f, latest };
+    }));
+
+    // Also check live feedValues for any that are more recent
+    results.forEach(r => {
+      const live = feedValues[r.feed.feed_key];
+      if (live && live.value != null) {
+        const liveAge    = live.timestamp ? Date.now() - new Date(live.timestamp).getTime() : 9999999;
+        const dbAge      = r.latest?.recorded_at ? Date.now() - new Date(r.latest.recorded_at).getTime() : 9999999;
+        if (liveAge < dbAge) {
+          r.latest = { value: live.value, unit: live.unit, recorded_at: live.timestamp };
+        }
+      }
+    });
+
+    const colorMap = {
+      nws_temp:"#e67e22", nws_humidity:"#2980b9", nws_heat_index:"#c0392b",
+      openmeteo_uv:"#8e44ad", openmeteo_temp_forecast:"#e67e22",
+      spp_lmp:"#c0392b", ercot_lmp:"#c0392b", miso_lmp:"#c0392b",
+      isone_lmp:"#c0392b", tou_peak:"#1a5f4a", tou_offpeak:"#2980b9"
+    };
+
+    grid.innerHTML = results.map(({ feed: f, latest }) => {
+      const def   = FEED_DEFS[f.feed_key] || {};
+      const val   = latest?.value != null ? latest.value : null;
+      const unit  = f.unit || def.unit || "";
+      const age   = latest?.recorded_at
+        ? Math.round((Date.now() - new Date(latest.recorded_at).getTime()) / 60000)
+        : null;
+      const color = colorMap[f.feed_key] || "var(--text-primary)";
+      const ageStr = age == null ? "No data" : age < 2 ? "Just now" : `${age}m ago`;
+      const ageColor = age == null ? "var(--red)" : age > 30 ? "var(--amber)" : "var(--text-hint)";
+
+      return `<div style="background:var(--surface2);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px;text-align:center;">
+        <div style="font-size:16px;margin-bottom:4px;">${def.icon || "📡"}</div>
+        <div style="font-size:11px;font-weight:600;color:var(--text-hint);margin-bottom:6px;font-family:monospace;text-transform:uppercase;letter-spacing:.04em;">${f.label}</div>
+        <div style="font-size:${val != null ? "24px" : "18px"};font-weight:700;color:${val != null ? color : "var(--text-hint)"};line-height:1;">
+          ${val != null ? val + (unit ? " <span style=\"font-size:12px;font-weight:400;\">" + unit + "</span>" : "") : "—"}
+        </div>
+        <div style="font-size:10px;color:${ageColor};margin-top:4px;">${ageStr}</div>
+      </div>`;
+    }).join("");
+
+    if (updated) updated.textContent = `Updated: ${new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}`;
+
+  } catch(e) {
+    console.warn("refreshSummaryFeeds:", e.message);
+  }
+}
+
+// ── Tier-Aware Rule Form ───────────────────────────────────────────────────────
+
+function applyRuleTierVisibility(tier) {
+  const actionSection  = document.getElementById("rule-action-section");
+  const graceRow       = document.getElementById("rule-grace-row");
+  const apWarn         = document.getElementById("autopilot-warning");
+  const notifySection  = document.getElementById("rule-notify-section");
+  const cancelRow      = document.getElementById("rule-notify-cancel-row");
+
+  if (!tier) return;
+
+  // Action section — hidden for Alert, shown for Suggest and Autopilot
+  if (actionSection) actionSection.style.display = tier === "alert" ? "none" : "block";
+
+  // Grace period — only for Autopilot
+  if (graceRow) graceRow.style.display = tier === "autopilot" ? "block" : "none";
+
+  // Autopilot warning
+  if (apWarn) apWarn.style.display = tier === "autopilot" ? "block" : "none";
+
+  // Notification section — always shown
+  if (notifySection) notifySection.style.display = "block";
+
+  // Cancel link option — only relevant for Suggest and Autopilot
+  if (cancelRow) cancelRow.style.display = tier === "alert" ? "none" : "flex";
+}
+
+// Override selectRuleTier to also apply visibility
+const _origSelectRuleTier = selectRuleTier;
+function selectRuleTier(tier) {
+  _origSelectRuleTier(tier);
+  applyRuleTierVisibility(tier);
+}
+
+// ── Email Notification System ─────────────────────────────────────────────────
+
+// Fetch alert-enabled users from user_profiles
+async function getAlertRecipients() {
+  try {
+    const rows = await supabaseGet("user_profiles?receive_alerts=eq.true&is_active=eq.true&select=email,full_name,role");
+    return Array.isArray(rows) ? rows : [];
+  } catch(e) {
+    console.warn("getAlertRecipients:", e);
+    return [];
+  }
+}
+
+// Generate a cancellation token and store it
+async function createCancelToken(ruleId, eventDesc, graceMins) {
+  const token     = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + graceMins * 60 * 1000).toISOString();
+  try {
+    await supabasePost("pending_notifications", {
+      token,
+      rule_id:     ruleId,
+      event_desc:  eventDesc,
+      expires_at:  expiresAt,
+      cancelled:   false,
+      created_at:  new Date().toISOString()
+    });
+  } catch(e) { console.warn("createCancelToken:", e); }
+  return token;
+}
+
+// Send notification email via Worker /notify endpoint
+async function sendNotificationEmail({ recipients, rule, tier, feedValue, feedUnit, feedLabel, eventDesc, cancelToken, graceMins }) {
+  if (!recipients || !recipients.length) return;
+
+  const tierColors = { alert:"#1d5fa8", suggest:"#b45309", autopilot:"#c0392b" };
+  const tierLabels = { alert:"⚠️ Alert", suggest:"💡 Suggestion", autopilot:"⚡ Autopilot" };
+  const tierColor  = tierColors[tier] || "#1a1a1a";
+  const tierLabel  = tierLabels[tier] || tier.toUpperCase();
+
+  const cancelSection = cancelToken ? `
+    <div style="margin-top:20px;text-align:center;">
+      <p style="font-size:13px;color:#666;margin-bottom:12px;">
+        This event will fire in <strong>${graceMins} minute${graceMins!==1?"s":""}</strong> unless cancelled.
+      </p>
+      <a href="${PROXY_URL}cancel?token=${cancelToken}"
+        style="display:inline-block;padding:12px 28px;background:#c0392b;color:#fff;border-radius:6px;text-decoration:none;font-weight:700;font-size:14px;">
+        &#10060; Cancel This Event
+      </a>
+      <p style="font-size:11px;color:#999;margin-top:8px;">This link expires in ${graceMins} minutes.</p>
+    </div>` : "";
+
+  const customMsg = rule.notify_message ? `<p style="font-size:13px;color:#444;font-style:italic;margin:8px 0;">${rule.notify_message}</p>` : "";
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #e0e0e0;">
+      <div style="background:${tierColor};padding:20px 24px;">
+        <div style="font-size:20px;font-weight:700;color:#fff;">${tierLabel}</div>
+        <div style="font-size:13px;color:rgba(255,255,255,.75);margin-top:4px;">Load Control Platform — Monitor & Triggers</div>
+      </div>
+      <div style="padding:24px;">
+        <p style="font-size:15px;font-weight:600;color:#1a1a1a;margin-bottom:4px;">${rule.name || feedLabel + " threshold crossed"}</p>
+        ${customMsg}
+        <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:13px;">
+          <tr style="background:#f5f5f3;">
+            <td style="padding:8px 12px;font-weight:600;color:#666;border-bottom:1px solid #e8e8e8;">Feed</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e8e8e8;">${feedLabel}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 12px;font-weight:600;color:#666;border-bottom:1px solid #e8e8e8;">Current Value</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e8e8e8;font-weight:700;color:${tierColor};">${feedValue} ${feedUnit}</td>
+          </tr>
+          <tr style="background:#f5f5f3;">
+            <td style="padding:8px 12px;font-weight:600;color:#666;border-bottom:1px solid #e8e8e8;">Threshold</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e8e8e8;">${{gt:">",gte:"≥",lt:"<",lte:"≤",eq:"="}[rule.operator]||rule.operator} ${rule.threshold} ${feedUnit}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 12px;font-weight:600;color:#666;">Action</td>
+            <td style="padding:8px 12px;">${eventDesc || "See dashboard"}</td>
+          </tr>
+        </table>
+        ${cancelSection}
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid #e8e8e8;font-size:11px;color:#999;">
+          Sent by Load Control Platform &bull; ${new Date().toLocaleString()}
+        </div>
+      </div>
+    </div>`;
+
+  try {
+    await fetch(PROXY_URL + "notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recipients: recipients.map(r => ({ email: r.email, name: r.full_name || r.email })),
+        subject:    `[LCP ${tier.toUpperCase()}] ${rule.name || feedLabel}`,
+        html
+      })
+    });
+  } catch(e) {
+    console.warn("sendNotificationEmail:", e.message);
+  }
+}
+
+// ── Cancellation Timer ─────────────────────────────────────────────────────────
+
+let activeCancellationTimers = {}; // { ruleId: { timer, countdownEl, graceMs } }
+
+function showCancellationBanner(rule, fv, tier, token) {
+  const graceMins = rule.grace_mins || 5;
+  const graceMs   = graceMins * 60 * 1000;
+  let   remaining = graceMins * 60; // seconds
+
+  // Remove existing banner for this rule if any
+  hideCancellationBanner(rule.id);
+
+  const bannerId = `cancel-banner-${rule.id}`;
+  const banner = document.createElement("div");
+  banner.id = bannerId;
+  banner.style.cssText = `position:fixed;bottom:20px;right:20px;z-index:800;background:var(--ink);color:#fff;
+    border-radius:var(--radius);padding:16px 20px;box-shadow:0 8px 32px rgba(0,0,0,.3);
+    max-width:340px;border-left:4px solid ${tier === "autopilot" ? "var(--red)" : "var(--amber)"};`;
+  banner.innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px;">
+          ${tier === "autopilot" ? "⚡ Autopilot Pending" : "💡 Suggested Event Pending"}
+        </div>
+        <div style="font-size:12px;color:rgba(255,255,255,.7);margin-bottom:8px;">${rule.name || "Monitor trigger"}</div>
+        <div style="font-size:11px;color:rgba(255,255,255,.5);margin-bottom:10px;">
+          ${tier === "autopilot" ? "Event fires in" : "Awaiting confirmation —"} <strong id="cancel-countdown-${rule.id}" style="color:${tier==="autopilot"?"var(--red)":"var(--amber)"};">${graceMins}:00</strong>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button onclick="cancelPendingEvent(${rule.id},'${token || ""}')"
+            style="padding:6px 14px;border-radius:4px;border:none;background:var(--red);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">
+            ✕ Cancel
+          </button>
+          ${tier !== "autopilot" ? `<button onclick="confirmSuggestedEvent(${rule.id})"
+            style="padding:6px 14px;border-radius:4px;border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">
+            ✓ Confirm Now
+          </button>` : ""}
+        </div>
+      </div>
+      <button onclick="hideCancellationBanner(${rule.id})"
+        style="background:none;border:none;color:rgba(255,255,255,.4);font-size:16px;cursor:pointer;padding:0;flex-shrink:0;">✕</button>
+    </div>`;
+
+  document.body.appendChild(banner);
+
+  // Countdown ticker
+  const countdownEl = document.getElementById(`cancel-countdown-${rule.id}`);
+  const ticker = setInterval(() => {
+    remaining--;
+    if (remaining <= 0) {
+      clearInterval(ticker);
+      hideCancellationBanner(rule.id);
+      return;
+    }
+    const m = Math.floor(remaining / 60);
+    const s = remaining % 60;
+    if (countdownEl) countdownEl.textContent = `${m}:${String(s).padStart(2,"0")}`;
+  }, 1000);
+
+  activeCancellationTimers[rule.id] = { ticker, token, rule, fv, tier };
+}
+
+function hideCancellationBanner(ruleId) {
+  const existing = document.getElementById(`cancel-banner-${ruleId}`);
+  if (existing) existing.remove();
+  if (activeCancellationTimers[ruleId]) {
+    clearInterval(activeCancellationTimers[ruleId].ticker);
+    delete activeCancellationTimers[ruleId];
+  }
+}
+
+async function cancelPendingEvent(ruleId, token) {
+  hideCancellationBanner(ruleId);
+
+  // Cancel autopilot timer if pending
+  if (pendingAutopilotEvents[ruleId]) {
+    clearTimeout(pendingAutopilotEvents[ruleId].timer);
+    clearInterval(pendingAutopilotEvents[ruleId].countdown);
+    delete pendingAutopilotEvents[ruleId];
+  }
+
+  // Mark token as cancelled in Supabase
+  if (token) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/pending_notifications?token=eq.${token}`, {
+        method: "PATCH",
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json", "Prefer": "return=minimal" },
+        body: JSON.stringify({ cancelled: true, cancelled_at: new Date().toISOString(), cancelled_by: currentUser?.email })
+      });
+    } catch(e) {}
+  }
+
+  // Update trigger log
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/monitor_trigger_log?rule_id=eq.${ruleId}&outcome=eq.pending`, {
+      method: "PATCH",
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json", "Prefer": "return=minimal" },
+      body: JSON.stringify({ outcome: "cancelled", cancelled_by: currentUser?.email })
+    });
+  } catch(e) {}
+
+  setStatus("ready", `Event cancelled for rule ${ruleId}`);
+  loadTriggerLog();
+  loadTriggerLogM();
+}
+
+function confirmSuggestedEvent(ruleId) {
+  hideCancellationBanner(ruleId);
+  const pending = pendingAutopilotEvents[ruleId];
+  if (pending) {
+    clearTimeout(pending.timer);
+    clearInterval(pending.countdown);
+    fireAutopilotEvent(pending.rule, pending.fv);
+    delete pendingAutopilotEvents[ruleId];
+  }
+}
+
+
 // ── Background Theme System ───────────────────────────────────────────────────
 
 const THEMES = {
@@ -12359,4 +12754,5 @@ function showHelpTab(key) {
 // Init help tab with scheduling content when navigated to
 
 </script>
-</b
+</body>
+</html>
