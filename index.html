@@ -4172,7 +4172,9 @@ let map, mapInitialized = false;
 const mapMarkers = {};
 
 // ── Group state ───────────────────────────────────────────────────────────────
-let groupNames = { 1: "Group 1", 2: "Group 2", 3: "Group 3" };
+let groupNames = { 1: "Group 1", 2: "Group 2", 3: "Group 3" }; // extended dynamically
+let numGroups  = 3; // configurable — saved in group_names table
+let groupTags  = {}; // { groupNum: tagString }
 let groupAssignments = {}; // { device_uid: [group_numbers] }
 
 // ── Supabase ──────────────────────────────────────────────────────────────────
@@ -4520,8 +4522,13 @@ async function prefillEventName() {
 async function loadGroupNamesForScheduler() {
   try {
     const names = await supabaseGet("group_names?order=group_number");
-    if (Array.isArray(names)) {
-      names.forEach(n => { groupNames[n.group_number] = n.group_name; });
+    if (Array.isArray(names) && names.length) {
+      names.forEach(n => {
+        groupNames[n.group_number] = n.group_name;
+        if (!groupTags) groupTags = {};
+        groupTags[n.group_number]  = n.group_tag || "";
+      });
+      numGroups = names.length;
     }
     const assignments = await supabaseGet("device_groups?order=group_number");
     groupAssignments = {};
@@ -10459,8 +10466,13 @@ async function loadGroups() {
   try {
     // Load group names
     const names = await supabaseGet("group_names?order=group_number");
-    if (Array.isArray(names)) {
-      names.forEach(n => { groupNames[n.group_number] = n.group_name; });
+    if (Array.isArray(names) && names.length) {
+      names.forEach(n => {
+        groupNames[n.group_number] = n.group_name;
+        if (!groupTags) groupTags = {};
+        groupTags[n.group_number]  = n.group_tag || "";
+      });
+      numGroups = names.length;
     }
     // Load assignments
     const assignments = await supabaseGet("device_groups?order=group_number");
@@ -10472,6 +10484,7 @@ async function loadGroups() {
       });
     }
     renderGroups();
+    refreshGroupSelectors();
   } catch(e) {
     container.innerHTML = `<div class="groups-loading">Error loading groups.</div>`;
   }
@@ -10479,12 +10492,41 @@ async function loadGroups() {
 
 function renderGroups() {
   const container = document.getElementById("groups-container");
-  const html = `<div class="groups-layout">
-    ${[1,2,3].map(gn => `
-      <div class="group-card">
+  const groupNums = Object.keys(groupNames).map(Number).sort((a,b) => a-b);
+  numGroups = groupNums.length || 3;
+
+  const html = `
+    <!-- Group management header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding:0 2px;">
+      <div style="font-size:12px;color:var(--text-hint);">${numGroups} group${numGroups!==1?"s":""} configured &bull; Devices can belong to multiple groups</div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="addGroup()" style="padding:6px 14px;border-radius:var(--radius-sm);border:0.5px solid var(--green);background:var(--green-bg);color:var(--green-dark);font-size:12px;font-weight:600;cursor:pointer;">+ Add Group</button>
+        ${numGroups > 1 ? `<button onclick="removeLastGroup()" style="padding:6px 14px;border-radius:var(--radius-sm);border:0.5px solid var(--red);background:none;color:var(--red);font-size:12px;cursor:pointer;">− Remove Last</button>` : ""}
+      </div>
+    </div>
+    <div class="groups-layout">
+    ${groupNums.map(gn => `
+      <div class="group-card" id="group-card-${gn}">
         <div class="group-header">
-          <input class="group-name-input" id="gname-${gn}" value="${groupNames[gn]}" placeholder="Group name..." />
+          <div style="flex:1;display:flex;flex-direction:column;gap:4px;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:10px;font-weight:700;color:var(--text-hint);font-family:monospace;flex-shrink:0;">GROUP ${gn}</span>
+            </div>
+            <input class="group-name-input" id="gname-${gn}"
+              value="${groupNames[gn]||"Group "+gn}"
+              placeholder="Group name or nickname..."
+              onkeydown="if(event.key==='Enter') saveGroupName(${gn})"
+              style="font-size:14px;font-weight:600;" />
+            <input class="group-name-input" id="gtag-${gn}"
+              value="${groupTags[gn]||""}"
+              placeholder="Tag / description (optional)"
+              onkeydown="if(event.key==='Enter') saveGroupName(${gn})"
+              style="font-size:11px;color:var(--text-hint);font-weight:400;border-color:transparent;" />
+          </div>
           <button class="group-save-btn" onclick="saveGroupName(${gn})">Save</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:8px;">
+          ${(Object.entries(groupAssignments).filter(([uid,groups]) => groups.includes(gn)).length)} device${(Object.entries(groupAssignments).filter(([uid,groups]) => groups.includes(gn)).length)!==1?"s":""} assigned
         </div>
         <div style="font-size:11px;font-weight:600;color:var(--red);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Emergency Direct Control</div>
         <div class="group-actions">
@@ -10492,7 +10534,7 @@ function renderGroups() {
           <button class="group-cmd-btn off" onclick="sendGroupCommand(${gn}, 'all_off')">All Relays OFF</button>
         </div>
         <div class="group-devices">
-          ${DEVICES.map(d => `
+          ${DEVICES.filter(d => !d.uid.includes("PLACEHOLDER")).map(d => `
             <label class="group-device-row ${(groupAssignments[d.uid] || []).includes(gn) ? "group-member" : ""}">
               <input type="checkbox" ${(groupAssignments[d.uid] || []).includes(gn) ? "checked" : ""}
                 onchange="assignDevice('${d.uid}', ${gn}, this.checked)" />
@@ -10503,16 +10545,107 @@ function renderGroups() {
             </label>`).join("")}
         </div>
       </div>`).join("")}
-  </div>`;
+    </div>`;
   container.innerHTML = html;
 }
 
+async function addGroup() {
+  const nums    = Object.keys(groupNames).map(Number);
+  const nextNum = nums.length ? Math.max(...nums) + 1 : 1;
+  const name    = `Group ${nextNum}`;
+  groupNames[nextNum] = name;
+  if (!groupTags) groupTags = {};
+  groupTags[nextNum]  = "";
+  numGroups = Object.keys(groupNames).length;
+  try {
+    await supabaseUpsert("group_names",
+      { group_number: nextNum, group_name: name, group_tag: "" }, "group_number");
+  } catch(e) {}
+  renderGroups();
+  // Scroll to new group and focus name
+  setTimeout(() => {
+    const el = document.getElementById(`group-card-${nextNum}`);
+    if (el) el.scrollIntoView({ behavior:"smooth", block:"nearest" });
+    const inp = document.getElementById(`gname-${nextNum}`);
+    if (inp) inp.focus();
+  }, 100);
+  setStatus("ready", `Group ${nextNum} created. Enter a name to customize it.`);
+}
+
+async function removeLastGroup() {
+  const nums    = Object.keys(groupNames).map(Number).sort((a,b) => a-b);
+  if (nums.length <= 1) { setStatus("error", "Must have at least one group."); return; }
+  const lastNum = nums[nums.length - 1];
+  // Check if any devices are in this group
+  const memberCount = Object.values(groupAssignments).filter(gs => gs.includes(lastNum)).length;
+  if (memberCount > 0) {
+    if (!confirm(`Group ${lastNum} (${groupNames[lastNum]}) has ${memberCount} device${memberCount!==1?"s":""} assigned. Remove the group and unassign them?`)) return;
+    // Remove all device assignments for this group
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/device_groups?group_number=eq.${lastNum}`, {
+        method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+      });
+    } catch(e) {}
+    Object.keys(groupAssignments).forEach(uid => {
+      groupAssignments[uid] = (groupAssignments[uid]||[]).filter(g => g !== lastNum);
+    });
+  }
+  // Remove from group_names
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/group_names?group_number=eq.${lastNum}`, {
+      method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+    });
+  } catch(e) {}
+  delete groupNames[lastNum];
+  if (groupTags) delete groupTags[lastNum];
+  numGroups = Object.keys(groupNames).length;
+  renderGroups();
+  setStatus("ready", `Group ${lastNum} removed.`);
+}
+
 async function saveGroupName(groupNum) {
-  const input = document.getElementById(`gname-${groupNum}`);
-  const name = input.value.trim() || `Group ${groupNum}`;
+  const input  = document.getElementById(`gname-${groupNum}`);
+  const tagEl  = document.getElementById(`gtag-${groupNum}`);
+  const name   = input?.value?.trim() || `Group ${groupNum}`;
+  const tag    = tagEl?.value?.trim() || "";
   groupNames[groupNum] = name;
-  await supabaseUpsert("group_names", { group_number: groupNum, group_name: name }, "group_number");
-  setStatus("ready", `Group ${groupNum} name saved.`);
+  if (!groupTags) groupTags = {};
+  groupTags[groupNum]  = tag;
+  try {
+    await supabaseUpsert("group_names",
+      { group_number: groupNum, group_name: name, group_tag: tag },
+      "group_number");
+  } catch(e) { console.warn("saveGroupName:", e.message); }
+  renderGroups();
+  // Refresh anywhere groupNames is displayed
+  refreshGroupSelectors();
+  setStatus("ready", `"${name}" saved.`);
+}
+
+function refreshGroupSelectors() {
+  // Update group dropdowns in scheduler, rules, etc.
+  const groupNums = Object.keys(groupNames).map(Number).sort((a,b)=>a-b);
+  document.querySelectorAll("select.group-target-sel, #rule-target, #inline-target, #ev-relay-device").forEach(sel => {
+    const prevVal = sel.value;
+    // Rebuild group options only
+    Array.from(sel.options).forEach(o => {
+      if (o.value.startsWith("group_")) o.remove();
+    });
+    // Re-add updated groups
+    groupNums.forEach(n => {
+      const exists = Array.from(sel.options).some(o => o.value === `group_${n}`);
+      if (!exists) {
+        const o = document.createElement("option");
+        o.value = `group_${n}`;
+        o.textContent = groupNames[n] || `Group ${n}`;
+        sel.appendChild(o);
+      } else {
+        const o = Array.from(sel.options).find(o => o.value === `group_${n}`);
+        if (o) o.textContent = groupNames[n] || `Group ${n}`;
+      }
+    });
+    sel.value = prevVal;
+  });
 }
 
 async function assignDevice(uid, groupNum, checked) {
@@ -11800,7 +11933,7 @@ function onRuleTargetChange() {
   if (!sel || !type) return;
   sel.innerHTML = '<option value="" disabled selected>-- Choose One --</option>';
   if (type === "group") {
-    [1,2,3].forEach(n => { const o = document.createElement("option"); o.value=`group_${n}`; o.textContent=groupNames[n]||`Group ${n}`; sel.appendChild(o); });
+    Object.keys(groupNames).map(Number).sort((a,b)=>a-b).forEach(n => { const o = document.createElement("option"); o.value=`group_${n}`; o.textContent=groupNames[n]||`Group ${n}`; sel.appendChild(o); });
   } else {
     DEVICES.filter(d => !d.uid.includes("PLACEHOLDER")).forEach(d => { const o = document.createElement("option"); o.value=d.uid; o.textContent=d.name; sel.appendChild(o); });
   }
@@ -12889,7 +13022,7 @@ function onInlineTargetChange() {
   if (!sel || !type) return;
   sel.innerHTML = '<option value="" disabled selected>-- Choose --</option>';
   if (type === "group") {
-    [1,2,3].forEach(n => {
+    Object.keys(groupNames).map(Number).sort((a,b)=>a-b).forEach(n => {
       const o = document.createElement("option");
       o.value = `group_${n}`;
       o.textContent = groupNames[n] || `Group ${n}`;
@@ -15924,7 +16057,7 @@ const HELP_CONTENT = {
       </div>
       <div class="help-section">
         <div class="help-section-title">Device Groups</div>
-        <p class="help-para">Groups allow you to send a single command to multiple devices simultaneously. Navigate to Devices → Groups to assign devices to groups, rename groups, and send group commands. Up to 3 groups are supported.</p>
+        <p class="help-para">Groups allow you to send a single command to multiple devices simultaneously. Navigate to Devices → Groups to assign devices to groups, rename groups, and send group commands. Any number of groups are supported — use the + Add Group and − Remove Last buttons in the Groups tab to configure.</p>
       </div>`
   },
 
