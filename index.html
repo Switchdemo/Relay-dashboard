@@ -1034,7 +1034,8 @@
               <label class="sched-label" style="margin-bottom:8px;display:block;">Per-Relay Mode Configuration</label>
               <div style="border:0.5px solid var(--border-md);border-radius:var(--radius-sm);overflow:hidden;">
                 <!-- Header -->
-                <div style="display:grid;grid-template-columns:80px 120px 1fr;gap:0;background:var(--surface2);padding:7px 12px;border-bottom:0.5px solid var(--border-md);">
+                <div style="display:grid;grid-template-columns:32px 80px 120px 1fr;gap:0;background:var(--surface2);padding:7px 12px;border-bottom:0.5px solid var(--border-md);">
+                  <span style="font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;">On</span>
                   <span style="font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;">Relay</span>
                   <span style="font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;">Mode</span>
                   <span style="font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;">Setting</span>
@@ -23025,9 +23026,14 @@ function renderHybridRows() {
   if (!container) return;
 
   container.innerHTML = [1,2,3,4].map(r => `
-    <div style="display:grid;grid-template-columns:80px 120px 1fr;gap:0;padding:10px 12px;border-bottom:0.5px solid var(--border);align-items:center;" id="sf-relay-row-${r}">
-      <span style="font-size:13px;font-weight:700;color:var(--text-primary);">Relay ${r}</span>
+    <div style="display:grid;grid-template-columns:32px 80px 120px 1fr;gap:0;padding:10px 12px;border-bottom:0.5px solid var(--border);align-items:center;" id="sf-relay-row-${r}">
       <div>
+        <input type="checkbox" id="sf-relay-${r}-active" checked
+          onchange="onRelayActiveChange(${r})"
+          style="width:15px;height:15px;accent-color:var(--blue-dark);cursor:pointer;" />
+      </div>
+      <span style="font-size:13px;font-weight:700;color:var(--text-primary);">Relay ${r}</span>
+      <div id="sf-relay-${r}-mode-col">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:4px;">
           <input type="radio" name="sf-relay-${r}-mode" value="dlc" checked
             onchange="onRelayModeChange(${r})" style="accent-color:var(--blue-dark);" />
@@ -23040,7 +23046,6 @@ function renderHybridRows() {
         </label>
       </div>
       <div id="sf-relay-${r}-setting">
-        <!-- DLC: duty cycle select (default) -->
         <select class="sched-select" id="sf-relay-${r}-dlc" style="font-size:11px;">
           <option value="19|30|30">100% — Full Shed</option>
           <option value="17|27|30">90% — High</option>
@@ -23052,6 +23057,18 @@ function renderHybridRows() {
       </div>
     </div>
   `).join("");
+}
+
+function onRelayActiveChange(relayNum) {
+  const active   = document.getElementById(`sf-relay-${relayNum}-active`)?.checked;
+  const modeCol  = document.getElementById(`sf-relay-${relayNum}-mode-col`);
+  const setting  = document.getElementById(`sf-relay-${relayNum}-setting`);
+  const label    = document.querySelector(`#sf-relay-row-${relayNum} span`);
+  const opacity  = active ? "1" : "0.35";
+  const pointer  = active ? "auto" : "none";
+  if (modeCol) { modeCol.style.opacity = opacity; modeCol.style.pointerEvents = pointer; }
+  if (setting) { setting.style.opacity = opacity; setting.style.pointerEvents = pointer; }
+  if (label)   { label.style.color = active ? "var(--text-primary)" : "var(--text-hint)"; }
 }
 
 function onRelayModeChange(relayNum) {
@@ -23077,8 +23094,11 @@ function onRelayModeChange(relayNum) {
 
 function getHybridConfig() {
   // Returns { dlcRelays: [{num, action, strategy}], basRelays: [{num, action, strategy}] }
+  // Only includes relays where the participation checkbox is checked
   const dlcRelays = [], basRelays = [];
   [1,2,3,4].forEach(r => {
+    const active   = document.getElementById(`sf-relay-${r}-active`)?.checked;
+    if (!active) return; // skip unchecked relays
     const mode     = document.querySelector(`input[name="sf-relay-${r}-mode"]:checked`)?.value || "dlc";
     const stratVal = mode === "bas"
       ? document.getElementById(`sf-relay-${r}-bas`)?.value
