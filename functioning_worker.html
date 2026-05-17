@@ -1,0 +1,2047 @@
+// ── Load Control Platform — Cloudflare Worker ────────────────────────────────
+// POST /              — proxy relay command to Notehub as data.qi
+// POST /ingest        — receive Notehub webhook, parse LC or LC Response
+// POST /env           — set Notehub environment variables (avoids CORS)
+// POST /notify        — send email via Resend (requires RESEND_API_KEY secret)
+// GET  /cancel        — handle email cancel links for pending events
+// POST /openadr/*     — OpenADR VEN endpoints (event, cancel, send, ping, report)
+// POST /openadr/test  — test VTN connectivity (supports mTLS via VTN_CERT binding)
+// POST /scada/ingest  — receive telemetry payloads from any SCADA source
+// POST /scada/poll    — proxy-poll a REST SCADA endpoint
+// POST /scada/test    — test SCADA source connectivity
+// WSS  /ocpp16/{id}   — OCPP 1.6J WebSocket endpoint for chargers
+// WSS  /ocpp201/{id}  — OCPP 2.0.1 WebSocket endpoint for chargers
+// POST /ocpp16/send   — queue CSMS→charger command (OCPP 1.6J)
+// POST /ocpp201/send  — queue CSMS→charger command (OCPP 2.0.1)
+// POST /ev/chargepoint/shed    — ChargePoint SOAP shedLoad
+// POST /ev/chargepoint/restore — ChargePoint SOAP clearShedState
+// POST /ev/enelx/shed          — Enel X JuiceNet set_override
+// POST /ev/enelx/restore       — Enel X JuiceNet restore amperage
+// POST /ev/blink/shed          — Blink Network remote stop/start
+// POST /ev/blink/restore       — Blink Network remote restore
+// POST /ev/status              — Poll status for proprietary API chargers
+// POST /ev/tesla/status        — Tesla Fleet API: get vehicle charge state
+// POST /ev/tesla/shed          — Tesla Fleet API: set_charging_amps or charge_stop
+// POST /ev/tesla/restore       — Tesla Fleet API: restore max amps + charge_start
+// POST /battery/tesla/status    — Tesla Powerwall: live SOC, power, mode
+// POST /battery/tesla/*         — Tesla Powerwall: discharge/hold/charge/restore
+// POST /battery/enphase/*       — Enphase IQ Battery: VPP/DR mode control
+// GET  /battery/solaredge/status — SolarEdge: current power flow + SOC
+// POST /battery/local/command   — Generic local REST battery gateway
+// POST /generator/mobilelink/status — Generac Mobile Link status (monitoring only)
+// POST /generator/modbus/status     — Modbus gateway: genset status
+// POST /generator/modbus/start      — Modbus gateway: remote start
+// POST /generator/modbus/stop       — Modbus gateway: remote stop
+// POST /utility/search-outage-map  — Search for utility outage map URL
+// POST /battery/sonnen/status   — Sonnen live data (SOC, power, mode)
+// POST /battery/sonnen/*        — Sonnen discharge/hold/charge/restore
+// GET  /battery/victron/status  — Victron VRM diagnostics (SOC, power)
+// POST /battery/victron/*       — Victron ESS mode + MinSOC control
+
+const NOTEHUB_TOKEN = "api_key_ghn9PnVbcab9VdToEGJuPfKVZXk9wlF9vpP+5e60sMA=";
+const PROJECT_UID   = "app:45e8c741-8358-4e04-b03a-b5f39135702a";
+const DEVICE_UID    = "dev:868032061596023";
+
+const SUPABASE_URL         = "https://diurqiuzknxzcdxqjfig.supabase.co";
+// IMPORTANT: Replace with your actual service role key from Supabase → Settings → API
+// In production, store this as a Cloudflare Worker Secret, not hardcoded
+// SUPABASE_SERVICE_KEY is stored as a Cloudflare Worker Secret (not hardcoded)
+// Set it via: Cloudflare Dashboard → Workers → patient-shadow → Settings → Variables → Add Secret
+// Name: SUPABASE_SERVICE_KEY  Value: your-service-role-key-from-supabase
+const SUPABASE_KEY  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRpdXJxaXV6a254emNkeHFqZmlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5ODQ3OTYsImV4cCI6MjA5MzU2MDc5Nn0.jUs0QYAyaOQmirQgCTjP7ldGqn9hhpzBunGLMVv0x8U";
+
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, X-Device-UID"
+};
+
+// ── LC Status Labels ──────────────────────────────────────────────────────────
+const LC_STATUS_LABELS = {
+  0: "Event Received",   1: "Event Started",      2: "Event Ended",
+  3: "Already In Queue", 4: "Rejected-Queue Full", 5: "Rejected",
+  6: "Event Canceled",   7: "Override",            8: "Override Canceled",
+  9: "Comfort Override", 10:"Comfort Exit"
+};
+
+// ── LC Response Parser (20-char hex) ─────────────────────────────────────────
+function parseLCResponse(hex) {
+  hex = hex.trim().toUpperCase();
+  if (hex.length !== 20) return null;
+  const b = (pos) => parseInt(hex.slice(pos*2, pos*2+2), 16);
+  if (b(0) !== 0x51 || b(2) !== 0x00) return null;
+  const eventId   = b(3);
+  const statusNum = b(4) & 0x0F;
+  const timestamp = (b(5)<<24)|(b(6)<<16)|(b(7)<<8)|b(8);
+  const checksum  = b(9);
+  let xor = 0;
+  for (let i = 0; i < 9; i++) xor ^= b(i);
+  return { eventId, statusNum, statusLabel: LC_STATUS_LABELS[statusNum]||"Unknown", timestamp, checksumOk: xor===checksum };
+}
+
+// ── Bubble Up Parser (62-char hex) ───────────────────────────────────────────
+function parseBubbleUp(hex) {
+  hex = hex.trim().toUpperCase();
+  if (hex.length !== 62) throw new Error(`Expected 62 chars, got ${hex.length}`);
+  const b = (pos) => parseInt(hex.slice(pos*2, pos*2+2), 16);
+  const w = (a, b2) => (b(a)<<8)|b(b2);
+  return {
+    header_byte:           b(0),  message_length:        b(1),
+    message_type:          b(2),  bubble_up_config:       b(3),
+    bubble_up_config_main: b(4),  relay_status_r1:        b(5),
+    relay_status_r2:       b(6),  relay_status_r3:        b(7),
+    relay_status_r4:       b(8),  power_up_flag:          b(9),
+    customer_comfort:      b(10), voltage:                w(11,12),
+    current:               w(13,14), power_factor:        w(15,16),
+    watts_consumed:        w(17,18), touch_pad_command:   b(19),
+    sw_value:              w(20,21), sq_value:            w(22,23),
+    override_timer_value:  w(24,25),
+    serial_number:         (b(26)<<16)|(b(27)<<8)|b(28),
+    device_identifier:     b(29), validation_code:        b(30)
+  };
+}
+
+async function supabasePost(path, data) {
+  return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method: "POST",
+    headers: {
+      "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json", "Prefer": "return=minimal"
+    },
+    body: JSON.stringify(data)
+  });
+}
+
+
+// ── Cancel Page HTML ──────────────────────────────────────────────────────────
+function cancelPage(title, message, success) {
+  const color = success ? "#1a5f4a" : "#c0392b";
+  const icon  = success ? "✅" : "❌";
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>${title} — LCP</title>
+    <style>
+      body{font-family:system-ui,sans-serif;background:#f5f5f3;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
+      .card{background:#fff;border-radius:12px;padding:2.5rem;max-width:480px;width:90%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.1);border-top:4px solid ${color}}
+      .icon{font-size:48px;margin-bottom:1rem}
+      h1{font-size:22px;color:#1a1a1a;margin-bottom:.75rem}
+      p{font-size:14px;color:#666;line-height:1.6}
+      .footer{margin-top:2rem;font-size:12px;color:#999}
+      a{color:${color}}
+    </style></head>
+    <body><div class="card">
+      <div class="icon">${icon}</div>
+      <h1>${title}</h1>
+      <p>${message}</p>
+      <div class="footer">Load Control Platform &bull; <a href="javascript:window.close()">Close this window</a></div>
+    </div></body></html>`;
+}
+
+export default {
+  async fetch(request, env) {
+    if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
+    // Allow GET for /cancel (email link) and all POST routes
+    if (request.method !== "POST" && request.method !== "GET") {
+      return new Response("Method not allowed", { status: 405 });
+    }
+
+    const url = new URL(request.url);
+    console.log("Worker received:", request.method, url.pathname);
+    let body = {};
+    if (request.method === "POST") {
+      const text = await request.text();
+      if (text) {
+        try { body = JSON.parse(text); }
+        catch {
+          console.log("Invalid JSON body:", text.slice(0, 500));
+          return new Response(
+            JSON.stringify({ error: "Invalid JSON", received: text.slice(0, 200) }),
+            { status: 400, headers: { ...CORS, "Content-Type": "application/json" } }
+          );
+        }
+      }
+    }
+
+    // ── /env — set Notehub environment variables ──────────────────────────────
+    // Proxies env var requests to avoid CORS from browser
+    if (url.pathname === "/env" || url.pathname === "/env/") {
+      const deviceUID = body.deviceUID || DEVICE_UID;
+      const envVars   = body.environment_variables || {};
+      const method    = body.method || "PUT"; // PUT=set, DELETE=clear
+
+      const notehubURL = `https://api.notefile.net/v1/projects/${PROJECT_UID}/devices/${encodeURIComponent(deviceUID)}/environment_variables`;
+
+      try {
+        const res = await fetch(notehubURL, {
+          method,
+          headers: {
+            "Authorization": `Bearer ${NOTEHUB_TOKEN}`,
+            "Content-Type": "application/json"
+          },
+          body: method !== "DELETE" ? JSON.stringify({ environment_variables: envVars }) : undefined
+        });
+        const text = await res.text();
+        return new Response(text, {
+          status: res.status,
+          headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+    }
+
+    // ── /env/get — get Notehub environment variables ──────────────────────────
+    if (url.pathname === "/env/get" || url.pathname === "/env/get/") {
+      const deviceUID = body.deviceUID || DEVICE_UID;
+      const notehubURL = `https://api.notefile.net/v1/projects/${PROJECT_UID}/devices/${encodeURIComponent(deviceUID)}/environment_variables`;
+      try {
+        const res = await fetch(notehubURL, {
+          headers: { "Authorization": `Bearer ${NOTEHUB_TOKEN}` }
+        });
+        const text = await res.text();
+        return new Response(text, {
+          status: res.status,
+          headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+    }
+
+    // ── /admin/create-user — create Supabase user (requires admin JWT) ─────────
+    if (url.pathname === "/admin/create-user" || url.pathname === "/admin/create-user/") {
+      // Verify the caller has a valid JWT
+      const authHeader = request.headers.get("Authorization") || "";
+      const callerJWT  = authHeader.replace("Bearer ", "");
+      if (!callerJWT) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+
+      // Verify caller is an administrator
+      const verifyRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/user_profiles?select=role`,
+        { headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${callerJWT}` } }
+      );
+      const profiles = await verifyRes.json();
+      const callerRole = profiles?.[0]?.role;
+      if (callerRole !== "administrator") {
+        return new Response(JSON.stringify({ error: "Administrator access required" }), {
+          status: 403, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+
+      if (!env.SUPABASE_SERVICE_KEY) {
+        return new Response(JSON.stringify({ error: "Service key not configured in Worker secrets" }), {
+          status: 500, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+
+      const { email, password, name, role, two_fa_required } = body;
+      if (!email || !password || !role) {
+        return new Response(JSON.stringify({ error: "email, password and role required" }), {
+          status: 400, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+
+      // Create user via Supabase Admin API using service role
+      // Note: We use the anon key here — in production use service role key stored as Worker secret
+      const createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: { full_name: name }
+        })
+      });
+
+      if (!createRes.ok) {
+        const err = await createRes.text();
+        return new Response(err, { status: createRes.status, headers: { ...CORS, "Content-Type": "application/json" } });
+      }
+
+      const newUser = await createRes.json();
+
+      // Insert profile
+      const profileInsert = await fetch(`${SUPABASE_URL}/rest/v1/user_profiles`, {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+          "Content-Type": "application/json",
+          "Prefer": "return=minimal"
+        },
+        body: JSON.stringify({
+          id:               newUser.id,
+          email,
+          full_name:        name || "",
+          role,
+          two_fa_required:  two_fa_required || false,
+          is_active:        true
+        })
+      });
+
+      if (!profileInsert.ok) {
+        const err = await profileInsert.text();
+        return new Response(JSON.stringify({ error: "User created but profile failed: " + err }), {
+          status: 500, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true, userId: newUser.id }), {
+        status: 200, headers: { ...CORS, "Content-Type": "application/json" }
+      });
+    }
+
+    // ── /session — _session.qo health data ──────────────────────────────────────
+    if (url.pathname === "/session" || url.pathname === "/session/") {
+      const device_uid = body?.device ?? body?.uid ?? "unknown";
+
+      // Parse firmware version from JSON string
+      let firmware_version = null;
+      try {
+        const fw = typeof body?.firmware_notecard === "string"
+          ? JSON.parse(body.firmware_notecard)
+          : body?.firmware_notecard;
+        firmware_version = fw?.version || null;
+      } catch(e) {}
+
+      const record = {
+        device_uid,
+        recorded_at:    new Date().toISOString(),
+        voltage:        body?.voltage        ?? null,
+        temperature:    body?.temp           ?? null,
+        rsrp:           body?.rsrp           ?? null,
+        rsrq:           body?.rsrq           ?? null,
+        rssi:           body?.rssi           ?? null,
+        sinr:           body?.sinr           ?? null,
+        bars:           body?.bars           ?? null,
+        rat:            body?.rat            ?? null,
+        bearer:         body?.bearer         ?? null,
+        moved:          body?.moved          ?? null,
+        orientation:    body?.orientation    ?? null,
+        session_reason: body?.body?.why      ?? null,
+        firmware_version,
+        lat:            body?.best_lat       ?? body?.tower_lat      ?? null,
+        lon:            body?.best_lon       ?? body?.tower_lon      ?? null,
+        location:       body?.best_location  ?? body?.tower_location ?? null,
+        raw:            body
+      };
+
+      const dbRes = await supabasePost("device_health", record);
+      if (!dbRes.ok) {
+        const err = await dbRes.text();
+        console.error("device_health insert failed:", err);
+        return new Response(JSON.stringify({ success: false, error: err }), {
+          status: 500, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+      return new Response(JSON.stringify({ success: true, device_uid }), {
+        status: 200, headers: { ...CORS, "Content-Type": "application/json" }
+      });
+    }
+
+    // ── /ingest — Notehub webhook ─────────────────────────────────────────────
+    if (url.pathname === "/ingest" || url.pathname === "/ingest/") {
+      const device_uid = body?.device ?? body?.uid ?? "unknown";
+      const file = body?.file || "";
+      // ── Route system notefiles to device_health ──────────────────────────────
+      // Only process session.begin (has full health data) and _health.qo
+      // Skip session.end — it overwrites good data with nulls
+      const isSessionBegin = file === "_session.qo" && body?.req === "session.begin";
+      const isHealthFile   = file === "_health.qo" || file === "_health_host.qo";
+      if (isSessionBegin || isHealthFile) {
+        let firmware_version = null;
+        try {
+          const fw = typeof body?.firmware_notecard === "string"
+            ? JSON.parse(body.firmware_notecard) : body?.firmware_notecard;
+          firmware_version = fw?.version || null;
+        } catch(e) {}
+        const voltage     = body?.voltage ?? body?.body?.voltage ?? null;
+        const temperature = body?.temp    ?? body?.body?.temp    ?? null;
+        const rat         = body?.rat ?? (body?.transport ? body.transport.split(":")[1] : null);
+        const healthRecord = {
+          device_uid, recorded_at: new Date().toISOString(),
+          voltage, temperature,
+          rsrp:     body?.rsrp    ?? null,
+          rsrq:     body?.rsrq    ?? null,
+          rssi:     body?.rssi    ?? null,
+          sinr:     body?.sinr    ?? null,
+          bars:     body?.bars    ?? null,
+          rat, bearer: body?.bearer ?? null,
+          moved:          body?.moved       ?? null,
+          orientation:    body?.orientation ?? null,
+          session_reason: body?.body?.why   ?? body?.body?.text ?? null,
+          firmware_version,
+          lat:      body?.best_lat      ?? body?.tower_lat      ?? null,
+          lon:      body?.best_lon      ?? body?.tower_lon      ?? null,
+          location: body?.best_location ?? body?.tower_location ?? null,
+          raw: body
+        };
+        const hRes = await supabasePost("device_health", healthRecord);
+        return new Response(JSON.stringify({ success: hRes.ok, device_uid, file }), {
+          status: hRes.ok ? 200 : 500, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+
+      // Skip session.end and other system notefiles gracefully
+      if (file.startsWith("_")) {
+        return new Response(JSON.stringify({ success: true, skipped: true, file }), {
+          status: 200, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+
+      const lc    = body?.body?.LC;
+      const lcLen = lc ? lc.trim().length : 0;
+
+      // ── LC Response (20 chars) → device_events ─────────────────────────────
+      if (lcLen === 20) {
+        const parsed = parseLCResponse(lc);
+        if (!parsed) {
+          return new Response(JSON.stringify({ error: "Invalid LC Response" }), {
+            status: 400, headers: { ...CORS, "Content-Type": "application/json" }
+          });
+        }
+        const evRes = await supabasePost("device_events", {
+          device_uid, event_id: parsed.eventId,
+          lc_status: parsed.statusNum, lc_status_label: parsed.statusLabel,
+          timestamp_unix: parsed.timestamp,
+          event_time: parsed.timestamp > 0 ? new Date(parsed.timestamp*1000).toISOString() : new Date().toISOString(),
+          raw_hex: lc, checksum_ok: parsed.checksumOk,
+          received_at: new Date().toISOString()
+        });
+        return new Response(JSON.stringify({
+          success: evRes.ok, device_uid,
+          event_id: parsed.eventId, status: parsed.statusLabel
+        }), { status: evRes.ok?200:500, headers: { ...CORS, "Content-Type": "application/json" } });
+      }
+
+      // ── Bubble Up (62 chars) → device_readings (deduplicated) ───────────────
+      if (lcLen === 62) {
+        let parsed;
+        try { parsed = parseBubbleUp(lc); } catch(e) {
+          return new Response(JSON.stringify({ error: e.message }), {
+            status: 400, headers: { ...CORS, "Content-Type": "application/json" }
+          });
+        }
+
+        const recordedAt = body?.when
+          ? new Date(body.when*1000).toISOString()
+          : new Date().toISOString();
+
+        // Deduplication: check if identical raw_lc was recorded in last 60 seconds
+        const dedupWindow = new Date(Date.now() - 60000).toISOString();
+        const existing = await fetch(
+          `${SUPABASE_URL}/rest/v1/device_readings?device_uid=eq.${encodeURIComponent(device_uid)}&raw_lc=eq.${encodeURIComponent(lc)}&recorded_at=gte.${dedupWindow}&limit=1`,
+          { headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` } }
+        );
+        const existingData = await existing.json();
+        if (Array.isArray(existingData) && existingData.length > 0) {
+          return new Response(JSON.stringify({ success: true, deduplicated: true, device_uid }), {
+            status: 200, headers: { ...CORS, "Content-Type": "application/json" }
+          });
+        }
+
+        const record = {
+          ...parsed, device_uid, raw_lc: lc, recorded_at: recordedAt,
+          lat:      body?.best_lat      ?? body?.tower_lat      ?? null,
+          lon:      body?.best_lon      ?? body?.tower_lon      ?? null,
+          location: body?.best_location ?? body?.tower_location ?? null,
+          country:  body?.best_country  ?? body?.tower_country  ?? null,
+        };
+        const dbRes = await supabasePost("device_readings", record);
+        if (!dbRes.ok) {
+          return new Response(JSON.stringify({ success: false, device_uid }), {
+            status: 500, headers: { ...CORS, "Content-Type": "application/json" }
+          });
+        }
+
+        // Check for active energy monitors targeting this device
+        try {
+          const emRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/energy_monitors?status=eq.active&limit=10`,
+            { headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` } }
+          );
+          if (emRes.ok) {
+            const monitors = await emRes.json();
+            for (const em of (monitors || [])) {
+              if (Array.isArray(em.target_ids) && em.target_ids.includes(device_uid)) {
+                await supabasePost("energy_readings", {
+                  monitor_id:      em.id,
+                  recorded_at:     new Date().toISOString(),
+                  device_uid,
+                  relay_status_r1: parsed.relay_status_r1,
+                  relay_status_r2: parsed.relay_status_r2,
+                  relay_status_r3: parsed.relay_status_r3,
+                  relay_status_r4: parsed.relay_status_r4,
+                  voltage:         parsed.voltage,
+                  current:         parsed.current,
+                  power_factor:    parsed.power_factor,
+                  watts_consumed:  parsed.watts_consumed,
+                  sw_value:        parsed.sw_value,
+                  sq_value:        parsed.sq_value,
+                  outside_temp:    null
+                });
+              }
+            }
+          }
+        } catch(emErr) { console.error("energy_readings error:", emErr); }
+
+        return new Response(JSON.stringify({ success: true, device_uid }), {
+          status: 200, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+
+      return new Response(JSON.stringify({ error: "Unexpected LC length", lcLen }), {
+        status: 400, headers: { ...CORS, "Content-Type": "application/json" }
+      });
+    }
+
+    // ── /openadr/event — incoming event from VTN ────────────────────────────────
+    if (url.pathname === "/openadr/event" || url.pathname === "/openadr/event/") {
+      const contentType = request.headers.get("Content-Type") || "";
+      let eventData = {};
+
+      // Parse XML (SOAP) or JSON (REST) flexibly
+      if (contentType.includes("xml")) {
+        // Basic XML field extraction — handles both SOAP and EiXML
+        const raw = JSON.stringify(body);
+        const extract = (tag) => {
+          const m = raw.match(new RegExp(`"${tag}"\\s*:\\s*"([^"]+)"`)) ||
+                    raw.match(new RegExp(`<${tag}>([^<]+)</${tag}>`));
+          return m ? m[1] : null;
+        };
+        eventData = {
+          vtn_event_id:  extract("eventID") || extract("eiEventID") || `evt-${Date.now()}`,
+          signal_level:  parseFloat(extract("signalPayload") || extract("currentValue") || "0.5"),
+          signal_name:   extract("signalName") || "SIMPLE",
+          signal_type:   extract("signalType") || "LOAD_DISPATCH",
+          dtstart:       extract("dtstart") || extract("dtstartDateTime") || new Date().toISOString(),
+          duration:      extract("duration") || "PT30M",
+        };
+      } else {
+        // JSON format
+        eventData = {
+          vtn_event_id:  body?.eventID || body?.eiEvent?.eventDescriptor?.eventID || `evt-${Date.now()}`,
+          signal_level:  parseFloat(body?.signalLevel || body?.currentValue || 0.5),
+          signal_name:   body?.signalName || "SIMPLE",
+          signal_type:   body?.signalType || "LOAD_DISPATCH",
+          dtstart:       body?.dtstart || new Date().toISOString(),
+          duration:      body?.duration || "PT30M",
+        };
+      }
+
+      // Parse ISO 8601 duration (PT30M, PT1H, etc.)
+      const parseDuration = (d) => {
+        if (!d) return 30;
+        const h = d.match(/(\d+)H/); const m = d.match(/(\d+)M/);
+        return (h ? parseInt(h[1]) * 60 : 0) + (m ? parseInt(m[1]) : 0) || 30;
+      };
+      const duration_mins = parseDuration(eventData.duration);
+
+      // Map signal level to strategy
+      const mappings = [
+        { level: 1.0, strategy: 19, mode: "dlc", pct: 100 },
+        { level: 0.75,strategy: 15, mode: "dlc", pct: 75  },
+        { level: 0.5, strategy: 9,  mode: "di",  pct: 50  },
+        { level: 0.25,strategy: 5,  mode: "di",  pct: 25  },
+        { level: 0.0, strategy: 61, mode: "dlc", pct: 0   },
+      ];
+      let best = mappings[0];
+      mappings.forEach(m => { if (Math.abs(eventData.signal_level - m.level) < Math.abs(eventData.signal_level - best.level)) best = m; });
+
+      // Write to openadr_events — auto optIn
+      const oadrRecord = {
+        vtn_event_id:  eventData.vtn_event_id,
+        event_status:  "near",
+        opt_type:      "optIn",
+        signal_name:   eventData.signal_name,
+        signal_type:   eventData.signal_type,
+        signal_level:  eventData.signal_level,
+        target_all:    true,
+        dtstart:       eventData.dtstart,
+        duration_mins,
+        created_dt:    new Date().toISOString(),
+        lc_strategy:   best.strategy,
+        lc_mode:       best.mode,
+        raw_payload:   JSON.stringify(body)
+      };
+
+      const dbRes = await supabasePost("openadr_events", oadrRecord);
+
+      // Build oadrCreatedEvent acknowledgement
+      const ackXML = `<?xml version="1.0" encoding="UTF-8"?>
+<oadrPayload xmlns="http://openadr.org/oadr-2.0b/2012/07">
+  <eiResponse><responseCode>200</responseCode><requestID>req-${Date.now()}</requestID></eiResponse>
+  <oadrCreatedEvent>
+    <eiCreatedEvent>
+      <eiResponse><responseCode>200</responseCode></eiResponse>
+      <optType>optIn</optType>
+    </eiCreatedEvent>
+  </oadrCreatedEvent>
+</oadrPayload>`;
+
+      return new Response(ackXML, {
+        status: 200,
+        headers: { ...CORS, "Content-Type": "application/xml" }
+      });
+    }
+
+    // ── /openadr/cancel — VTN cancels an event ────────────────────────────────
+    if (url.pathname === "/openadr/cancel" || url.pathname === "/openadr/cancel/") {
+      const eventId = body?.eventID || body?.vtn_event_id;
+      if (eventId) {
+        await fetch(`${SUPABASE_URL}/rest/v1/openadr_events?vtn_event_id=eq.${encodeURIComponent(eventId)}`, {
+          method: "PATCH",
+          headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+            "Content-Type": "application/json", "Prefer": "return=minimal" },
+          body: JSON.stringify({ event_status: "cancelled" })
+        });
+      }
+      const ackXML = `<?xml version="1.0" encoding="UTF-8"?>
+<oadrPayload xmlns="http://openadr.org/oadr-2.0b/2012/07">
+  <eiResponse><responseCode>200</responseCode></eiResponse>
+</oadrPayload>`;
+      return new Response(ackXML, { status: 200, headers: { ...CORS, "Content-Type": "application/xml" } });
+    }
+
+    // ── /openadr/send — dashboard sends oadrCreatedEvent/oadrUpdateReport to VTN ──
+    if (url.pathname === "/openadr/send" || url.pathname === "/openadr/send/") {
+      const { vtn_url, transport, payload } = body;
+      if (!vtn_url) return new Response(JSON.stringify({ error: "No VTN URL" }), { status: 400, headers: CORS });
+      try {
+        const isSOAP = transport === "soap";
+        const sendBody = isSOAP ? payload?.xml : JSON.stringify(payload?.json);
+        const ct = isSOAP ? "application/soap+xml" : "application/json";
+        const res = await fetch(vtn_url, {
+          method: "POST",
+          headers: { "Content-Type": ct },
+          body: sendBody
+        });
+        return new Response(JSON.stringify({ success: res.ok, status: res.status }), {
+          status: 200, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ success: false, error: e.message }), {
+          status: 200, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+    }
+
+    // ── /openadr/ping — test VTN connection ───────────────────────────────────
+    if (url.pathname === "/openadr/ping" || url.pathname === "/openadr/ping/") {
+      const { vtn_url } = body;
+      if (!vtn_url) return new Response(JSON.stringify({ error: "No URL" }), { status: 400, headers: CORS });
+      try {
+        const res = await fetch(vtn_url, { method: "GET" });
+        return new Response(JSON.stringify({ success: true, status: res.status }), {
+          status: 200, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ success: false, error: e.message }), {
+          status: 200, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+    }
+
+    // ── /openadr/report — VTN pulls telemetry ────────────────────────────────
+    if (url.pathname === "/openadr/report" || url.pathname === "/openadr/report/") {
+      const reports = await fetch(
+        `${SUPABASE_URL}/rest/v1/openadr_reports?order=created_dt.desc&limit=100`,
+        { headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` } }
+      ).then(r => r.json());
+      return new Response(JSON.stringify({ reports }), {
+        status: 200, headers: { ...CORS, "Content-Type": "application/json" }
+      });
+    }
+
+    // ── /notify — send email via Resend ──────────────────────────────────────
+    if (url.pathname === "/notify" || url.pathname === "/notify/") {
+      const RESEND_KEY = env.RESEND_API_KEY;
+      if (!RESEND_KEY) {
+        return new Response(JSON.stringify({ error: "RESEND_API_KEY secret not set. Run: wrangler secret put RESEND_API_KEY" }), {
+          status: 500, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+      const { recipients, subject, html } = body;
+      if (!recipients?.length || !subject || !html) {
+        return new Response(JSON.stringify({ error: "recipients, subject, and html required" }), {
+          status: 400, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+      try {
+        const FROM = env.NOTIFY_FROM_EMAIL || "alerts@yourdomain.com";
+        const results = await Promise.all(recipients.map(async r => {
+          const res = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ from: `Load Control Platform <${FROM}>`, to: [r.email], subject, html })
+          });
+          const data = await res.json();
+          return { email: r.email, ok: res.ok, status: res.status, id: data.id };
+        }));
+        return new Response(JSON.stringify({ ok: true, results }), {
+          headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok: false, error: e.message }), {
+          status: 500, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+    }
+
+    // ── /cancel — handle email cancel link (GET) ──────────────────────────────
+    if (url.pathname === "/cancel" || url.pathname === "/cancel/") {
+      const token = url.searchParams.get("token");
+      if (!token) {
+        return new Response(cancelPage("Invalid Link", "No cancellation token provided.", false), {
+          headers: { ...CORS, "Content-Type": "text/html" }
+        });
+      }
+      try {
+        const res  = await fetch(`${SUPABASE_URL}/rest/v1/pending_notifications?token=eq.${encodeURIComponent(token)}&select=*`, {
+          headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+        });
+        const rows   = await res.json();
+        const record = Array.isArray(rows) && rows.length ? rows[0] : null;
+
+        if (!record) return new Response(cancelPage("Link Not Found", "This cancellation link is invalid or has already been used.", false), {
+          headers: { ...CORS, "Content-Type": "text/html" }
+        });
+
+        if (record.cancelled) return new Response(cancelPage("Already Cancelled", "This event was already cancelled.", true), {
+          headers: { ...CORS, "Content-Type": "text/html" }
+        });
+
+        if (new Date(record.expires_at) < new Date()) return new Response(cancelPage("Link Expired", "The grace period has passed — the event has already been dispatched.", false), {
+          headers: { ...CORS, "Content-Type": "text/html" }
+        });
+
+        // Mark cancelled
+        await fetch(`${SUPABASE_URL}/rest/v1/pending_notifications?token=eq.${encodeURIComponent(token)}`, {
+          method: "PATCH",
+          headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+          body: JSON.stringify({ cancelled: true, cancelled_at: new Date().toISOString(), cancelled_via: "email_link" })
+        });
+        // Update trigger log
+        await fetch(`${SUPABASE_URL}/rest/v1/monitor_trigger_log?rule_id=eq.${record.rule_id}&outcome=eq.pending`, {
+          method: "PATCH",
+          headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+          body: JSON.stringify({ outcome: "cancelled", cancelled_by: "email_link" })
+        });
+        return new Response(cancelPage("✅ Event Cancelled", `"${record.event_desc}" has been successfully cancelled.`, true), {
+          headers: { ...CORS, "Content-Type": "text/html" }
+        });
+      } catch(e) {
+        return new Response(cancelPage("Error", e.message, false), {
+          headers: { ...CORS, "Content-Type": "text/html" }
+        });
+      }
+    }
+
+    // ── /openadr/mtls-status — check mTLS binding ─────────────────────────────
+    if (url.pathname === "/openadr/mtls-status") {
+      return new Response(JSON.stringify({ configured: !!(env.VTN_CERT) }), {
+        headers: { ...CORS, "Content-Type": "application/json" }
+      });
+    }
+
+    // ── /openadr/test — test VTN connectivity ─────────────────────────────────
+    if (url.pathname === "/openadr/test") {
+      const { vtn_url, auth_mode, api_key } = body;
+      if (!vtn_url) return new Response(JSON.stringify({ ok: false, error: "vtn_url required" }), {
+        status: 400, headers: { ...CORS, "Content-Type": "application/json" }
+      });
+      try {
+        const headers = { "Content-Type": "application/xml", "Accept": "application/xml" };
+        if (auth_mode === "apikey" && api_key) headers["Authorization"] = `Bearer ${api_key}`;
+        const fetchFn = (auth_mode === "mtls" && env.VTN_CERT) ? env.VTN_CERT.fetch.bind(env.VTN_CERT) : fetch;
+        const res = await fetchFn(vtn_url, { method: "GET", headers, signal: AbortSignal.timeout(8000) });
+        return new Response(JSON.stringify({ ok: res.ok, status: res.status, message: res.statusText, mtls_active: !!(env.VTN_CERT) }), {
+          headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok: false, error: e.message }), {
+          headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+    }
+
+    // ── /openadr/event — receive DR event from VTN ────────────────────────────
+    if (url.pathname === "/openadr/event") {
+      await supabasePost("openadr_events", {
+        event_id:      body.event_id || body.eiEventID || crypto.randomUUID(),
+        vtn_id:        body.vtn_id  || "unknown",
+        signal_level:  parseFloat(body.signal_level || "0"),
+        signal_type:   body.signal_type || "SIMPLE",
+        opt_type:      body.opt_type || "optIn",
+        dtstart:       body.dtstart || new Date().toISOString(),
+        duration_mins: parseInt(body.duration_mins || "60"),
+        status:        "pending",
+        raw_payload:   JSON.stringify(body),
+        received_at:   new Date().toISOString()
+      });
+      return new Response(JSON.stringify({ ok: true, message: "Event received" }), {
+        headers: { ...CORS, "Content-Type": "application/json" }
+      });
+    }
+
+    // ── /openadr/cancel — cancel DR event ────────────────────────────────────
+    if (url.pathname === "/openadr/cancel") {
+      const eventId = body.event_id || body.eiEventID;
+      if (eventId) {
+        await fetch(`${SUPABASE_URL}/rest/v1/openadr_events?event_id=eq.${encodeURIComponent(eventId)}`, {
+          method: "PATCH",
+          headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+          body: JSON.stringify({ status: "cancelled", updated_at: new Date().toISOString() })
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...CORS, "Content-Type": "application/json" } });
+    }
+
+
+
+    // ── /scada/ingest — receive telemetry from any source (webhook/gateway) ──────
+    if (url.pathname === "/scada/ingest" || url.pathname === "/scada/ingest/") {
+      const { source, timestamp, points } = body;
+      if (!Array.isArray(points) || !points.length) {
+        return new Response(JSON.stringify({ error: "points array required" }), {
+          status: 400, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+      const now = new Date().toISOString();
+      const records = points.map(p => ({
+        source_id:   null,
+        source_name: source || "webhook",
+        point_id:    p.id   || p.point_id,
+        point_name:  p.name || p.point_name || p.id,
+        type:        p.type || "analog",
+        value:       parseFloat(p.value),
+        unit:        p.unit || "",
+        quality:     p.quality || "good",
+        recorded_at: timestamp || p.timestamp || now
+      }));
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/scada_readings`, {
+          method: "POST",
+          headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+            "Content-Type": "application/json", "Prefer": "return=minimal" },
+          body: JSON.stringify(records)
+        });
+        return new Response(JSON.stringify({ ok: true, ingested: records.length }), {
+          headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok: false, error: e.message }), {
+          status: 500, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+    }
+
+    // ── /scada/poll — proxy REST poll to SCADA endpoint ───────────────────────
+    if (url.pathname === "/scada/poll" || url.pathname === "/scada/poll/") {
+      const { url: targetUrl, auth, source_name } = body;
+      if (!targetUrl) return new Response(JSON.stringify({ error: "url required" }), {
+        status: 400, headers: { ...CORS, "Content-Type": "application/json" }
+      });
+      try {
+        const headers = { "Accept": "application/json", "Content-Type": "application/json" };
+        if (auth === "bearer" && body.credential) headers["Authorization"] = `Bearer ${body.credential}`;
+        if (auth === "apikey" && body.credential) headers["X-API-Key"] = body.credential;
+        const res  = await fetch(targetUrl, { method: "GET", headers, signal: AbortSignal.timeout(8000) });
+        const data = await res.json();
+        // Normalize — try common SCADA API response shapes
+        let points = [];
+        if (Array.isArray(data)) points = data;
+        else if (Array.isArray(data.points)) points = data.points;
+        else if (Array.isArray(data.data))   points = data.data;
+        else if (Array.isArray(data.values)) points = data.values;
+        else {
+          // Flat object — convert keys to points
+          points = Object.entries(data).map(([k,v]) => ({
+            id: k, name: k, type: "analog",
+            value: typeof v === "object" ? (v.value ?? v.v ?? null) : v,
+            unit:  typeof v === "object" ? (v.unit  ?? v.u ?? "") : "",
+            quality: typeof v === "object" ? (v.quality ?? "good") : "good",
+            timestamp: typeof v === "object" ? v.timestamp : new Date().toISOString()
+          }));
+        }
+        return new Response(JSON.stringify({ ok: true, points, count: points.length }), {
+          headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok: false, error: e.message }), {
+          headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+    }
+
+    // ── /scada/test — test SCADA source connectivity ──────────────────────────
+    if (url.pathname === "/scada/test" || url.pathname === "/scada/test/") {
+      const { url: targetUrl, auth } = body;
+      if (!targetUrl) return new Response(JSON.stringify({ ok: false, error: "url required" }), {
+        status: 400, headers: { ...CORS, "Content-Type": "application/json" }
+      });
+      try {
+        const res = await fetch(targetUrl, { method: "HEAD", signal: AbortSignal.timeout(5000) });
+        return new Response(JSON.stringify({ ok: res.ok, status: res.status, message: res.statusText }), {
+          headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok: false, error: e.message }), {
+          headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+    }
+
+
+    // ── OCPP WebSocket Upgrade — chargers connect here ────────────────────────
+    // OCPP 1.6J:  wss://worker.dev/ocpp16/{stationId}
+    // OCPP 2.0.1: wss://worker.dev/ocpp201/{stationId}
+    if ((url.pathname.startsWith("/ocpp16/") || url.pathname.startsWith("/ocpp201/")) &&
+        request.headers.get("Upgrade") === "websocket") {
+      const parts     = url.pathname.split("/");
+      const stationId = parts[parts.length - 1];
+      const version   = url.pathname.startsWith("/ocpp201/") ? "2.0.1" : "1.6";
+      const subproto  = version === "2.0.1" ? "ocpp2.0.1" : "ocpp1.6";
+
+      const { 0: client, 1: server } = new WebSocketPair();
+      server.accept();
+
+      // Register station as online in Supabase
+      const now = new Date().toISOString();
+      fetch(`${SUPABASE_URL}/rest/v1/ev_sessions`, {
+        method: "POST",
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({ station_id: stationId, status: "connected", protocol: version, updated_at: now, connected_at: now })
+      }).catch(() => {});
+
+      server.addEventListener("message", async (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          const [msgType, uniqueId, action, payload] = msg;
+
+          if (msgType === 2) { // CALL from charger
+            let response = {};
+
+            if (action === "BootNotification") {
+              // Accept connection and set heartbeat interval
+              response = version === "2.0.1"
+                ? { currentTime: now, interval: 300, status: "Accepted" }
+                : { currentTime: now, interval: 300, status: "Accepted" };
+
+              // Update station name/make in Supabase from boot info
+              const make  = payload.chargingStationVendorName || payload.chargePointVendor || "";
+              const model = payload.chargingStationModel      || payload.chargePointModel  || "";
+              fetch(`${SUPABASE_URL}/rest/v1/ev_chargers?station_id=eq.${encodeURIComponent(stationId)}`, {
+                method: "PATCH",
+                headers: { "apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+                  "Content-Type":"application/json","Prefer":"return=minimal" },
+                body: JSON.stringify({ make: `${make} ${model}`.trim()||null, status:"online", updated_at:now })
+              }).catch(() => {});
+
+            } else if (action === "Heartbeat") {
+              response = { currentTime: new Date().toISOString() };
+
+            } else if (action === "StatusNotification") {
+              const connId  = payload.connectorId ?? payload.evseId ?? 0;
+              const status  = payload.connectorStatus || payload.status || "Unknown";
+              fetch(`${SUPABASE_URL}/rest/v1/ev_sessions`, {
+                method: "POST",
+                headers: { "apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+                  "Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal" },
+                body: JSON.stringify({ station_id:stationId, connector_id:connId, status:status.toLowerCase(), updated_at:new Date().toISOString() })
+              }).catch(() => {});
+              response = {};
+
+            } else if (action === "MeterValues" || action === "TransactionEvent") {
+              // Parse meter values for power/energy
+              let powerKw = null, energyKwh = null, soc = null;
+              const meterValues = payload.meterValue || payload.sampledValue || [];
+              const parseMeter  = (mv) => {
+                const vals = mv.sampledValue || [];
+                vals.forEach(v => {
+                  if (v.measurand === "Power.Active.Import" || v.measurand === "Power.Active.Import.Total") powerKw = parseFloat(v.value) / 1000;
+                  if (v.measurand === "Energy.Active.Import.Register") energyKwh = parseFloat(v.value) / 1000;
+                  if (v.measurand === "SoC") soc = parseFloat(v.value);
+                });
+              };
+              if (Array.isArray(meterValues)) meterValues.forEach(parseMeter);
+
+              if (powerKw != null || energyKwh != null) {
+                fetch(`${SUPABASE_URL}/rest/v1/ev_sessions`, {
+                  method: "POST",
+                  headers: { "apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+                    "Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal" },
+                  body: JSON.stringify({
+                    station_id:stationId, status:"charging",
+                    power_kw:powerKw, energy_kwh:energyKwh, soc_pct:soc,
+                    updated_at:new Date().toISOString()
+                  })
+                }).catch(() => {});
+              }
+              response = {};
+
+            } else if (action === "Authorize") {
+              response = version === "2.0.1"
+                ? { idTokenInfo: { status: "Accepted" } }
+                : { idTagInfo: { status: "Accepted" } };
+
+            } else {
+              // Generic accept for unhandled messages
+              response = {};
+            }
+
+            // Send CALLRESULT back to charger
+            server.send(JSON.stringify([3, uniqueId, response]));
+          }
+        } catch(e) {
+          console.error("OCPP message error:", e.message);
+        }
+      });
+
+      server.addEventListener("close", () => {
+        // Mark offline
+        fetch(`${SUPABASE_URL}/rest/v1/ev_sessions`, {
+          method: "POST",
+          headers: { "apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+            "Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal" },
+          body: JSON.stringify({ station_id:stationId, status:"offline", updated_at:new Date().toISOString() })
+        }).catch(() => {});
+        fetch(`${SUPABASE_URL}/rest/v1/ev_chargers?station_id=eq.${encodeURIComponent(stationId)}`, {
+          method:"PATCH", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+            "Content-Type":"application/json","Prefer":"return=minimal"},
+          body: JSON.stringify({ status:"offline", updated_at:new Date().toISOString() })
+        }).catch(() => {});
+      });
+
+      return new Response(null, { status: 101, webSocket: client,
+        headers: { "Sec-WebSocket-Protocol": subproto } });
+    }
+
+    // ── /ocpp16/send or /ocpp201/send — CSMS → charger message ────────────────
+    // Note: For persistent connections we need Durable Objects for production scale.
+    // This endpoint stores outbound commands in Supabase for charger pickup.
+    if (url.pathname === "/ocpp16/send" || url.pathname === "/ocpp201/send") {
+      const { station_id, action, payload } = body;
+      if (!station_id || !action) return new Response(JSON.stringify({ error:"station_id and action required" }), {
+        status:400, headers:{...CORS,"Content-Type":"application/json"}
+      });
+      // Store command for charger to pick up on next connection
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/ev_csms_commands`, {
+          method:"POST",
+          headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+            "Content-Type":"application/json","Prefer":"return=minimal"},
+          body: JSON.stringify({
+            station_id, action, payload: JSON.stringify(payload),
+            status:"pending", created_at: new Date().toISOString()
+          })
+        });
+        return new Response(JSON.stringify({ ok:true, queued:true, note:"Command queued — will be sent on next charger connection" }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok:false, error:e.message }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      }
+    }
+
+
+    // ── /ev/chargepoint/shed — ChargePoint shedLoad via SOAP ─────────────────
+    if (url.pathname === "/ev/chargepoint/shed" || url.pathname === "/ev/chargepoint/restore") {
+      const { api_key, api_pass, station_id, allowed_load } = body;
+      const isRestore = url.pathname.includes("restore");
+      if (!api_key || !station_id) return new Response(JSON.stringify({ ok:false, error:"api_key and station_id required" }), {
+        status:400, headers:{...CORS,"Content-Type":"application/json"}
+      });
+      try {
+        const CP_ENDPOINT = "https://webservices.chargepoint.com/cp_api/";
+        const soapBody = isRestore
+          ? `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns="urn:dictionary:com.chargepoint.webservices">
+              <soapenv:Header>
+                <ns:WSSecurityHeader><ns:username>${api_key}</ns:username><ns:password>${api_pass||""}</ns:password></ns:WSSecurityHeader>
+              </soapenv:Header>
+              <soapenv:Body><ns:clearShedState><ns:shedQuery><ns:stationID>${station_id}</ns:stationID></ns:shedQuery></ns:clearShedState></soapenv:Body>
+             </soapenv:Envelope>`
+          : `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns="urn:dictionary:com.chargepoint.webservices">
+              <soapenv:Header>
+                <ns:WSSecurityHeader><ns:username>${api_key}</ns:username><ns:password>${api_pass||""}</ns:password></ns:WSSecurityHeader>
+              </soapenv:Header>
+              <soapenv:Body>
+                <ns:shedLoad>
+                  <ns:shedQuery>
+                    <ns:stationID>${station_id}</ns:stationID>
+                    <ns:allowedLoad>${allowed_load||0}</ns:allowedLoad>
+                    <ns:timeInterval>3600</ns:timeInterval>
+                  </ns:shedQuery>
+                </ns:shedLoad>
+              </soapenv:Body>
+             </soapenv:Envelope>`;
+        const res = await fetch(CP_ENDPOINT, {
+          method:"POST",
+          headers:{ "Content-Type":"text/xml; charset=utf-8",
+                    "SOAPAction":"urn:dictionary:com.chargepoint.webservices:shedLoad" },
+          body: soapBody
+        });
+        const text = await res.text();
+        const ok   = text.includes("<responseCode>100</responseCode>");
+        return new Response(JSON.stringify({ ok, status:res.status, raw:text.substring(0,300) }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok:false, error:e.message }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      }
+    }
+
+    // ── /ev/enelx/shed — Enel X JuiceNet set_charge_limit ────────────────────
+    if (url.pathname === "/ev/enelx/shed" || url.pathname === "/ev/enelx/restore") {
+      const { api_token, device_token, limit_amps } = body;
+      const isRestore = url.pathname.includes("restore");
+      if (!api_token || !device_token) return new Response(JSON.stringify({ ok:false, error:"api_token and device_token required" }), {
+        status:400, headers:{...CORS,"Content-Type":"application/json"}
+      });
+      try {
+        // JuiceNet API — set charging rate
+        const JUICENET_BASE = "https://jbv1-api.emotorwerks.com";
+        const res = await fetch(`${JUICENET_BASE}/Box_Api_Volt`, {
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body: JSON.stringify({
+            cmd:         "set_override",
+            device_id:   device_token,
+            token:       api_token,
+            amperage:    isRestore ? 40 : Math.max(0, limit_amps||0),
+            energy_at_plugin: 0,
+            energy_to_add: 0
+          })
+        });
+        const data = await res.json();
+        return new Response(JSON.stringify({ ok: data.success === true || res.ok, data }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok:false, error:e.message }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      }
+    }
+
+    // ── /ev/blink/shed — Blink Network remote control ─────────────────────────
+    if (url.pathname === "/ev/blink/shed" || url.pathname === "/ev/blink/restore") {
+      const { username, password, charger_id, action, limit_amps } = body;
+      const isRestore = url.pathname.includes("restore");
+      if (!username || !charger_id) return new Response(JSON.stringify({ ok:false, error:"username and charger_id required" }), {
+        status:400, headers:{...CORS,"Content-Type":"application/json"}
+      });
+      try {
+        const BLINK_BASE = "https://api.blinkcharging.com";
+        // Step 1: Authenticate
+        const authRes = await fetch(`${BLINK_BASE}/auth/login`, {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ username, password })
+        });
+        const authData = await authRes.json();
+        const token    = authData.auth_token || authData.access_token;
+        if (!token) return new Response(JSON.stringify({ ok:false, error:"Blink auth failed" }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+        // Step 2: Send command (stop = shed, start = restore)
+        const cmd = isRestore ? "start" : (limit_amps <= 0 ? "stop" : "start");
+        const cmdRes = await fetch(`${BLINK_BASE}/api/v2/chargers/${charger_id}/start_stop`, {
+          method:"POST",
+          headers:{"Content-Type":"application/json","Authorization":`Token ${token}`},
+          body: JSON.stringify({ action: cmd })
+        });
+        const cmdData = await cmdRes.json();
+        return new Response(JSON.stringify({ ok:cmdRes.ok, data:cmdData }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok:false, error:e.message }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      }
+    }
+
+    // ── /ev/status — poll status for proprietary API chargers ────────────────
+    if (url.pathname === "/ev/status") {
+      const { integration, station_id, integ_config } = body;
+      try {
+        if (integration === "chargepoint") {
+          const { api_key, api_pass, cp_station } = integ_config;
+          const soapBody = `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns="urn:dictionary:com.chargepoint.webservices">
+            <soapenv:Header><ns:WSSecurityHeader><ns:username>${api_key}</ns:username><ns:password>${api_pass||""}</ns:password></ns:WSSecurityHeader></soapenv:Header>
+            <soapenv:Body><ns:getLoad><ns:shedQuery><ns:stationID>${cp_station}</ns:stationID></ns:shedQuery></ns:getLoad></soapenv:Body>
+           </soapenv:Envelope>`;
+          const res  = await fetch("https://webservices.chargepoint.com/cp_api/", {
+            method:"POST", headers:{"Content-Type":"text/xml","SOAPAction":"urn:dictionary:com.chargepoint.webservices:getLoad"},
+            body: soapBody
+          });
+          const text = await res.text();
+          // Parse stationLoad from XML
+          const loadMatch = text.match(/<stationLoad>([\d.]+)<\/stationLoad>/);
+          const shedMatch = text.match(/<shedState>(\d)<\/shedState>/);
+          return new Response(JSON.stringify({
+            ok: true,
+            power_kw:   loadMatch ? parseFloat(loadMatch[1]) : null,
+            shed_active: shedMatch ? shedMatch[1] === "1" : false
+          }), { headers:{...CORS,"Content-Type":"application/json"} });
+
+        } else if (integration === "enelx") {
+          const { api_token, device_token } = integ_config;
+          const res = await fetch("https://jbv1-api.emotorwerks.com/Box_Api_Volt", {
+            method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({ cmd:"get_state", device_id:device_token, token:api_token })
+          });
+          const data = await res.json();
+          return new Response(JSON.stringify({
+            ok:true,
+            power_kw:  data.charging_power ? data.charging_power / 1000 : null,
+            status:    data.state === "charging" ? "charging" : "available"
+          }), { headers:{...CORS,"Content-Type":"application/json"} });
+        }
+        return new Response(JSON.stringify({ ok:false, error:"Unsupported integration for status poll" }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok:false, error:e.message }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      }
+    }
+
+
+    // ── Tesla Fleet API routes ────────────────────────────────────────────────
+    // Auth: client_credentials with refresh_token → short-lived access_token
+    // Base URL: https://fleet-api.prd.{region}.vn.cloud.tesla.com
+    // Auth URL: https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token
+
+    async function teslaGetToken({ client_id, client_secret, refresh_token }) {
+      const res = await fetch("https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type:    "refresh_token",
+          client_id,
+          client_secret: client_secret || "",
+          refresh_token,
+          scope:         "openid vehicle_device_data vehicle_cmds vehicle_charging_cmds"
+        })
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Tesla token error ${res.status}: ${err.substring(0,200)}`);
+      }
+      const data = await res.json();
+      return data.access_token;
+    }
+
+    function teslaBaseUrl(region) {
+      const r = region || "na";
+      return `https://fleet-api.prd.${r}.vn.cloud.tesla.com`;
+    }
+
+    if (url.pathname === "/ev/tesla/status") {
+      const { client_id, client_secret, refresh_token, region, vin } = body;
+      if (!client_id || !refresh_token || !vin) return new Response(JSON.stringify({ ok:false, error:"client_id, refresh_token and vin required" }), {
+        status:400, headers:{...CORS,"Content-Type":"application/json"}
+      });
+      try {
+        const token   = await teslaGetToken({ client_id, client_secret, refresh_token });
+        const base    = teslaBaseUrl(region);
+        const res     = await fetch(`${base}/api/1/vehicles/${vin}/vehicle_data?endpoints=charge_state`, {
+          headers:{ "Authorization":`Bearer ${token}`, "Content-Type":"application/json" }
+        });
+        const data    = await res.json();
+        const charge  = data?.response?.charge_state || {};
+        return new Response(JSON.stringify({
+          ok:            res.ok,
+          display_name:  data?.response?.display_name || vin,
+          state:         data?.response?.state || "unknown",
+          battery_level: charge.battery_level,
+          charging_state:charge.charging_state,
+          charge_amps:   charge.charge_amps,
+          power_kw:      charge.charger_power || null
+        }), { headers:{...CORS,"Content-Type":"application/json"} });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok:false, error:e.message }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      }
+    }
+
+    if (url.pathname === "/ev/tesla/shed" || url.pathname === "/ev/tesla/restore") {
+      const { client_id, client_secret, refresh_token, region, vin, limit_amps, max_amps } = body;
+      const isRestore = url.pathname.includes("restore");
+      if (!client_id || !refresh_token || !vin) return new Response(JSON.stringify({ ok:false, error:"client_id, refresh_token and vin required" }), {
+        status:400, headers:{...CORS,"Content-Type":"application/json"}
+      });
+      try {
+        const token = await teslaGetToken({ client_id, client_secret, refresh_token });
+        const base  = teslaBaseUrl(region);
+        const authHdr = { "Authorization":`Bearer ${token}`, "Content-Type":"application/json" };
+
+        if (isRestore) {
+          // Restore: set to max amps and start charging if stopped
+          const ampsRes = await fetch(`${base}/api/1/vehicles/${vin}/command/set_charging_amps`, {
+            method:"POST", headers:authHdr,
+            body: JSON.stringify({ charging_amps: max_amps || 48 })
+          });
+          const startRes = await fetch(`${base}/api/1/vehicles/${vin}/command/charge_start`, {
+            method:"POST", headers:authHdr, body:"{}"
+          });
+          const ampsData  = await ampsRes.json();
+          return new Response(JSON.stringify({ ok:ampsRes.ok, result:ampsData?.response }), {
+            headers:{...CORS,"Content-Type":"application/json"}
+          });
+
+        } else if (limit_amps <= 0) {
+          // Emergency: stop charging entirely
+          const res  = await fetch(`${base}/api/1/vehicles/${vin}/command/charge_stop`, {
+            method:"POST", headers:authHdr, body:"{}"
+          });
+          const data = await res.json();
+          return new Response(JSON.stringify({ ok:res.ok, result:data?.response }), {
+            headers:{...CORS,"Content-Type":"application/json"}
+          });
+
+        } else {
+          // Shed: reduce amps
+          const res  = await fetch(`${base}/api/1/vehicles/${vin}/command/set_charging_amps`, {
+            method:"POST", headers:authHdr,
+            body: JSON.stringify({ charging_amps: Math.max(5, Math.round(limit_amps)) })
+          });
+          const data = await res.json();
+          return new Response(JSON.stringify({ ok:res.ok, result:data?.response }), {
+            headers:{...CORS,"Content-Type":"application/json"}
+          });
+        }
+      } catch(e) {
+        return new Response(JSON.stringify({ ok:false, error:e.message }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      }
+    }
+
+
+    // ── Battery Storage API Routes ────────────────────────────────────────────
+
+    // Helper: shared Tesla token exchange (same as vehicle API)
+    // teslaGetToken and teslaBaseUrl already defined above in Tesla vehicle routes
+
+    // ── /battery/tesla/status — Powerwall live_status ─────────────────────────
+    if (url.pathname === "/battery/tesla/status") {
+      const { client_id, client_secret, refresh_token, region, site_id } = body;
+      if (!client_id || !refresh_token || !site_id) return new Response(JSON.stringify({ ok:false, error:"client_id, refresh_token, site_id required" }), {
+        status:400, headers:{...CORS,"Content-Type":"application/json"}
+      });
+      try {
+        const token = await teslaGetToken({ client_id, client_secret, refresh_token });
+        const base  = teslaBaseUrl(region);
+        const res   = await fetch(`${base}/api/1/energy_sites/${site_id}/live_status`, {
+          headers:{ "Authorization":`Bearer ${token}`, "Content-Type":"application/json" }
+        });
+        const data  = await res.json();
+        const live  = data?.response || {};
+        return new Response(JSON.stringify({
+          ok:                 res.ok,
+          percentage_charged: live.percentage_charged,
+          power_kw:           live.total_pack_energy != null ? Math.round((live.battery_power || 0) / 100) / 10 : null,
+          battery_power:      live.battery_power,
+          grid_power:         live.grid_power,
+          solar_power:        live.solar_power,
+          load_power:         live.load_power,
+          grid_status:        live.grid_status,
+          storm_mode:         live.storm_mode_active,
+          mode:               live.operation || "unknown"
+        }), { headers:{...CORS,"Content-Type":"application/json"} });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok:false, error:e.message }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      }
+    }
+
+    // ── /battery/tesla/discharge|hold|charge|restore ──────────────────────────
+    if (url.pathname.startsWith("/battery/tesla/")) {
+      const action = url.pathname.split("/").pop(); // discharge, hold, charge, restore
+      const { client_id, client_secret, refresh_token, region, site_id, min_reserve } = body;
+      if (!client_id || !refresh_token || !site_id) return new Response(JSON.stringify({ ok:false, error:"client_id, refresh_token, site_id required" }), {
+        status:400, headers:{...CORS,"Content-Type":"application/json"}
+      });
+      try {
+        const token   = await teslaGetToken({ client_id, client_secret, refresh_token });
+        const base    = teslaBaseUrl(region);
+        const authHdr = { "Authorization":`Bearer ${token}`, "Content-Type":"application/json" };
+        const reserve = Math.max(5, parseInt(min_reserve || 20));
+
+        let opRes;
+        if (action === "discharge") {
+          // Enable discharge: self_consumption mode + low backup reserve
+          opRes = await fetch(`${base}/api/1/energy_sites/${site_id}/operation`, {
+            method:"POST", headers:authHdr,
+            body: JSON.stringify({ default_real_mode:"self_consumption" })
+          });
+          await fetch(`${base}/api/1/energy_sites/${site_id}/backup`, {
+            method:"POST", headers:authHdr,
+            body: JSON.stringify({ backup_reserve_percent: reserve })
+          });
+        } else if (action === "hold") {
+          // Stop charging: set backup reserve to 100% (battery won't charge from grid)
+          opRes = await fetch(`${base}/api/1/energy_sites/${site_id}/backup`, {
+            method:"POST", headers:authHdr,
+            body: JSON.stringify({ backup_reserve_percent: 100 })
+          });
+        } else if (action === "charge") {
+          // Pre-charge: autonomous mode, high backup reserve forces charging
+          opRes = await fetch(`${base}/api/1/energy_sites/${site_id}/operation`, {
+            method:"POST", headers:authHdr,
+            body: JSON.stringify({ default_real_mode:"autonomous" })
+          });
+          await fetch(`${base}/api/1/energy_sites/${site_id}/backup`, {
+            method:"POST", headers:authHdr,
+            body: JSON.stringify({ backup_reserve_percent: 95 })
+          });
+        } else {
+          // Restore: autonomous mode + original min reserve
+          opRes = await fetch(`${base}/api/1/energy_sites/${site_id}/operation`, {
+            method:"POST", headers:authHdr,
+            body: JSON.stringify({ default_real_mode:"autonomous" })
+          });
+          await fetch(`${base}/api/1/energy_sites/${site_id}/backup`, {
+            method:"POST", headers:authHdr,
+            body: JSON.stringify({ backup_reserve_percent: reserve })
+          });
+        }
+        const opData = await opRes.json();
+        return new Response(JSON.stringify({ ok:opRes.ok, result:opData?.response }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok:false, error:e.message }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      }
+    }
+
+    // ── /battery/enphase/discharge|hold|charge|restore ────────────────────────
+    if (url.pathname.startsWith("/battery/enphase/")) {
+      const action = url.pathname.split("/").pop();
+      const { api_key, token, system_id, min_reserve } = body;
+      if (!api_key || !system_id) return new Response(JSON.stringify({ ok:false, error:"api_key and system_id required" }), {
+        status:400, headers:{...CORS,"Content-Type":"application/json"}
+      });
+      try {
+        const ENPHASE_BASE = "https://api.enphaseenergy.com/api/v4";
+        const authHdr = {
+          "Authorization": `Bearer ${token}`,
+          "key":           api_key,
+          "Content-Type":  "application/json"
+        };
+        // Map action to Enphase battery control commands
+        // Enphase 2025 API provides VPP/DR battery control endpoints
+        const modeMap = {
+          discharge: "self_consumption",  // use stored energy
+          hold:      "backup",            // reserve only — stop grid charging
+          charge:    "savings",           // charge from grid when possible
+          restore:   "self_consumption"   // return to normal
+        };
+        const reservePct = Math.max(5, parseInt(min_reserve || 20));
+        const res = await fetch(`${ENPHASE_BASE}/systems/${system_id}/battery/control`, {
+          method:"POST", headers:authHdr,
+          body: JSON.stringify({
+            mode:              modeMap[action] || "self_consumption",
+            backup_reserve_pct: action === "hold" ? 100 : reservePct,
+            dr_active:         action !== "restore"
+          })
+        });
+        const data = await res.json();
+        return new Response(JSON.stringify({ ok:res.ok, data }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok:false, error:e.message }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      }
+    }
+
+    // ── /battery/solaredge/status|discharge|hold|restore ──────────────────────
+    if (url.pathname.startsWith("/battery/solaredge/")) {
+      const action = url.pathname.split("/").pop();
+      const { api_key, site_id } = body;
+      if (!api_key || !site_id) return new Response(JSON.stringify({ ok:false, error:"api_key and site_id required" }), {
+        status:400, headers:{...CORS,"Content-Type":"application/json"}
+      });
+      try {
+        const SE_BASE = "https://monitoringapi.solaredge.com";
+        if (action === "status") {
+          // Get current power flow + storage data
+          const res = await fetch(`${SE_BASE}/site/${site_id}/currentPowerFlow?api_key=${api_key}`);
+          const data = await res.json();
+          const storage = data?.siteCurrentPowerFlow?.STORAGE;
+          return new Response(JSON.stringify({
+            ok:      res.ok,
+            soc:     storage?.chargeLevel,
+            power_kw:storage?.currentPower != null
+              ? (storage?.status === "Charging" ? storage.currentPower : -storage.currentPower)
+              : null,
+            mode:    storage?.status || "unknown"
+          }), { headers:{...CORS,"Content-Type":"application/json"} });
+        }
+        // Note: SolarEdge direct battery mode control requires the installer API
+        // or Modbus TCP locally. Via monitoring API only data reads are supported.
+        return new Response(JSON.stringify({
+          ok:   false,
+          error: "SolarEdge direct battery mode control requires Modbus TCP locally or installer API access. This endpoint provides monitoring data only.",
+          note:  "Manual action required: adjust battery mode in mySolarEdge app or monitoring portal."
+        }), { headers:{...CORS,"Content-Type":"application/json"} });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok:false, error:e.message }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      }
+    }
+
+    // ── /battery/local/command — Generic local REST battery command ────────────
+    if (url.pathname === "/battery/local/command") {
+      const { url: targetUrl, token } = body;
+      if (!targetUrl) return new Response(JSON.stringify({ ok:false, error:"url required" }), {
+        status:400, headers:{...CORS,"Content-Type":"application/json"}
+      });
+      try {
+        const headers = { "Content-Type":"application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        const res  = await fetch(targetUrl, { method:"POST", headers, body:"{}" });
+        return new Response(JSON.stringify({ ok:res.ok, status:res.status }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok:false, error:e.message }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      }
+    }
+
+
+    // ── Sonnen local API v2 ───────────────────────────────────────────────────
+    // Base: http://{ip}/api/v2 — auth token in Auth header
+    // Status: GET /api/v2/latestdata
+    // Mode:   PUT /api/v2/configurations  { EM_OperatingMode: "1"|"2"|"7" }
+    //   1 = manual, 2 = self-consumption, 7 = battery-care (idle)
+    // Manual power: PUT /api/v2/setpoint/discharge/{watts}
+    //               PUT /api/v2/setpoint/charge/{watts}
+
+    if (url.pathname === "/battery/sonnen/status") {
+      const { ip, token } = body;
+      if (!ip) return new Response(JSON.stringify({ ok:false, error:"ip required" }), {
+        status:400, headers:{...CORS,"Content-Type":"application/json"}
+      });
+      try {
+        const headers = token ? { "Auth-Token": token } : {};
+        const res  = await fetch(`http://${ip}/api/v2/latestdata`, { headers });
+        const data = await res.json();
+        // Pac_total_W: positive = discharging, negative = charging
+        const power = data.Pac_total_W != null ? Math.round(data.Pac_total_W) / 1000 : null;
+        return new Response(JSON.stringify({
+          ok:       res.ok,
+          soc:      data.USOC,
+          power_kw: power,
+          mode:     data.OperatingMode === "2" ? "self_consumption"
+                  : data.OperatingMode === "1" ? "manual"
+                  : data.OperatingMode === "7" ? "battery_care" : "unknown",
+          grid_kw:  data.GridFeedIn_W != null ? Math.round(data.GridFeedIn_W) / 1000 : null,
+          solar_kw: data.Production_W != null ? Math.round(data.Production_W) / 1000 : null
+        }), { headers:{...CORS,"Content-Type":"application/json"} });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok:false, error:e.message }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      }
+    }
+
+    if (url.pathname.startsWith("/battery/sonnen/")) {
+      const action = url.pathname.split("/").pop(); // discharge, hold, charge, restore
+      const { ip, token, min_reserve } = body;
+      if (!ip) return new Response(JSON.stringify({ ok:false, error:"ip required" }), {
+        status:400, headers:{...CORS,"Content-Type":"application/json"}
+      });
+      try {
+        const authHdr = token ? { "Auth-Token": token, "Content-Type":"application/json" }
+                               : { "Content-Type":"application/json" };
+        let res;
+        if (action === "discharge") {
+          // Self-consumption mode — battery discharges to cover house load
+          res = await fetch(`http://${ip}/api/v2/configurations`, {
+            method:"PUT", headers:authHdr,
+            body: JSON.stringify({ EM_OperatingMode:"2" })
+          });
+        } else if (action === "hold") {
+          // Manual mode, set discharge to 0W (hold SOC)
+          await fetch(`http://${ip}/api/v2/configurations`, {
+            method:"PUT", headers:authHdr,
+            body: JSON.stringify({ EM_OperatingMode:"1" })
+          });
+          res = await fetch(`http://${ip}/api/v2/setpoint/discharge/0`, {
+            method:"POST", headers:authHdr
+          });
+        } else if (action === "charge") {
+          // Manual mode, set max charge power
+          await fetch(`http://${ip}/api/v2/configurations`, {
+            method:"PUT", headers:authHdr,
+            body: JSON.stringify({ EM_OperatingMode:"1" })
+          });
+          res = await fetch(`http://${ip}/api/v2/setpoint/charge/3300`, {
+            method:"POST", headers:authHdr
+          });
+        } else {
+          // Restore — back to self-consumption
+          res = await fetch(`http://${ip}/api/v2/configurations`, {
+            method:"PUT", headers:authHdr,
+            body: JSON.stringify({ EM_OperatingMode:"2" })
+          });
+        }
+        return new Response(JSON.stringify({ ok: res?.ok || false, status: res?.status }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok:false, error:e.message }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      }
+    }
+
+    // ── Victron VRM Cloud API ─────────────────────────────────────────────────
+    // Base:  https://vrmapi.victronenergy.com/v2
+    // Auth:  X-Authorization: Token {token}
+    // Status: GET /installations/{id}/diagnostics
+    // Control: POST /installations/{id}/settings  (ESS mode via MQTT writeback)
+
+    if (url.pathname === "/battery/victron/status") {
+      const { token, install_id } = body;
+      if (!token || !install_id) return new Response(JSON.stringify({ ok:false, error:"token and install_id required" }), {
+        status:400, headers:{...CORS,"Content-Type":"application/json"}
+      });
+      try {
+        const res  = await fetch(`https://vrmapi.victronenergy.com/v2/installations/${install_id}/diagnostics?count=1000`, {
+          headers:{ "X-Authorization":`Token ${token}`, "Content-Type":"application/json" }
+        });
+        const data = await res.json();
+        // Parse SOC and battery power from diagnostics records
+        let soc = null, battPower = null, mode = "unknown";
+        const records = data?.records || [];
+        records.forEach(r => {
+          if (r.code === "bs" || r.description?.toLowerCase().includes("state of charge")) soc = parseFloat(r.formattedValue);
+          if (r.code === "Pb" || r.description?.toLowerCase().includes("battery power")) battPower = parseFloat(r.rawValue) / 1000;
+          if (r.description?.toLowerCase().includes("ess mode") || r.code === "em") mode = r.formattedValue;
+        });
+        return new Response(JSON.stringify({
+          ok:       res.ok,
+          soc,
+          power_kw: battPower,
+          mode,
+          raw_count: records.length
+        }), { headers:{...CORS,"Content-Type":"application/json"} });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok:false, error:e.message }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      }
+    }
+
+    if (url.pathname.startsWith("/battery/victron/")) {
+      const action = url.pathname.split("/").pop();
+      const { token, install_id, instance, min_reserve } = body;
+      if (!token || !install_id) return new Response(JSON.stringify({ ok:false, error:"token and install_id required" }), {
+        status:400, headers:{...CORS,"Content-Type":"application/json"}
+      });
+      try {
+        const authHdr = { "X-Authorization":`Token ${token}`, "Content-Type":"application/json" };
+        const inst    = instance || "276";
+        const reserve = Math.max(5, parseInt(min_reserve || 20));
+        // ESS mode values: 1=Optimized(with BatteryLife), 2=Optimized(without), 3=Keep charged, 4=External control
+        // MinSOC: percentage 0-100
+        const modeMap = {
+          discharge: { "ESS mode":3, "MinSOC":reserve },       // Keep charged → allows discharge
+          hold:      { "ESS mode":3, "MinSOC":100 },            // 100% MinSOC = hold
+          charge:    { "ESS mode":3, "MinSOC":95 },             // Force charge to 95%
+          restore:   { "ESS mode":1, "MinSOC":reserve }         // Optimized with BatteryLife
+        };
+        const settings = modeMap[action] || modeMap.restore;
+        const writes = Object.entries(settings).map(([attr, value]) => ({
+          idSite:    parseInt(install_id),
+          instance:  parseInt(inst),
+          attribute: attr,
+          value
+        }));
+        const res = await fetch(`https://vrmapi.victronenergy.com/v2/installations/${install_id}/settings`, {
+          method:"POST", headers:authHdr,
+          body: JSON.stringify({ settings: writes })
+        });
+        const data = await res.json();
+        return new Response(JSON.stringify({ ok:res.ok, data }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok:false, error:e.message }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      }
+    }
+
+
+    // ── Generator Routes ──────────────────────────────────────────────────────
+
+    // ── /generator/mobilelink/status — Generac Mobile Link status poll ────────
+    if (url.pathname === "/generator/mobilelink/status") {
+      const { username, password, generator_id } = body;
+      if (!username || !generator_id) return new Response(JSON.stringify({ ok:false, error:"username and generator_id required" }), {
+        status:400, headers:{...CORS,"Content-Type":"application/json"}
+      });
+      try {
+        // Step 1: Authenticate
+        const ML_BASE = "https://mobilelink.generac.com";
+        const authRes = await fetch(`${ML_BASE}/api/Account/Login`, {
+          method:"POST",
+          headers:{"Content-Type":"application/json","Accept":"application/json"},
+          body: JSON.stringify({ username, password })
+        });
+        if (!authRes.ok) return new Response(JSON.stringify({ ok:false, error:`Auth failed: ${authRes.status}` }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+        const authData = await authRes.json();
+        const token    = authData?.AccessToken || authData?.access_token;
+        if (!token) return new Response(JSON.stringify({ ok:false, error:"No token in auth response" }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+        // Step 2: Get generator status
+        const genRes  = await fetch(`${ML_BASE}/api/Generators/${generator_id}`, {
+          headers:{ "Authorization":`Bearer ${token}`, "Accept":"application/json" }
+        });
+        const genData = await genRes.json();
+        const status  = genData?.apparatusStatus?.toLowerCase() || "unknown";
+        return new Response(JSON.stringify({
+          ok:          genRes.ok,
+          status:      status.includes("running") ? "running"
+                     : status.includes("ready")   ? "standby"
+                     : status.includes("alarm")   ? "fault"   : "unknown",
+          status_raw:  genData?.apparatusStatus,
+          kw:          genData?.currentPowerConsumption || null,
+          runtime_hrs: genData?.totalRunHours || null,
+          battery_v:   genData?.batteryVoltage || null,
+          last_alarm:  genData?.lastActivationDate || null,
+          fuel_level:  genData?.fuelLevel || null
+        }), { headers:{...CORS,"Content-Type":"application/json"} });
+      } catch(e) {
+        return new Response(JSON.stringify({ ok:false, error:e.message }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      }
+    }
+
+    // ── /generator/modbus/status|start|stop ───────────────────────────────────
+    // Routes via a REST-to-Modbus proxy gateway.
+    // Controller-specific register maps for common genset controllers.
+    if (url.pathname.startsWith("/generator/modbus/")) {
+      const action = url.pathname.split("/").pop(); // status, start, stop
+      const { proxy, token, host, port, unit, controller, test } = body;
+      if (!proxy && !host) return new Response(JSON.stringify({ ok:false, error:"proxy or host required" }), {
+        status:400, headers:{...CORS,"Content-Type":"application/json"}
+      });
+
+      // Register maps by controller type
+      const REGISTERS = {
+        generac_h100: { status:40001, remote_start:40002, kw:40030, voltage:40010, frequency:40012 },
+        generac_gpanel:{ status:40001, remote_start:40002, kw:40030, voltage:40010, frequency:40012 },
+        kohler_dec:   { status:40001, remote_start:40100, kw:40200, voltage:40050, frequency:40060 },
+        cummins_pcc:  { status:40001, remote_start:40100, kw:40200, voltage:40050, frequency:40060 },
+        cat_emcp:     { status:40001, remote_start:40010, kw:40100, voltage:40020, frequency:40030 },
+        comap_il4:    { status:1001,  remote_start:1200,  kw:1100,  voltage:1050,  frequency:1060  },
+        deepsea:      { status:40001, remote_start:40010, kw:40100, voltage:40020, frequency:40030 },
+        generic:      { status:40001, remote_start:40002, kw:40030, voltage:40010, frequency:40012 }
+      };
+      const regs = REGISTERS[controller] || REGISTERS.generic;
+
+      try {
+        if (proxy) {
+          // REST proxy mode — proxy translates REST to Modbus
+          const hdrs = { "Content-Type":"application/json" };
+          if (token) hdrs["Authorization"] = `Bearer ${token}`;
+
+          if (action === "status") {
+            const res  = await fetch(`${proxy}/status`, { method:"GET", headers:hdrs });
+            const data = await res.json();
+            return new Response(JSON.stringify({
+              ok:      res.ok,
+              status:  data.running ? "running" : data.fault ? "fault" : "standby",
+              kw:      data.kw || data.power || null,
+              voltage: data.voltage || null,
+              frequency: data.frequency || null,
+              runtime_hrs: data.runtime_hours || data.hours || null
+            }), { headers:{...CORS,"Content-Type":"application/json"} });
+
+          } else if (action === "start") {
+            const res = await fetch(`${proxy}/start`, { method:"POST", headers:hdrs, body:JSON.stringify({ test: !!test }) });
+            return new Response(JSON.stringify({ ok:res.ok, status:res.status }), {
+              headers:{...CORS,"Content-Type":"application/json"}
+            });
+
+          } else if (action === "stop") {
+            const res = await fetch(`${proxy}/stop`, { method:"POST", headers:hdrs, body:"{}" });
+            return new Response(JSON.stringify({ ok:res.ok, status:res.status }), {
+              headers:{...CORS,"Content-Type":"application/json"}
+            });
+          }
+
+        } else {
+          // Direct Modbus TCP — note: Cloudflare Workers cannot open raw TCP sockets
+          // This path requires a REST-to-Modbus proxy; return helpful error
+          return new Response(JSON.stringify({
+            ok:    false,
+            error: "Direct Modbus TCP requires a REST proxy. Cloudflare Workers cannot open raw TCP sockets. " +
+                   "Deploy a Node-RED, mbusd, or similar REST-to-Modbus bridge on your local network and configure the proxy URL.",
+            register_map: regs,
+            host, port, unit, controller
+          }), { headers:{...CORS,"Content-Type":"application/json"} });
+        }
+      } catch(e) {
+        return new Response(JSON.stringify({ ok:false, error:e.message }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      }
+    }
+
+
+    // ── /utility/search-outage-map ─────────────────────────────────────────────
+    // Fetches PowerOutage.us state page, finds the utility by name match,
+    // then fetches that utility's page and extracts the outage map link.
+    if (url.pathname === "/utility/search-outage-map") {
+      const { name, state, util_type } = body;
+      if (!name) return new Response(JSON.stringify({ ok:false, error:"name required" }), {
+        status:400, headers:{...CORS,"Content-Type":"application/json"}
+      });
+
+      const STATE_SLUGS = {
+        AL:"alabama", AK:"alaska", AZ:"arizona", AR:"arkansas",
+        CA:"california", CO:"colorado", CT:"connecticut", DC:"district-of-columbia",
+        DE:"delaware", FL:"florida", GA:"georgia", HI:"hawaii",
+        ID:"idaho", IL:"illinois", IN:"indiana", IA:"iowa",
+        KS:"kansas", KY:"kentucky", LA:"louisiana", ME:"maine",
+        MD:"maryland", MA:"massachusetts", MI:"michigan", MN:"minnesota",
+        MS:"mississippi", MO:"missouri", MT:"montana", NE:"nebraska",
+        NV:"nevada", NH:"new-hampshire", NJ:"new-jersey", NM:"new-mexico",
+        NY:"new-york", NC:"north-carolina", ND:"north-dakota", OH:"ohio",
+        OK:"oklahoma", OR:"oregon", PA:"pennsylvania", RI:"rhode-island",
+        SC:"south-carolina", SD:"south-dakota", TN:"tennessee", TX:"texas",
+        UT:"utah", VT:"vermont", VA:"virginia", WA:"washington",
+        WV:"west-virginia", WI:"wisconsin", WY:"wyoming"
+      };
+
+      const FETCH_OPTS = {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.5"
+        }
+      };
+
+      // Normalize name for fuzzy matching
+      function normalizeName(s) {
+        return s.toLowerCase()
+          .replace(/\b(electric|energy|power|cooperative|coop|co-op|utilities|utility|service|company|corporation|corp|inc|llc|ltd|association|assn|the|of|and|&|authority|board|department|dept)\b/g, " ")
+          .replace(/[^a-z0-9\s]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+
+      function similarity(a, b) {
+        const na = normalizeName(a);
+        const nb = normalizeName(b);
+        if (na === nb) return 1.0;
+        if (na.includes(nb) || nb.includes(na)) return 0.9;
+        // Count shared words
+        const wa = new Set(na.split(" ").filter(w => w.length > 2));
+        const wb = new Set(nb.split(" ").filter(w => w.length > 2));
+        let shared = 0;
+        for (const w of wa) if (wb.has(w)) shared++;
+        return shared / Math.max(wa.size, wb.size, 1);
+      }
+
+      try {
+        const stateSlug = STATE_SLUGS[state?.toUpperCase()] || null;
+
+        // ── Step 1: Fetch state utility list from PowerOutage.us ──────────────
+        let utilityId   = null;
+        let utilityName = null;
+
+        if (stateSlug) {
+          const stateRes = await fetch(
+            `https://poweroutage.us/area/state/${stateSlug}`,
+            { ...FETCH_OPTS, signal: AbortSignal.timeout(6000) }
+          );
+          if (stateRes.ok) {
+            const html = await stateRes.text();
+            // Parse utility links: /area/utility/{id} with utility name text
+            const utilityLinks = [...html.matchAll(/href="\/area\/utility\/(\d+)"[^>]*>([^<]+)</g)];
+            let bestScore = 0;
+            for (const [, id, rawName] of utilityLinks) {
+              const score = similarity(name, rawName.trim());
+              if (score > bestScore) {
+                bestScore   = score;
+                utilityId   = id;
+                utilityName = rawName.trim();
+              }
+            }
+            // Only accept if reasonably confident — lowered to 0.3 for short utility names
+            console.log(`Best match: "${utilityName}" score=${bestScore} for search "${name}"`);
+            if (bestScore < 0.3) { utilityId = null; utilityName = null; }
+          }
+        }
+
+        // ── Step 2: If we found a utility ID, fetch its page for the map link ─
+        let outageMapUrl    = null;
+        let powerOutageUrl  = null;
+
+        if (utilityId) {
+          powerOutageUrl = `https://poweroutage.us/area/utility/${utilityId}`;
+          const utilRes = await fetch(
+            powerOutageUrl,
+            { ...FETCH_OPTS, signal: AbortSignal.timeout(6000) }
+          );
+          if (utilRes.ok) {
+            const html = await utilRes.text();
+            // Look for outage map link patterns on the utility page
+            // PowerOutage.us shows an "Outage Map" button linking to the utility's own map
+            const mapPatterns = [
+              /href="(https?:\/\/[^"]+)"[^>]*>[^<]*[Oo]utage\s*[Mm]ap[^<]*</g,
+              /href="(https?:\/\/[^"]+)"[^>]*class="[^"]*outage[^"]*"/g,
+              /"outage[_-]?map[_-]?url"\s*:\s*"(https?:\/\/[^"]+)"/gi,
+              /data-url="(https?:\/\/[^"]+outage[^"]+)"/gi,
+            ];
+            for (const pattern of mapPatterns) {
+              const matches = [...html.matchAll(pattern)];
+              for (const m of matches) {
+                const candidateUrl = m[1];
+                // Skip if it's a poweroutage.us URL itself
+                if (!candidateUrl.includes("poweroutage.us") &&
+                    !candidateUrl.includes("poweroutage.com")) {
+                  outageMapUrl = candidateUrl;
+                  break;
+                }
+              }
+              if (outageMapUrl) break;
+            }
+          }
+        }
+
+        // ── Step 3: Respond ────────────────────────────────────────────────────
+        // If PowerOutage.us didn't find a map, try a direct Bing search
+        if (!outageMapUrl) {
+          const BING_KEY = env?.BING_SEARCH_KEY;
+          if (BING_KEY) {
+            try {
+              const q = `"${name}" outage map -site:poweroutage.us -site:reddit.com`;
+              const bingRes = await fetch(
+                `https://api.bing.microsoft.com/v7.0/search?q=${encodeURIComponent(q)}&count=5`,
+                { headers:{"Ocp-Apim-Subscription-Key": BING_KEY} }
+              );
+              if (bingRes.ok) {
+                const bingData = await bingRes.json();
+                const results  = bingData?.webPages?.value || [];
+                const SKIP = ["poweroutage","reddit","yelp","facebook","yellowpages","bbb","wikipedia"];
+                for (const r of results) {
+                  const u = r.url || "";
+                  if (SKIP.some(s => u.includes(s))) continue;
+                  if (r.name?.toLowerCase().includes("outage") || r.snippet?.toLowerCase().includes("outage map")) {
+                    outageMapUrl = u;
+                    break;
+                  }
+                }
+              }
+            } catch(e) { console.warn("Bing fallback:", e.message); }
+          }
+        }
+
+        if (outageMapUrl) {
+          return new Response(JSON.stringify({
+            ok:    true,
+            found: true,
+            url:   outageMapUrl,
+            note:  `Found via PowerOutage.us — matched "${utilityName}"`,
+            poweroutage_url: powerOutageUrl,
+            utility_id: utilityId
+          }), { headers:{...CORS,"Content-Type":"application/json"} });
+        } else if (powerOutageUrl) {
+          // Tracked by PowerOutage.us but no dedicated map link extracted
+          return new Response(JSON.stringify({
+            ok:    true,
+            found: false,
+            poweroutage_url: powerOutageUrl,
+            utility_name: utilityName,
+            note: utilityId
+              ? `"${utilityName}" is tracked on PowerOutage.us but has no published outage map`
+              : "Utility not found on PowerOutage.us for this state"
+          }), { headers:{...CORS,"Content-Type":"application/json"} });
+        } else {
+          return new Response(JSON.stringify({
+            ok:    true,
+            found: false,
+            note:  "Utility not found on PowerOutage.us. You can add the map URL manually if one exists."
+          }), { headers:{...CORS,"Content-Type":"application/json"} });
+        }
+
+      } catch(e) {
+        return new Response(JSON.stringify({ ok:false, error:e.message }), {
+          headers:{...CORS,"Content-Type":"application/json"}
+        });
+      }
+    }  // end /utility/search-outage-map
+
+    // ── / (root) — relay LC command proxy → Notehub ─────────────────────────
+    // Dashboard POSTs {body:{LC:"..."}, req:"note.add", sync:true}
+    // Wrap entire body in another body key — exactly like the working historic worker
+    if (url.pathname === "/" || url.pathname === "") {
+      const deviceUID  = request.headers.get("X-Device-UID") || body.deviceUID || body.device || DEVICE_UID;
+      const notehubURL = `https://api.notefile.net/v1/projects/${PROJECT_UID}/devices/${encodeURIComponent(deviceUID)}/notes/data.qi`;
+      try {
+        const res = await fetch(notehubURL, {
+          method:  "POST",
+          headers: { "Authorization": `Bearer ${NOTEHUB_TOKEN}`, "Content-Type": "application/json" },
+          body:    JSON.stringify({ body })
+        });
+        const text = await res.text();
+        console.log(`note.add ← ${deviceUID}: ${res.status} ${text}`);
+        return new Response(text || "{}", {
+          status:  res.status,
+          headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+    }
+
+    // ── Catch-all: unmatched route ─────────────────────────────────────────────
+    return new Response(JSON.stringify({ error: "Not found", path: url.pathname }), {
+      status: 404, headers: { ...CORS, "Content-Type": "application/json" }
+    });
+  }
+};
