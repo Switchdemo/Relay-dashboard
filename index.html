@@ -6921,7 +6921,7 @@ async function sendLCToDevice(uid, lcHex) {
   try {
     await fetch(PROXY_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Device-UID": uid },
       body: JSON.stringify(payload)
     });
     console.log(`LC sent to ${uid}:`, JSON.stringify(payload));
