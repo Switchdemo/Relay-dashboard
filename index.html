@@ -6011,12 +6011,20 @@ function showSchedConfirm() {
     targetVal = getVal("sf-target");
     if (!type)      { setStatus("error", "Please select a target type."); return; }
     if (!targetVal) { setStatus("error", "Please select a target."); return; }
-    if (!stratVal)  { setStatus("error", "Please select a shed level."); return; }
+    const isHybrid = document.getElementById("sf-switch-mode")?.value === "hybrid";
+    if (isHybrid) {
+      const { dlcRelays, basRelays } = getHybridConfig();
+      if (!dlcRelays.length && !basRelays.length) { setStatus("error", "Select at least one relay to participate."); return; }
+      stratVal      = "hybrid"; // sentinel
+      actionSummary = `Hybrid — ${dlcRelays.length} DLC, ${basRelays.length} BAS relay${(dlcRelays.length+basRelays.length)!==1?"s":""}`;
+    } else {
+      if (!stratVal)  { setStatus("error", "Please select a shed level."); return; }
+      const shed    = Object.entries(SHED_LEVEL_MAP).find(([,v])=>v.strategy===stratVal||stratVal.startsWith(v.strategy.split("|")[0]));
+      actionSummary = shed ? shed[1].label : `Strategy ${stratVal}`;
+    }
     targetName    = type === "group"
       ? (groupNames[parseInt(targetVal.replace("group_",""))] || targetVal)
       : unitName(targetVal);
-    const shed    = Object.entries(SHED_LEVEL_MAP).find(([,v])=>v.strategy===stratVal||stratVal.startsWith(v.strategy.split("|")[0]));
-    actionSummary = shed ? shed[1].label : `Strategy ${stratVal}`;
 
   } else if (eventType === "bas_di") {
     const basType = getVal("sf-bas-target-type");
@@ -6084,7 +6092,7 @@ function showSchedConfirm() {
   // LC hex (only for switch/relay events)
   let lcHex = "—", repsLabel = "—", schedUnix = null;
   const isLCEvent = eventType === "switch" || eventType === "bas_di";
-  if (isLCEvent && stratVal && !["ev_shed","batt_action","gen_action","oadr_event"].includes(stratVal)) {
+  if (isLCEvent && stratVal && !["ev_shed","batt_action","gen_action","oadr_event","hybrid"].includes(stratVal)) {
     const [stratNum,, stratCycle] = stratVal.split("|").map(Number);
     const reps = duration_minutes && stratCycle ? Math.max(1, Math.round(duration_minutes / stratCycle)) : 1;
     schedUnix = getScheduleUnixTime(event_date, time, tz);
@@ -6283,7 +6291,7 @@ async function _executeCreateSchedule() {
 
   if (!type)      { setStatus("error", "Please select a target type."); return; }
   if (!targetVal) { setStatus("error", "Please select a target."); return; }
-  if (!stratVal)  { setStatus("error", "Please select a shed level."); return; }
+  if (!stratVal && evType !== "hybrid")  { setStatus("error", "Please select a shed level."); return; }
 
   const [stratNum, stratTimeout, stratCycle] = stratVal.split("|").map(Number);
   const reps = duration_minutes && stratCycle
