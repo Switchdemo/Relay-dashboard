@@ -22833,13 +22833,12 @@ async function searchOutageMap() {
     return;
   }
 
-  // Show loading
   if (btn)      { btn.disabled = true; btn.textContent = "Searching…"; }
-  if (resultEl) resultEl.innerHTML = '<span style="color:var(--text-hint);">&#128269; Searching for outage map…</span>';
+  if (resultEl) resultEl.innerHTML = '<span style="color:var(--text-hint);">&#128269; Finding utility website…</span>';
 
   try {
     const controller = new AbortController();
-    const fetchTimeout = setTimeout(() => controller.abort(), 15000); // 15s hard cap
+    const fetchTimeout = setTimeout(() => controller.abort(), 15000);
     const res  = await fetch(PROXY_URL + "utility/search-outage-map", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
@@ -22849,26 +22848,54 @@ async function searchOutageMap() {
     clearTimeout(fetchTimeout);
     const data = await res.json();
 
-    if (data.found && data.url) {
-      if (mapEl)    mapEl.value = data.url;
-      if (resultEl) resultEl.innerHTML =
-        `<span style="color:var(--green-dark);">&#10003; Found: <a href="${data.url}" target="_blank" style="color:var(--blue-dark);">${data.url}</a> — ${data.note||""}</span>`;
-    } else if (data.poweroutage_url) {
-      // No direct map but PowerOutage.us tracks them
-      if (resultEl) resultEl.innerHTML =
-        `<span style="color:var(--amber);">No dedicated outage map found. ` +
-        `<a href="${data.poweroutage_url}" target="_blank" style="color:var(--blue-dark);">PowerOutage.us tracks this utility</a>. ` +
-        `You can use that URL or leave blank.</span>`;
-      // Offer to set PowerOutage.us URL
-      if (mapEl && !mapEl.value) mapEl.value = data.poweroutage_url;
+    const homepageUrl = data.homepage_url || null;
+    const poUrl       = data.poweroutage_url || null;
+
+    if (homepageUrl) {
+      // Found the utility website — show it with instructions to navigate
+      if (resultEl) resultEl.innerHTML = `
+        <div style="background:var(--blue-lt);border:0.5px solid var(--blue-dark);border-radius:var(--radius-sm);padding:10px 12px;margin-top:4px;">
+          <div style="font-size:12px;font-weight:600;color:var(--blue-dark);margin-bottom:6px;">&#127968; Utility website found</div>
+          <div style="margin-bottom:8px;">
+            <a href="${homepageUrl}" target="_blank"
+               style="font-size:12px;color:var(--blue-dark);font-weight:600;word-break:break-all;">${homepageUrl}</a>
+          </div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;">
+            Open the site, navigate to their <strong>Outage Map</strong> or <strong>Outage Center</strong>, 
+            then copy that page's URL and paste it into the field above.
+          </div>
+          <button type="button" onclick="window.open('${homepageUrl}','_blank')"
+            style="padding:5px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--blue-dark);background:var(--blue-dark);color:#fff;font-size:11px;font-weight:600;cursor:pointer;margin-right:6px;">
+            &#128279; Open Website
+          </button>
+          ${poUrl ? `<a href="${poUrl}" target="_blank" style="font-size:11px;color:var(--text-hint);">PowerOutage.us page</a>` : ""}
+        </div>`;
+    } else if (poUrl) {
+      // No homepage found but PowerOutage.us tracks them
+      if (resultEl) resultEl.innerHTML = `
+        <div style="background:var(--surface2);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:10px 12px;margin-top:4px;">
+          <div style="font-size:12px;font-weight:600;color:var(--amber);margin-bottom:6px;">&#9888; Utility website not found</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;">
+            Couldn't locate the utility's website automatically. 
+            PowerOutage.us tracks this utility — you can use their page, or search manually for the utility's outage map.
+          </div>
+          <button type="button" onclick="document.getElementById('new-util-map-url').value='${poUrl}'"
+            style="padding:5px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:11px;cursor:pointer;margin-right:6px;">
+            Use PowerOutage.us URL
+          </button>
+          <a href="${poUrl}" target="_blank" style="font-size:11px;color:var(--blue-dark);">View on PowerOutage.us</a>
+        </div>`;
     } else {
-      if (resultEl) resultEl.innerHTML =
-        `<span style="color:var(--text-hint);">&#128683; No public outage map found for "${name}". ` +
-        `The utility will still be tracked — you can add a URL later if one becomes available.</span>`;
+      if (resultEl) resultEl.innerHTML = `
+        <div style="font-size:11px;color:var(--text-hint);margin-top:4px;">
+          &#128683; Could not find a website for <strong>${name}</strong>. 
+          Try searching <a href="https://www.google.com/search?q=${encodeURIComponent(name+' outage map')}" target="_blank" style="color:var(--blue-dark);">Google</a> 
+          and paste the URL into the field above.
+        </div>`;
     }
   } catch(e) {
     const msg = e.name === "AbortError"
-      ? "Search timed out — try entering the URL manually or leave blank."
+      ? "Search timed out — try entering the URL manually."
       : `Search error: ${e.message}`;
     if (resultEl) resultEl.innerHTML = `<span style="color:var(--amber);">${msg}</span>`;
   } finally {
