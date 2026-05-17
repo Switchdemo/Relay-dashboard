@@ -5708,9 +5708,12 @@ function makeIcon(online) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36"><path d="M14 0C6.27 0 0 6.27 0 14c0 9.33 14 22 14 22s14-12.67 14-22C28 6.27 21.73 0 14 0z" fill="${color}"/><circle cx="14" cy="14" r="6" fill="white"/></svg>`;
   return L.divIcon({ html: svg, className: "", iconSize: [28,36], iconAnchor: [14,36], popupAnchor: [0,-36] });
 }
+// Online threshold: 4 hours — generous for cellular Notecards on varying bubble-up intervals
+const ONLINE_THRESHOLD_MS = 4 * 60 * 60 * 1000;
+
 function isOnline(row) {
   if (!row) return false;
-  return Date.now() - new Date(row.recorded_at).getTime() < 24 * 60 * 60 * 1000;
+  return Date.now() - new Date(row.recorded_at).getTime() < ONLINE_THRESHOLD_MS;
 }
 async function loadMap() {
   if (!mapInitialized) {
@@ -7709,7 +7712,7 @@ async function initDeviceStatusTab() {
 // loadDeviceStatusTable — same logic as loadProgramSummary's device section
 async function loadDeviceStatusTable() {
   const now        = Date.now();
-  const oneHourAgo = new Date(now - 60 * 60 * 1000).toISOString();
+  const oneHourAgo = new Date(now - ONLINE_THRESHOLD_MS).toISOString();
   refreshCountdown = 10;
 
   const deviceData = {};
@@ -7749,7 +7752,7 @@ async function loadDeviceStatusTable() {
     const reading    = deviceData[device.uid];
     const evData     = eventData[device.uid];
     const lastReport = reading?.recorded_at ? new Date(reading.recorded_at) : null;
-    const isOnline   = lastReport && (now - lastReport.getTime()) < 60 * 60 * 1000;
+    const isOnline   = lastReport && (now - lastReport.getTime()) < ONLINE_THRESHOLD_MS;
     const location   = reading?.location ?? "—";
 
     const hasEvent    = !!evData;
@@ -7825,7 +7828,7 @@ setInterval(() => {
 
 async function loadProgramSummary() {
   const now = Date.now();
-  const oneHourAgo = new Date(now - 60 * 60 * 1000).toISOString();
+  const oneHourAgo = new Date(now - ONLINE_THRESHOLD_MS).toISOString();
   const oneDayAgo  = new Date(now - 24 * 60 * 60 * 1000).toISOString();
   refreshCountdown = 10;
 
@@ -7859,7 +7862,7 @@ async function loadProgramSummary() {
     const reading    = deviceData[device.uid];
     const evData     = eventData[device.uid];
     const lastReport = reading?.recorded_at ? new Date(reading.recorded_at) : null;
-    const isOnline   = lastReport && (now - lastReport.getTime()) < 60 * 60 * 1000;
+    const isOnline   = lastReport && (now - lastReport.getTime()) < ONLINE_THRESHOLD_MS;
     if (isOnline) online++; else offline++;
     if (!evData) noEvent++;
   }
@@ -7879,7 +7882,7 @@ async function loadProgramSummary() {
     const reading = deviceData[device.uid];
     const evData  = eventData[device.uid];
     const lastReport = reading?.recorded_at ? new Date(reading.recorded_at) : null;
-    const isOnline = lastReport && (now - lastReport.getTime()) < 60 * 60 * 1000;
+    const isOnline = lastReport && (now - lastReport.getTime()) < ONLINE_THRESHOLD_MS;
     const location = reading?.location ?? "—";
 
     // Event received indicator
