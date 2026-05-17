@@ -22528,7 +22528,7 @@ async function searchOutageMap() {
     const res  = await fetch(PROXY_URL + "utility/search-outage-map", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ name, state: state || "" })
+      body:    JSON.stringify({ name, state: state || "", util_type: document.getElementById("new-util-type")?.value || "iou" })
     });
     const data = await res.json();
 
