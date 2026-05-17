@@ -6274,6 +6274,7 @@ async function _executeCreateSchedule() {
       name, fire_at: new Date(schedUnix*1000).toISOString(),
       target_type:type, target_id:targetVal,
       target_name: unitName(targetVal),
+      relay_action: "hybrid",
       duration_minutes, timezone:tz, action_time:time,
       one_time:true, status:"sent", fired_at:new Date().toISOString(),
       event_type:"hybrid"
