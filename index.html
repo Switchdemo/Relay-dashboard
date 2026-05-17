@@ -701,7 +701,6 @@
   <div class="sub-tabs" id="sub-tabs-events" style="display:none;">
     <button class="sub-tab-btn active" id="sub-scheduler" onclick="switchSub('events','scheduler',this)">Event Scheduler</button>
     <button class="sub-tab-btn" id="sub-eventstats" onclick="switchSub('events','eventstats',this)">Event Statistics</button>
-    <button class="sub-tab-btn" id="sub-openadr" onclick="switchSub('events','openadr',this)">OpenADR</button>
   </div>
   <div class="sub-tabs" id="sub-tabs-devices" style="display:none;">
     <button class="sub-tab-btn active" id="sub-data" onclick="switchSub('devices','data',this)">Current Device Status</button>
@@ -831,7 +830,6 @@
         </div>
         <div id="charts-empty" style="text-align:center;padding:1rem;color:var(--text-hint);font-size:13px;display:none;">No data available for selected range.</div>
       </div>
-    </div>
   </div>
 </div>
 
@@ -1477,6 +1475,9 @@
     </div>
   </div>
 </div>
+</div>
+</div>
+
 <!-- ── MAP TAB ── -->
 <div class="tab-pane" id="tab-map">
   <div class="scroll-content">
@@ -5478,9 +5479,7 @@
 <!-- Drill panel backdrop -->
 <div id="fh-drill-backdrop" onclick="closeDrillDown()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:999;"></div>
 
-<!-- Device detail modal reused for drill-down -->    </div>
-  </div>
-</div>
+<!-- Device detail modal reused for drill-down -->
 
 <script>
 const LCP_VERSION  = "2.0.0";
