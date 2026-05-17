@@ -12356,6 +12356,7 @@ async function loadLatestDevice(deviceId) {
   const device    = DEVICES.find(d => d.id === deviceId);
   const container = document.getElementById(`data-fields-${deviceId}`);
   const tsEl      = document.getElementById(`data-ts-${deviceId}`);
+  if (!container || !device) return;  // EV/battery/generator devices don't have data tiles
   container.innerHTML = `<div class="data-empty">Loading...</div>`;
   try {
     const rows = await supabaseGet(`device_readings?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1`);
