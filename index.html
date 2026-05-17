@@ -960,7 +960,7 @@
 
           <!-- SWITCH / RELAY controls -->
           <div id="sf-panel-switch" class="sched-field full sf-event-panel" style="display:none;">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
               <div>
                 <label class="sched-label">Target Type</label>
                 <select class="sched-select" id="sf-target-type" onchange="onTargetTypeChange()">
@@ -973,6 +973,16 @@
                 <label class="sched-label">Target</label>
                 <select class="sched-select" id="sf-target" onchange="updateSchedulerTimezone()">
                   <option value="" disabled selected>— Choose One —</option>
+                </select>
+              </div>
+              <div>
+                <label class="sched-label">Relay</label>
+                <select class="sched-select" id="sf-relay-select" onchange="document.getElementById('sf-action').value=this.value;document.getElementById('sf-action-adv').value=this.value;">
+                  <option value="all_on">All Relays (default)</option>
+                  <option value="relay1_on">Relay 1 only</option>
+                  <option value="relay2_on">Relay 2 only</option>
+                  <option value="relay3_on">Relay 3 only</option>
+                  <option value="relay4_on">Relay 4 only</option>
                 </select>
               </div>
             </div>
@@ -5994,12 +6004,7 @@ function populateTargetSelector() {
   sel.value = ""; // ensure placeholder is shown
 }
 
-function onTargetTypeChange() {
-  const type = document.getElementById("sf-target-type").value;
-  if (!type) return; // don't populate if placeholder selected
-  populateTargetSelector();
-  updateSchedulerTimezone();
-}
+// onTargetTypeChange merged below with BAS context support
 
 function getGroupMostCommonTz(groupNum) {
   const members = DEVICES.filter(d => (groupAssignments[d.uid] || []).includes(groupNum));
@@ -7294,35 +7299,6 @@ function runLCResponseParse(containerId) {
 }
 
 // ── End Event ────────────────────────────────────────────────────────────────
-async function cancelSpecificEvent(queueId, targetId, targetType, relayAction, eventName, lcEventId) {
-  // Cancel a specific event by its LC Event ID (not 0xFF which cancels all)
-  if (!confirm(`Cancel "${eventName}" on the device? Only this event will be cancelled.`)) return;
-
-  // If we have the LC event ID, use it for targeted cancel
-  // Otherwise fall back to the name-based approach
-  // Use buildCancelEventHex for targeted cancel by LC Event ID
-  // Falls back to buildRestoreHex (cancel all) if no event ID available
-  const restoreHex = lcEventId
-    ? buildCancelEventHex(relayAction, lcEventId)
-    : buildRestoreHex(relayAction);
-  console.log(`Cancel hex for ${eventName} (LC#${lcEventId}): ${restoreHex}`);
-  setStatus("sending", `Cancelling "${eventName}" (LC Event ID: ${lcEventId ?? "unknown"})...`);
-
-  if (targetType === "group") {
-    const gNum = parseInt(targetId.replace("group_",""));
-    const members = DEVICES.filter(d => (groupAssignments[d.uid]||[]).includes(gNum));
-    for (const device of members) await sendLCToDevice(device.uid, restoreHex);
-  } else {
-    await sendLCToDevice(targetId, restoreHex);
-  }
-
-  // Mark as cancelled in Supabase
-  await supabasePatch(`schedule_queue?id=eq.${queueId}`, { status: "cancelled" });
-  setStatus("ready", `"${eventName}" cancelled.`);
-  loadEventsBar();
-  loadDeviceEvents();
-  loadSchedules();
-}
 
 async function endEvent(targetId, targetType, relayAction, queueId) {
   const restoreHex = buildRestoreHex(relayAction);
@@ -11380,27 +11356,6 @@ async function saveMappings() {
   setTimeout(() => { if (statusEl) statusEl.style.display = "none"; }, 2000);
 }
 
-async function testVTNConnection() {
-  const url = document.getElementById("oadr-vtn-url")?.value?.trim();
-  const statusEl = document.getElementById("oadr-config-status");
-  if (!url) { if (statusEl) { statusEl.textContent = "Enter VTN URL first."; statusEl.style.color = "var(--red)"; statusEl.style.display = "block"; } return; }
-  if (statusEl) { statusEl.textContent = "Testing connection..."; statusEl.style.color = "var(--text-secondary)"; statusEl.style.display = "block"; }
-  try {
-    const res = await fetch(`${PROXY_URL}openadr/ping`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ vtn_url: url })
-    });
-    const data = await res.json();
-    if (res.ok) {
-      if (statusEl) { statusEl.textContent = `✅ Connected — VTN responded.`; statusEl.style.color = "var(--green-dark)"; }
-    } else {
-      if (statusEl) { statusEl.textContent = `⚠️ VTN returned ${res.status} — check URL.`; statusEl.style.color = "var(--amber)"; }
-    }
-  } catch(e) {
-    if (statusEl) { statusEl.textContent = `❌ Connection failed: ${e.message}`; statusEl.style.color = "var(--red)"; }
-  }
-}
 
 // ── Events Tab ────────────────────────────────────────────────────────────────
 function startOADRPoller() {
@@ -20521,12 +20476,6 @@ async function loadEVSessionLog() {
 
 // ── Wire OpenADR → EV Chargers ───────────────────────────────────────────────
 // Called from fireAutopilotEvent and OpenADR dispatch — extends existing DR to EV chargers
-async function dispatchEVChargersDR(signalLevel) {
-  const enrolled = evChargers.filter(c => c.dr_enrolled);
-  if (!enrolled.length) return;
-  console.log(`EV DR dispatch: ${enrolled.length} chargers, signal ${signalLevel}`);
-  await shedEVChargers(null, signalLevel);
-}
 
 
 
@@ -23047,28 +22996,32 @@ function selectDILevel(btn, strategy, label) {
   document.getElementById("sf-strategy").value  = strategy;
 }
 
-// Override onTargetTypeChange to handle BAS panel
-const _origOnTargetTypeChange = onTargetTypeChange;
+// Unified onTargetTypeChange — handles switch targets and BAS targets
 function onTargetTypeChange(context) {
   if (context === "bas") {
+    // BAS/DI panel has its own target selectors
     const typeEl   = document.getElementById("sf-bas-target-type");
     const targetEl = document.getElementById("sf-bas-target");
     if (!typeEl || !targetEl) return;
     const type = typeEl.value;
     targetEl.innerHTML = `<option value="" disabled selected>— Choose One —</option>`;
     if (type === "group") {
-      groupNames.forEach((name, i) => {
-        if (name) targetEl.innerHTML += `<option value="group_${i}">Group ${i}: ${name}</option>`;
+      Object.keys(groupNames).map(Number).sort((a,b)=>a-b).forEach(i => {
+        const nm = groupNames[i]; if (!nm) return;
+        targetEl.innerHTML += `<option value="group_${i}">Group ${i}: ${nm}</option>`;
       });
     } else {
-      const relayDevs = DEVICES.filter(d => !d.type || d.type === "relay");
-      relayDevs.forEach(d => {
+      DEVICES.filter(d => !d.type || d.type === "relay").forEach(d => {
         targetEl.innerHTML += `<option value="${d.uid}">${d.name}</option>`;
       });
     }
     return;
   }
-  _origOnTargetTypeChange();
+  // Default: populate the switch panel target selector
+  const type = document.getElementById("sf-target-type")?.value;
+  if (!type) return;
+  populateTargetSelector();
+  updateSchedulerTimezone();
 }
 
 
