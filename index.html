@@ -5709,7 +5709,7 @@ function makeIcon(online) {
   return L.divIcon({ html: svg, className: "", iconSize: [28,36], iconAnchor: [14,36], popupAnchor: [0,-36] });
 }
 // Online threshold: 4 hours — generous for cellular Notecards on varying bubble-up intervals
-const ONLINE_THRESHOLD_MS = 4 * 60 * 60 * 1000;
+const ONLINE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24h — matches Notecard periodic reporting
 
 function isOnline(row) {
   if (!row) return false;
@@ -12365,7 +12365,14 @@ async function loadLatestDevice(deviceId) {
     const rows = await supabaseGet(`device_readings?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1`);
     if (!rows || rows.length === 0) { container.innerHTML = `<div class="data-empty">No data yet</div>`; tsEl.textContent = ""; return; }
     const r = rows[0];
-    document.getElementById(`badge-${deviceId}`)?.classList.add("online");
+    // Badge: green only if within ONLINE_THRESHOLD_MS (same logic as status table)
+    const lastSeen = r.recorded_at ? new Date(r.recorded_at) : null;
+    const isOnlineNow = lastSeen && (Date.now() - lastSeen.getTime()) < ONLINE_THRESHOLD_MS;
+    const badgeEl = document.getElementById(`badge-${deviceId}`);
+    if (badgeEl) {
+      badgeEl.classList.toggle("online", isOnlineNow);
+      badgeEl.title = lastSeen ? `Last seen: ${lastSeen.toLocaleString()}` : "No data";
+    }
 
     // Check for active event for this device
     const now = new Date();
