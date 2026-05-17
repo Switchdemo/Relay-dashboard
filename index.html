@@ -537,6 +537,22 @@
   .gen-integ-opt { padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;transition:all .15s; }
   .gen-integ-opt:hover { border-color:var(--text-primary); }
   .gen-integ-panel { display:none; }
+
+  /* ── Event Type Tiles ── */
+  .sf-event-type-tile {
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:12px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);
+    background:var(--surface2);text-align:center;cursor:pointer;transition:all .15s;
+    user-select:none;
+  }
+  .sf-event-type-tile:hover { border-color:var(--text-secondary);background:var(--surface); }
+  .sf-event-type-tile.active { border-color:var(--blue-dark);background:var(--blue-lt); }
+  .sf-tile-icon  { font-size:22px;margin-bottom:4px; }
+  .sf-tile-label { font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:2px; }
+  .sf-tile-sub   { font-size:9px;color:var(--text-hint);line-height:1.4; }
+  .sf-event-type-tile.active .sf-tile-label { color:var(--blue-dark); }
+  .sf-event-panel { animation:fadeIn .2s ease; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
 </style>
 </head>
 <body>
@@ -878,6 +894,310 @@
     <div class="scheduler-layout">
 
       <!-- Create Schedule Form -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">Create New Event <button class="help-icon" onclick="openHelp('scheduling')" title="Help">?</button></div>
+        </div>
+        <div class="sched-form">
+
+          <!-- ── Step 1: Event Name ── -->
+          <div class="sched-field full">
+            <label class="sched-label">Event Name</label>
+            <input class="sched-input" id="sf-name" type="text" placeholder="Auto-generated from selections below" onfocus="if(!this.value) getNextEventName().then(n=>{this.value=n;})" />
+          </div>
+
+          <!-- ── Step 2: Event Type radios ── -->
+          <div class="sched-field full">
+            <label class="sched-label">Event Type</label>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;" id="sf-event-type-tiles">
+
+              <label class="sf-event-type-tile" data-type="switch" onclick="selectEventType('switch')">
+                <input type="radio" name="sf-event-type" value="switch" style="display:none;"/>
+                <div class="sf-tile-icon">&#128268;</div>
+                <div class="sf-tile-label">Switch / Relay</div>
+                <div class="sf-tile-sub">DLC cycling on enrolled devices</div>
+              </label>
+
+              <label class="sf-event-type-tile" data-type="bas_di" onclick="selectEventType('bas_di')">
+                <input type="radio" name="sf-event-type" value="bas_di" style="display:none;"/>
+                <div class="sf-tile-icon">&#127968;</div>
+                <div class="sf-tile-label">BAS / DI</div>
+                <div class="sf-tile-sub">Building automation — Distributed Intelligence mode</div>
+              </label>
+
+              <label class="sf-event-type-tile" data-type="ev" onclick="selectEventType('ev')">
+                <input type="radio" name="sf-event-type" value="ev" style="display:none;"/>
+                <div class="sf-tile-icon">&#9889;</div>
+                <div class="sf-tile-label">EV Charger</div>
+                <div class="sf-tile-sub">Charge rate limit on enrolled chargers</div>
+              </label>
+
+              <label class="sf-event-type-tile" data-type="battery" onclick="selectEventType('battery')">
+                <input type="radio" name="sf-event-type" value="battery" style="display:none;"/>
+                <div class="sf-tile-icon">&#128267;</div>
+                <div class="sf-tile-label">Battery Backup</div>
+                <div class="sf-tile-sub">Discharge / hold / pre-charge command</div>
+              </label>
+
+              <label class="sf-event-type-tile" data-type="generator" onclick="selectEventType('generator')">
+                <input type="radio" name="sf-event-type" value="generator" style="display:none;"/>
+                <div class="sf-tile-icon">&#9889;</div>
+                <div class="sf-tile-label">Generator</div>
+                <div class="sf-tile-sub">Start / stop enrolled generators</div>
+              </label>
+
+              <label class="sf-event-type-tile" data-type="openadr" onclick="selectEventType('openadr')">
+                <input type="radio" name="sf-event-type" value="openadr" style="display:none;"/>
+                <div class="sf-tile-icon">&#127760;</div>
+                <div class="sf-tile-label">OpenADR</div>
+                <div class="sf-tile-sub">VEN signal — SIMPLE or payload event</div>
+              </label>
+
+            </div>
+          </div>
+
+          <!-- ── Step 3: Type-specific controls (shown/hidden by event type) ── -->
+
+          <!-- SWITCH / RELAY controls -->
+          <div id="sf-panel-switch" class="sched-field full sf-event-panel" style="display:none;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+              <div>
+                <label class="sched-label">Target Type</label>
+                <select class="sched-select" id="sf-target-type" onchange="onTargetTypeChange()">
+                  <option value="" disabled selected>— Select —</option>
+                  <option value="group">Group</option>
+                  <option value="device">Individual Device</option>
+                </select>
+              </div>
+              <div>
+                <label class="sched-label">Target</label>
+                <select class="sched-select" id="sf-target" onchange="updateSchedulerTimezone()">
+                  <option value="" disabled selected>— Choose One —</option>
+                </select>
+              </div>
+            </div>
+            <label class="sched-label">Shed Level <span id="sf-shed-hint" style="font-size:10px;font-weight:400;color:var(--text-hint);margin-left:6px;"></span></label>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:6px;" id="sf-shed-tiles">
+              <button type="button" class="sf-shed-tile" data-shed="100" onclick="selectShedLevel(this)" style="padding:10px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);background:var(--surface2);text-align:center;cursor:pointer;transition:all .15s;">
+                <div style="font-size:15px;font-weight:800;color:var(--red);">100%</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Full Shed</div>
+                <div style="font-size:9px;color:var(--text-hint);">On 30 / Off 0 min</div>
+              </button>
+              <button type="button" class="sf-shed-tile" data-shed="90" onclick="selectShedLevel(this)" style="padding:10px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);background:var(--surface2);text-align:center;cursor:pointer;transition:all .15s;">
+                <div style="font-size:15px;font-weight:800;color:var(--red);">90%</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">High Shed</div>
+                <div style="font-size:9px;color:var(--text-hint);">On 27 / Off 3 min</div>
+              </button>
+              <button type="button" class="sf-shed-tile" data-shed="75" onclick="selectShedLevel(this)" style="padding:10px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);background:var(--surface2);text-align:center;cursor:pointer;transition:all .15s;">
+                <div style="font-size:15px;font-weight:800;color:var(--amber);">75%</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">High-Med</div>
+                <div style="font-size:9px;color:var(--text-hint);">On 22.5 / Off 7.5 min</div>
+              </button>
+              <button type="button" class="sf-shed-tile" data-shed="50" onclick="selectShedLevel(this)" style="padding:10px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);background:var(--surface2);text-align:center;cursor:pointer;transition:all .15s;">
+                <div style="font-size:15px;font-weight:800;color:var(--amber);">50%</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Medium</div>
+                <div style="font-size:9px;color:var(--text-hint);">On 15 / Off 15 min</div>
+              </button>
+              <button type="button" class="sf-shed-tile" data-shed="33" onclick="selectShedLevel(this)" style="padding:10px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);background:var(--surface2);text-align:center;cursor:pointer;transition:all .15s;">
+                <div style="font-size:15px;font-weight:800;color:var(--green-dark);">33%</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Low-Med</div>
+                <div style="font-size:9px;color:var(--text-hint);">On 10 / Off 20 min</div>
+              </button>
+              <button type="button" class="sf-shed-tile" data-shed="25" onclick="selectShedLevel(this)" style="padding:10px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);background:var(--surface2);text-align:center;cursor:pointer;transition:all .15s;">
+                <div style="font-size:15px;font-weight:800;color:var(--green-dark);">25%</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Low Shed</div>
+                <div style="font-size:9px;color:var(--text-hint);">On 7.5 / Off 22.5 min</div>
+              </button>
+            </div>
+            <!-- Hidden LC fields -->
+            <input type="hidden" id="sf-action"   value="all_on"/>
+            <input type="hidden" id="sf-mode"     value="dlc"/>
+            <input type="hidden" id="sf-strategy" value=""/>
+            <!-- Advanced -->
+            <details id="sf-advanced-details" style="margin-top:10px;">
+              <summary style="font-size:11px;color:var(--text-hint);cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px;">
+                <span id="sf-advanced-caret">&#9654;</span>
+                <span>Advanced — relay, mode, strategy override</span>
+              </summary>
+              <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                <div>
+                  <label class="sched-label">Relay</label>
+                  <select class="sched-select" id="sf-action-adv" onchange="document.getElementById('sf-action').value=this.value">
+                    <option value="all_on" selected>All Relays</option>
+                    <option value="relay1_on">Relay 1</option>
+                    <option value="relay2_on">Relay 2</option>
+                    <option value="relay3_on">Relay 3</option>
+                    <option value="relay4_on">Relay 4</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="sched-label">Mode</label>
+                  <select class="sched-select" id="sf-mode-adv" onchange="document.getElementById('sf-mode').value=this.value">
+                    <option value="dlc" selected>DLC</option>
+                    <option value="di">DI</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="sched-label">Strategy Override</label>
+                  <select class="sched-select" id="sf-strategy-adv" onchange="onStrategyAdvChange(this.value)">
+                    <option value="">— Use shed level —</option>
+                    <option value="2|7.5|15">50% 15min cycle</option>
+                    <option value="5|7.5|30">25% 30min</option>
+                    <option value="6|10|30">33% 30min</option>
+                    <option value="9|15|30">50% 30min</option>
+                    <option value="11|18|30">60% 30min</option>
+                    <option value="13|21|30">70% 30min</option>
+                    <option value="15|24|30">80% 30min</option>
+                    <option value="17|27|30">90% 30min</option>
+                    <option value="19|30|30">100% 30min</option>
+                    <option value="1|7.5|7.5">100% 7.5min</option>
+                  </select>
+                </div>
+              </div>
+              <div style="margin-top:8px;">
+                <label class="sched-label">LC Hex Preview</label>
+                <div style="font-family:monospace;font-size:11px;background:var(--ink);color:#a8e6cf;padding:7px 10px;border-radius:var(--radius-sm);letter-spacing:.08em;" id="sf-lc-preview">—</div>
+              </div>
+            </details>
+          </div>
+
+          <!-- BAS / DI controls -->
+          <div id="sf-panel-bas_di" class="sched-field full sf-event-panel" style="display:none;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+              <div>
+                <label class="sched-label">Target Type</label>
+                <select class="sched-select" id="sf-bas-target-type" onchange="onTargetTypeChange('bas')">
+                  <option value="" disabled selected>— Select —</option>
+                  <option value="group">Group</option>
+                  <option value="device">Individual Device</option>
+                </select>
+              </div>
+              <div>
+                <label class="sched-label">Target</label>
+                <select class="sched-select" id="sf-bas-target">
+                  <option value="" disabled selected>— Choose One —</option>
+                </select>
+              </div>
+            </div>
+            <label class="sched-label">DI Setpoint</label>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:6px;">
+              <button type="button" class="sf-shed-tile sf-di-tile" data-di="19|30|30" onclick="selectDILevel(this,'19|30|30','Full — 100%')" style="padding:10px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);background:var(--surface2);text-align:center;cursor:pointer;">
+                <div style="font-size:14px;font-weight:800;color:var(--red);">Full Off</div>
+                <div style="font-size:10px;color:var(--text-hint);">Strategy 19 — DI</div>
+              </button>
+              <button type="button" class="sf-shed-tile sf-di-tile" data-di="9|15|30" onclick="selectDILevel(this,'9|15|30','50% Cycling')" style="padding:10px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);background:var(--surface2);text-align:center;cursor:pointer;">
+                <div style="font-size:14px;font-weight:800;color:var(--amber);">50% Cycle</div>
+                <div style="font-size:10px;color:var(--text-hint);">Strategy 9 — DI</div>
+              </button>
+              <button type="button" class="sf-shed-tile sf-di-tile" data-di="5|7.5|30" onclick="selectDILevel(this,'5|7.5|30','25% Cycling')" style="padding:10px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);background:var(--surface2);text-align:center;cursor:pointer;">
+                <div style="font-size:14px;font-weight:800;color:var(--green-dark);">25% Cycle</div>
+                <div style="font-size:10px;color:var(--text-hint);">Strategy 5 — DI</div>
+              </button>
+              <button type="button" class="sf-shed-tile sf-di-tile" data-di="61|30|30" onclick="selectDILevel(this,'61|30|30','Restore')" style="padding:10px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);background:var(--surface2);text-align:center;cursor:pointer;">
+                <div style="font-size:14px;font-weight:800;color:var(--green-dark);">Restore</div>
+                <div style="font-size:10px;color:var(--text-hint);">Strategy 61 — DI</div>
+              </button>
+            </div>
+            <input type="hidden" id="sf-bas-strategy" value=""/>
+          </div>
+
+          <!-- EV CHARGER controls -->
+          <div id="sf-panel-ev" class="sched-field full sf-event-panel" style="display:none;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+              <div>
+                <label class="sched-label">Target</label>
+                <select class="sched-select" id="sf-ev-target">
+                  <option value="" disabled selected>— Select EV Charger —</option>
+                </select>
+              </div>
+              <div>
+                <label class="sched-label">Charge Rate Limit</label>
+                <select class="sched-select" id="sf-ev-shed-pct">
+                  <option value="" disabled selected>— Select shed level —</option>
+                  <option value="0">Full Shed — Stop charging (0%)</option>
+                  <option value="25">Low Shed — 25% max rate</option>
+                  <option value="50">Medium Shed — 50% max rate</option>
+                  <option value="75">High Shed — 75% max rate</option>
+                  <option value="100">Restore — Full charge rate</option>
+                </select>
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--text-hint);">Sends a charge rate limit command to the selected EV charger via its configured integration (OCPP, ChargePoint, Tesla Fleet API, etc.).</div>
+          </div>
+
+          <!-- BATTERY BACKUP controls -->
+          <div id="sf-panel-battery" class="sched-field full sf-event-panel" style="display:none;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+              <div>
+                <label class="sched-label">Target Battery</label>
+                <select class="sched-select" id="sf-batt-target">
+                  <option value="" disabled selected>— Select Battery System —</option>
+                </select>
+              </div>
+              <div>
+                <label class="sched-label">Battery Action</label>
+                <select class="sched-select" id="sf-batt-action">
+                  <option value="" disabled selected>— Select action —</option>
+                  <option value="discharge">Discharge — support grid, reduce site load</option>
+                  <option value="hold">Hold — stop charging, preserve SOC</option>
+                  <option value="charge">Pre-charge — fill battery before event</option>
+                  <option value="restore">Restore — return to autonomous mode</option>
+                </select>
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--text-hint);">Min backup reserve configured per asset is always maintained during discharge events.</div>
+          </div>
+
+          <!-- GENERATOR controls -->
+          <div id="sf-panel-generator" class="sched-field full sf-event-panel" style="display:none;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+              <div>
+                <label class="sched-label">Target Generator</label>
+                <select class="sched-select" id="sf-gen-target">
+                  <option value="" disabled selected>— Select Generator —</option>
+                </select>
+              </div>
+              <div>
+                <label class="sched-label">Generator Action</label>
+                <select class="sched-select" id="sf-gen-action">
+                  <option value="" disabled selected>— Select action —</option>
+                  <option value="start">Start — begin DR event, generator runs</option>
+                  <option value="test">Test Run — 30-second exercise only</option>
+                  <option value="stop">Stop — end event, allow cool-down</option>
+                </select>
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--text-hint);">Generator DR = start/stop. When started, the site can shed utility load or island.</div>
+          </div>
+
+          <!-- OPENADR controls -->
+          <div id="sf-panel-openadr" class="sched-field full sf-event-panel" style="display:none;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+              <div>
+                <label class="sched-label">Signal Type</label>
+                <select class="sched-select" id="sf-oadr-signal-type">
+                  <option value="SIMPLE">SIMPLE (0/1/2/3)</option>
+                  <option value="PRICE">PRICE</option>
+                  <option value="LOAD_DISPATCH">LOAD_DISPATCH</option>
+                  <option value="LOAD_CONTROL">LOAD_CONTROL</option>
+                </select>
+              </div>
+              <div>
+                <label class="sched-label">Signal Level / Value</label>
+                <select class="sched-select" id="sf-oadr-level">
+                  <option value="2">2 — High (Emergency)</option>
+                  <option value="1">1 — Moderate</option>
+                  <option value="3">3 — Special</option>
+                  <option value="0">0 — Normal (Restore)</option>
+                </select>
+              </div>
+              <div>
+                <label class="sched-label">Event ID</label>
+                <input type="text" class="sched-input" id="sf-oadr-event-id" placeholder="Auto-generated" style="font-family:monospace;font-size:12px;"/>
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--text-hint);">Sends an OpenADR 2.0b event to the configured VEN. Device dispatch follows the signal level → LC strategy mapping in OpenADR Config.</div>
+          </div>
       <div class="sched-card">
         <div class="sched-card-header">
           <div class="sched-card-title">Create New Event <button class="help-icon" onclick="openHelp('scheduling')" title="Help">?</button></div>
@@ -5751,46 +6071,85 @@ function updateRepsDisplay() {
 function showSchedConfirm() {
   const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ""; };
   const name           = getVal("sf-name").trim();
-  const type           = getVal("sf-target-type");
-  const targetVal      = getVal("sf-target");
-  const action         = getVal("sf-action");
-  const mode           = getVal("sf-mode");
-  const stratVal       = getVal("sf-strategy");
   const hour           = getVal("sf-hour");
   const minute         = getVal("sf-minute");
-  const time           = (hour !== "" && minute !== "") ? `${hour}:${minute}` : "";
   const tz             = getVal("sf-timezone");
   const event_date     = getVal("sf-date") || null;
   const duration_minutes = parseFloat(getVal("sf-duration")) || null;
+  const eventType      = sfEventType;
 
-  // Run same validation as createSchedule so errors show before modal opens
-  if (!name)             { setStatus("error", "Please enter a schedule name."); return; }
-  if (!type)             { setStatus("error", "Please select a target type."); return; }
-  if (!targetVal)        { setStatus("error", "Please select a target."); return; }
-  if (!stratVal)         { setStatus("error", "Please select a shed level."); return; }
+  if (!name)             { setStatus("error", "Please enter an event name."); return; }
+  if (!eventType)        { setStatus("error", "Please select an event type."); return; }
   if (!event_date)       { setStatus("error", "Please select a date."); return; }
-  if (!hour || !minute)  { setStatus("error", "Please select both hour and minute."); return; }
+  if (!hour || !minute)  { setStatus("error", "Please select a time."); return; }
   if (!duration_minutes) { setStatus("error", "Please select an event duration."); return; }
 
-  const [stratNum, stratTimeout, stratCycle] = stratVal.split("|").map(Number);
-  const reps = duration_minutes && stratCycle
-    ? Math.max(1, Math.round(duration_minutes / stratCycle))
-    : 1;
+  // Type-specific validation & summary info
+  let targetName = "—", actionSummary = "—", type = "device", targetVal = "";
+  const action = getVal("sf-action") || "all_on";
+  const mode   = getVal("sf-mode")   || "dlc";
+  let stratVal = getVal("sf-strategy");
 
-  // Resolve human-readable target name
-  let targetName = targetVal;
-  if (type === "group") {
-    const gNum = parseInt(targetVal.replace("group_", ""));
-    targetName = groupNames[gNum] || "Group " + gNum;
-  } else {
-    targetName = unitName(targetVal);
+  if (eventType === "switch") {
+    type      = getVal("sf-target-type");
+    targetVal = getVal("sf-target");
+    if (!type)      { setStatus("error", "Please select a target type."); return; }
+    if (!targetVal) { setStatus("error", "Please select a target."); return; }
+    if (!stratVal)  { setStatus("error", "Please select a shed level."); return; }
+    targetName    = type === "group"
+      ? (groupNames[parseInt(targetVal.replace("group_",""))] || targetVal)
+      : unitName(targetVal);
+    const shed    = Object.entries(SHED_LEVEL_MAP).find(([,v])=>v.strategy===stratVal||stratVal.startsWith(v.strategy.split("|")[0]));
+    actionSummary = shed ? shed[1].label : `Strategy ${stratVal}`;
+
+  } else if (eventType === "bas_di") {
+    const basType = getVal("sf-bas-target-type");
+    targetVal     = getVal("sf-bas-target");
+    stratVal      = getVal("sf-bas-strategy") || stratVal;
+    type          = basType || "device";
+    if (!targetVal) { setStatus("error", "Please select a BAS target."); return; }
+    if (!stratVal)  { setStatus("error", "Please select a DI setpoint."); return; }
+    targetName    = targetVal;
+    actionSummary = `DI Mode — Strategy ${stratVal.split("|")[0]}`;
+
+  } else if (eventType === "ev") {
+    targetVal     = getVal("sf-ev-target");
+    const evPct   = getVal("sf-ev-shed-pct");
+    if (!targetVal) { setStatus("error", "Please select an EV charger."); return; }
+    if (evPct === "") { setStatus("error", "Please select a charge rate limit."); return; }
+    targetName    = unitName(targetVal) || targetVal;
+    actionSummary = document.querySelector(`#sf-ev-shed-pct option[value="${evPct}"]`)?.text || `${evPct}%`;
+    stratVal      = "ev_shed"; // sentinel so validation passes
+
+  } else if (eventType === "battery") {
+    targetVal     = getVal("sf-batt-target");
+    const battAct = getVal("sf-batt-action");
+    if (!targetVal) { setStatus("error", "Please select a battery system."); return; }
+    if (!battAct)   { setStatus("error", "Please select a battery action."); return; }
+    targetName    = unitName(targetVal) || targetVal;
+    actionSummary = document.querySelector(`#sf-batt-action option[value="${battAct}"]`)?.text || battAct;
+    stratVal      = "batt_action"; // sentinel
+
+  } else if (eventType === "generator") {
+    targetVal     = getVal("sf-gen-target");
+    const genAct  = getVal("sf-gen-action");
+    if (!targetVal) { setStatus("error", "Please select a generator."); return; }
+    if (!genAct)    { setStatus("error", "Please select a generator action."); return; }
+    targetName    = unitName(targetVal) || targetVal;
+    actionSummary = document.querySelector(`#sf-gen-action option[value="${genAct}"]`)?.text || genAct;
+    stratVal      = "gen_action"; // sentinel
+
+  } else if (eventType === "openadr") {
+    const oadrLevel = getVal("sf-oadr-level");
+    actionSummary   = `OpenADR SIMPLE level ${oadrLevel}`;
+    targetName      = "VEN (configured)";
+    targetVal       = "openadr_ven";
+    stratVal        = "oadr_event"; // sentinel
   }
 
   // Resolve human-readable labels from select option text
-  const actionLabel   = document.querySelector(`#sf-action option[value="${action}"]`)?.text || action;
-  const modeLabel     = document.querySelector(`#sf-mode option[value="${mode}"]`)?.text || mode;
-  const stratLabel    = document.querySelector(`#sf-strategy option[value="${stratVal}"]`)?.text || stratVal;
-  const tzLabel       = document.querySelector(`#sf-timezone option[value="${tz}"]`)?.text || tz;
+  const time = (hour !== "" && minute !== "") ? `${hour}:${minute}` : "";
+  const tzLabel = document.querySelector(`#sf-timezone option[value="${tz}"]`)?.text || tz;
 
   // Format scheduled date/time
   const [yr, mo, dy] = (event_date || "").split("-").map(Number);
@@ -5804,26 +6163,34 @@ function showSchedConfirm() {
   // Duration label
   const durH = Math.floor(duration_minutes / 60);
   const durM = duration_minutes % 60;
-  const durLabel = durH > 0
-    ? (durM > 0 ? `${durH}h ${durM}m` : `${durH}h`)
-    : `${durM}m`;
+  const durLabel = durH > 0 ? (durM > 0 ? `${durH}h ${durM}m` : `${durH}h`) : `${durM}m`;
 
-  // Build preview LC hex
-  const schedUnix = getScheduleUnixTime(event_date, time, tz);
-  const lcHex = buildLCHex(action, mode, stratNum, reps, schedUnix);
+  // LC hex (only for switch/relay events)
+  let lcHex = "—", repsLabel = "—", schedUnix = null;
+  const isLCEvent = eventType === "switch" || eventType === "bas_di";
+  if (isLCEvent && stratVal && !["ev_shed","batt_action","gen_action","oadr_event"].includes(stratVal)) {
+    const [stratNum,, stratCycle] = stratVal.split("|").map(Number);
+    const reps = duration_minutes && stratCycle ? Math.max(1, Math.round(duration_minutes / stratCycle)) : 1;
+    schedUnix = getScheduleUnixTime(event_date, time, tz);
+    lcHex    = buildLCHex(action, mode, stratNum, reps, schedUnix) || "—";
+    repsLabel = `${reps} rep${reps!==1?"s":""} (${duration_minutes}m ÷ ${stratCycle}m cycle)`;
+  } else {
+    schedUnix = getScheduleUnixTime(event_date, time, tz);
+  }
 
   // Populate modal fields
-  document.getElementById("sc-name").textContent        = name;
-  document.getElementById("sc-target").textContent      = targetName;
-  document.getElementById("sc-target-type").textContent = type === "group" ? "Group" : "Individual Device";
-  document.getElementById("sc-datetime").textContent    = dateLabel;
-  document.getElementById("sc-timezone").textContent    = tzLabel;
-  document.getElementById("sc-duration").textContent    = durLabel;
-  document.getElementById("sc-action").textContent      = actionLabel;
-  document.getElementById("sc-mode").textContent        = modeLabel;
-  document.getElementById("sc-strategy").textContent    = stratLabel;
-  document.getElementById("sc-reps").textContent        = `${reps} repetition${reps !== 1 ? "s" : ""} (${duration_minutes} min ÷ ${stratCycle} min cycle)`;
-  document.getElementById("sc-hex").textContent         = lcHex || "—";
+  const setText = (id, val) => { const el=document.getElementById(id); if(el) el.textContent=val; };
+  setText("sc-name",        name);
+  setText("sc-target",      targetName);
+  setText("sc-target-type", eventType.toUpperCase().replace("_"," "));
+  setText("sc-datetime",    dateLabel);
+  setText("sc-timezone",    tzLabel);
+  setText("sc-duration",    durLabel);
+  setText("sc-action",      actionSummary);
+  setText("sc-mode",        mode);
+  setText("sc-strategy",    isLCEvent ? stratVal : "—");
+  setText("sc-reps",        repsLabel);
+  setText("sc-hex",         lcHex);
 
   // Warning if event is in the past
   const warnEl = document.getElementById("sc-warning");
@@ -5860,128 +6227,156 @@ async function createSchedule() {
 async function _executeCreateSchedule() {
   const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ""; };
   const name     = getVal("sf-name").trim();
-  const type     = getVal("sf-target-type");
-  const targetVal= getVal("sf-target");
-  const action   = getVal("sf-action");
-  const mode     = getVal("sf-mode");
-  const stratVal = getVal("sf-strategy");
   const hour     = getVal("sf-hour");
   const minute   = getVal("sf-minute");
   const time     = (hour !== "" && minute !== "") ? `${hour}:${minute}` : "";
   const tz       = getVal("sf-timezone");
   const event_date = getVal("sf-date") || null;
-  const one_time = true;
   const duration_minutes = parseFloat(getVal("sf-duration")) || null;
+  const evType   = sfEventType || "switch";
 
-  if (!name) { setStatus("error", "Please enter a schedule name."); return; }
-  if (!type) { setStatus("error", "Please select a target type."); return; }
-  if (!targetVal) { setStatus("error", "Please select a target."); return; }
-  if (!action) { setStatus("error", "Please select a relay action."); return; }
-  if (!mode) { setStatus("error", "Please select a control mode."); return; }
-  if (!stratVal) { setStatus("error", "Please select a strategy."); return; }
-  if (!event_date) { setStatus("error", "Please select a date."); return; }
-  if (!hour || !minute) { setStatus("error", "Please select both hour and minute."); return; }
+  if (!name)             { setStatus("error", "Please enter an event name."); return; }
+  if (!event_date)       { setStatus("error", "Please select a date."); return; }
+  if (!hour || !minute)  { setStatus("error", "Please select a time."); return; }
   if (!duration_minutes) { setStatus("error", "Please select an event duration."); return; }
 
-  const [stratNum, stratTimeout, stratCycle] = stratVal.split("|").map(Number);
+  const schedUnix = getScheduleUnixTime(event_date, time, tz);
+  setStatus("sending", "Dispatching event…");
 
-  // Determine target name
-  let targetName = targetVal;
-  if (type === "group") {
-    const gNum = parseInt(targetVal.replace("group_", ""));
-    targetName = groupNames[gNum] || "Group " + gNum;
-  } else {
-    targetName = unitName(targetVal);
+  // ── EV Charger ─────────────────────────────────────────────────────────────
+  if (evType === "ev") {
+    const evTarget  = getVal("sf-ev-target");
+    const evPct     = parseFloat(getVal("sf-ev-shed-pct"));
+    if (!evTarget)  { setStatus("error", "Please select an EV charger."); return; }
+    if (isNaN(evPct)) { setStatus("error", "Please select a charge rate limit."); return; }
+    const stationId = evTarget.replace("ev_","");
+    if (evPct === 100) await restoreEVSingle(stationId);
+    else               await dispatchEVDRSingle(stationId, evPct/100);
+    await supabasePost("schedule_queue", {
+      name, fire_at: new Date(schedUnix*1000).toISOString(),
+      target_type:"ev", target_id:evTarget, target_name:unitName(evTarget)||evTarget,
+      duration_minutes, timezone:tz, action_time:time, one_time:true,
+      status:"sent", fired_at:new Date().toISOString(), event_type:"ev",
+      ev_shed_pct:evPct
+    });
+    setStatus("ready", `"${name}" EV event dispatched.`);
+    await loadSchedules(); return;
   }
 
-  // Calculate repetitions: duration ÷ cycle time
-  // e.g. 15 min event with 15 min cycle = 1 rep
-  //      60 min event with 15 min cycle = 4 reps
-  //      60 min event with 30 min cycle = 2 reps
+  // ── Battery Backup ──────────────────────────────────────────────────────────
+  if (evType === "battery") {
+    const battTarget = getVal("sf-batt-target");
+    const battAct    = getVal("sf-batt-action");
+    if (!battTarget) { setStatus("error", "Please select a battery system."); return; }
+    if (!battAct)    { setStatus("error", "Please select a battery action."); return; }
+    const assetId    = battTarget.replace("batt_","");
+    if (battAct === "restore") await restoreBatterySingle(assetId);
+    else                       await dispatchBatteryDRSingle(assetId, battAct);
+    await supabasePost("schedule_queue", {
+      name, fire_at: new Date(schedUnix*1000).toISOString(),
+      target_type:"battery", target_id:battTarget, target_name:unitName(battTarget)||battTarget,
+      duration_minutes, timezone:tz, action_time:time, one_time:true,
+      status:"sent", fired_at:new Date().toISOString(), event_type:"battery",
+      battery_action:battAct
+    });
+    setStatus("ready", `"${name}" battery event dispatched.`);
+    await loadSchedules(); return;
+  }
+
+  // ── Generator ───────────────────────────────────────────────────────────────
+  if (evType === "generator") {
+    const genTarget = getVal("sf-gen-target");
+    const genAct    = getVal("sf-gen-action");
+    if (!genTarget) { setStatus("error", "Please select a generator."); return; }
+    if (!genAct)    { setStatus("error", "Please select a generator action."); return; }
+    const assetId   = genTarget.replace("gen_","");
+    if (genAct === "stop") await stopGeneratorSingle(assetId);
+    else                   await startGeneratorSingle(assetId, genAct === "test");
+    await supabasePost("schedule_queue", {
+      name, fire_at: new Date(schedUnix*1000).toISOString(),
+      target_type:"generator", target_id:genTarget, target_name:unitName(genTarget)||genTarget,
+      duration_minutes, timezone:tz, action_time:time, one_time:true,
+      status:"sent", fired_at:new Date().toISOString(), event_type:"generator",
+      generator_action:genAct
+    });
+    setStatus("ready", `"${name}" generator event dispatched.`);
+    await loadSchedules(); return;
+  }
+
+  // ── OpenADR ─────────────────────────────────────────────────────────────────
+  if (evType === "openadr") {
+    const oadrLevel = parseInt(getVal("sf-oadr-level") || "1");
+    const oadrSig   = getVal("sf-oadr-signal-type") || "SIMPLE";
+    const evId      = getVal("sf-oadr-event-id") || `EVT-${Date.now()}`;
+    try {
+      const res = await fetch(PROXY_URL + "openadr/event", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          event_id:evId, signal_type:oadrSig,
+          signal_level:oadrLevel, duration_minutes
+        })
+      });
+      const data = await res.json();
+      setStatus(data.ok ? "ready" : "error", data.ok ? `"${name}" OpenADR event sent.` : "OpenADR dispatch failed.");
+    } catch(e) { setStatus("error", "OpenADR error: " + e.message); }
+    await loadSchedules(); return;
+  }
+
+  // ── Switch / Relay / BAS-DI ─────────────────────────────────────────────────
+  const type     = evType === "bas_di" ? getVal("sf-bas-target-type") : getVal("sf-target-type");
+  const targetVal= evType === "bas_di" ? getVal("sf-bas-target")      : getVal("sf-target");
+  const action   = getVal("sf-action") || "all_on";
+  const mode     = getVal("sf-mode")   || (evType === "bas_di" ? "di" : "dlc");
+  const stratVal = evType === "bas_di" ? (getVal("sf-bas-strategy")||getVal("sf-strategy")) : getVal("sf-strategy");
+
+  if (!type)      { setStatus("error", "Please select a target type."); return; }
+  if (!targetVal) { setStatus("error", "Please select a target."); return; }
+  if (!stratVal)  { setStatus("error", "Please select a shed level."); return; }
+
+  const [stratNum, stratTimeout, stratCycle] = stratVal.split("|").map(Number);
   const reps = duration_minutes && stratCycle
-    ? Math.max(1, Math.round(duration_minutes / stratCycle))
-    : 1;
-  console.log(`Duration=${duration_minutes} min, Cycle=${stratCycle} min, Reps=${reps}`);
+    ? Math.max(1, Math.round(duration_minutes / stratCycle)) : 1;
+
+  let targetName = type === "group"
+    ? (groupNames[parseInt(targetVal.replace("group_",""))] || targetVal)
+    : unitName(targetVal);
 
   const schedule = {
     name, enabled: true,
-    target_type: type,
-    target_id: targetVal,
-    target_name: targetName,
-    frequency: "one_time",
-    days_of_week: null,
-    action_time: time,
-    event_date: event_date || null,
-    timezone: tz,
-    relay_action: action,
-    duration_minutes: duration_minutes,
-    one_time: true,
-    lc_mode: mode,
-    lc_strategy: stratNum,
-    lc_timeout: stratTimeout,
-    lc_cycle: stratCycle,
-    lc_reps: reps
+    target_type: type, target_id: targetVal, target_name: targetName,
+    frequency: "one_time", days_of_week: null,
+    action_time: time, event_date: event_date || null, timezone: tz,
+    relay_action: action, duration_minutes, one_time: true,
+    lc_mode: mode, lc_strategy: stratNum, lc_timeout: stratTimeout,
+    lc_cycle: stratCycle, lc_reps: reps,
+    event_type: evType
   };
 
-  setStatus("sending", "Saving schedule...");
   const res = await supabasePost("schedules", schedule);
   if (res.ok) {
-    // Build Unix timestamp from event_date + time + timezone
-    const schedUnix = getScheduleUnixTime(event_date, time, tz);
-
-    // Build LC hex with scheduled start time baked in
     const lcHex = buildLCHex(action, mode, stratNum, reps, schedUnix);
-  const lastEventId = lcEventId > 1 ? lcEventId - 1 : 254; // capture ID just used
-    console.log(`Sending LC hex immediately: ${lcHex} (startTime=${schedUnix})`);
+    const lastEventId = lcEventId > 1 ? lcEventId - 1 : 254;
 
-    // Send payload to device(s) immediately — device stores and executes at scheduled time
-    // Capture targetVal locally to prevent any dropdown change affecting this
-    const sendTarget = String(targetVal);
-    console.log(`Sending to target: ${sendTarget} (type: ${type})`);
     if (type === "group") {
-      const gNum = parseInt(sendTarget.replace("group_", ""));
-      const members = DEVICES.filter(d => (groupAssignments[d.uid] || []).includes(gNum));
-      console.log(`Group ${gNum} members:`, members.map(d => d.uid));
+      const gNum = parseInt(targetVal.replace("group_",""));
+      const members = DEVICES.filter(d => (groupAssignments[d.uid]||[]).includes(gNum));
       for (const device of members) await sendLCToDevice(device.uid, lcHex);
     } else {
-      console.log(`Sending LC to single device: ${sendTarget}`);
-      await sendLCToDevice(sendTarget, lcHex);
+      await sendLCToDevice(targetVal, lcHex);
     }
 
-    // Log to queue as sent
-    const queuePayload = {
-      schedule_id: null,
-      name: name,
-      fire_at: new Date(schedUnix * 1000).toISOString(),
-      target_type: type,
-      target_id: targetVal,
-      target_name: targetName,
-      relay_action: action,
-      duration_minutes: duration_minutes || null,
-      timezone: tz,
-      action_time: time || null,
-      lc_mode: mode,
-      lc_strategy: stratNum,
-      lc_timeout: stratTimeout || null,
-      lc_cycle: stratCycle || null,
-      lc_reps: reps,
-      lc_event_id: lastEventId,
-      one_time: true,
-      status: "sent",
-      fired_at: new Date().toISOString()
-    };
-    console.log("Posting to schedule_queue:", JSON.stringify(queuePayload));
-    const qRes = await supabasePost("schedule_queue", queuePayload);
-    if (!qRes.ok) {
-      const qErr = await qRes.text();
-      console.error("Queue post failed:", qErr);
-      setStatus("error", `Queue save failed: ${qErr}`);
-    } else {
-      console.log("Queue post successful");
-    }
+    await supabasePost("schedule_queue", {
+      schedule_id:null, name,
+      fire_at: new Date(schedUnix*1000).toISOString(),
+      target_type:type, target_id:targetVal, target_name:targetName,
+      relay_action:action, duration_minutes, timezone:tz, action_time:time,
+      lc_mode:mode, lc_strategy:stratNum, lc_timeout:stratTimeout||null,
+      lc_cycle:stratCycle||null, lc_reps:reps, lc_event_id:lastEventId,
+      one_time:true, status:"sent", fired_at:new Date().toISOString(),
+      event_type:evType
+    });
 
-    setStatus("ready", `"${name}" saved & payload sent to device.`);
-    // Auto-increment name for next event
+    setStatus("ready", `"${name}" saved & sent to device.`);
     const nextName = await getNextEventName();
     document.getElementById("sf-name").value = nextName;
     await loadSchedules();
@@ -5990,6 +6385,9 @@ async function _executeCreateSchedule() {
     setStatus("error", "Error saving schedule.");
   }
 }
+
+
+
 
 async function loadSchedules() {
   const list = document.getElementById("sched-list");
@@ -22561,6 +22959,116 @@ async function searchOutageMap() {
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = "&#128269; Search"; }
   }
+}
+
+
+
+// ── Create New Event — Event Type System ─────────────────────────────────────
+let sfEventType = null;
+
+function selectEventType(type) {
+  sfEventType = type;
+
+  // Update tile visual state
+  document.querySelectorAll(".sf-event-type-tile").forEach(t => {
+    t.classList.toggle("active", t.dataset.type === type);
+  });
+  // Check the hidden radio
+  const radio = document.querySelector(`input[name="sf-event-type"][value="${type}"]`);
+  if (radio) radio.checked = true;
+
+  // Hide all panels, show the selected one
+  document.querySelectorAll(".sf-event-panel").forEach(p => p.style.display = "none");
+  const panel = document.getElementById(`sf-panel-${type}`);
+  if (panel) panel.style.display = "block";
+
+  // Populate type-specific target dropdowns
+  populateEventTypeTargets(type);
+
+  // Auto-generate a name
+  getNextEventName().then(n => {
+    const nameEl = document.getElementById("sf-name");
+    if (nameEl && !nameEl.value) nameEl.value = n;
+  });
+}
+
+function populateEventTypeTargets(type) {
+  if (type === "switch" || type === "bas_di") {
+    // Re-use existing target type / target selectors (already wired)
+    onTargetTypeChange();
+  }
+
+  if (type === "ev") {
+    const sel = document.getElementById("sf-ev-target");
+    if (!sel) return;
+    const evDevs = DEVICES.filter(d => d.type === "ev");
+    sel.innerHTML = evDevs.length
+      ? `<option value="" disabled selected>— Select EV Charger —</option>` +
+        evDevs.map(d => `<option value="${d.uid}">⚡ ${d.name}</option>`).join("")
+      : `<option value="">No EV chargers enrolled</option>`;
+  }
+
+  if (type === "battery") {
+    const sel = document.getElementById("sf-batt-target");
+    if (!sel) return;
+    const battDevs = DEVICES.filter(d => d.type === "battery");
+    sel.innerHTML = battDevs.length
+      ? `<option value="" disabled selected>— Select Battery System —</option>` +
+        battDevs.map(d => `<option value="${d.uid}">🔋 ${d.name}</option>`).join("")
+      : `<option value="">No battery systems enrolled</option>`;
+  }
+
+  if (type === "generator") {
+    const sel = document.getElementById("sf-gen-target");
+    if (!sel) return;
+    const genDevs = DEVICES.filter(d => d.type === "generator");
+    sel.innerHTML = genDevs.length
+      ? `<option value="" disabled selected>— Select Generator —</option>` +
+        genDevs.map(d => `<option value="${d.uid}">⚡ ${d.name}</option>`).join("")
+      : `<option value="">No generators enrolled</option>`;
+  }
+
+  if (type === "bas_di") {
+    // Populate BAS target selectors same as switch
+    const typeEl = document.getElementById("sf-bas-target-type");
+    if (typeEl) typeEl.onchange = () => onTargetTypeChange("bas");
+  }
+}
+
+function selectDILevel(btn, strategy, label) {
+  document.querySelectorAll(".sf-di-tile").forEach(b => {
+    b.style.borderColor = "var(--border-md)";
+    b.style.background  = "var(--surface2)";
+  });
+  btn.style.borderColor = "var(--blue-dark)";
+  btn.style.background  = "var(--blue-lt)";
+  document.getElementById("sf-bas-strategy").value = strategy;
+  document.getElementById("sf-mode").value     = "di";
+  document.getElementById("sf-strategy").value  = strategy;
+}
+
+// Override onTargetTypeChange to handle BAS panel
+const _origOnTargetTypeChange = onTargetTypeChange;
+function onTargetTypeChange(context) {
+  if (context === "bas") {
+    const typeEl   = document.getElementById("sf-bas-target-type");
+    const targetEl = document.getElementById("sf-bas-target");
+    if (!typeEl || !targetEl) return;
+    const type = typeEl.value;
+    targetEl.innerHTML = `<option value="" disabled selected>— Choose One —</option>`;
+    if (type === "group") {
+      groupNames.forEach((name, i) => {
+        if (name) targetEl.innerHTML += `<option value="group_${i}">Group ${i}: ${name}</option>`;
+      });
+    } else {
+      const relayDevs = DEVICES.filter(d => !d.type || d.type === "relay");
+      relayDevs.forEach(d => {
+        targetEl.innerHTML += `<option value="${d.uid}">${d.name}</option>`;
+      });
+    }
+    return;
+  }
+  _origOnTargetTypeChange();
 }
 
 
