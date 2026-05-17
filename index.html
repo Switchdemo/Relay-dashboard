@@ -919,8 +919,8 @@
               <label class="sf-event-type-tile" data-type="bas_di" onclick="selectEventType('bas_di')">
                 <input type="radio" name="sf-event-type" value="bas_di" style="display:none;"/>
                 <div class="sf-tile-icon">&#127968;</div>
-                <div class="sf-tile-label">BAS / DI</div>
-                <div class="sf-tile-sub">Building automation — Distributed Intelligence mode</div>
+                <div class="sf-tile-label">BAS Mode</div>
+                <div class="sf-tile-sub">Building Automation System — BAS mode control</div>
               </label>
 
               <label class="sf-event-type-tile" data-type="ev" onclick="selectEventType('ev')">
@@ -969,13 +969,24 @@
               </div>
               <div>
                 <label class="sched-label">Target</label>
-                <select class="sched-select" id="sf-target" onchange="updateSchedulerTimezone()">
+                <select class="sched-select" id="sf-target" onchange="updateSchedulerTimezone(); onSwitchTargetChange()">
                   <option value="" disabled selected>— Choose One —</option>
                 </select>
               </div>
               <div>
+                <label class="sched-label">Mode</label>
+                <select class="sched-select" id="sf-switch-mode" onchange="onSwitchModeChange()">
+                  <option value="uniform">Uniform — all relays same</option>
+                  <option value="hybrid">Hybrid — per-relay DLC / BAS</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Uniform mode: relay selector + duty cycle tiles -->
+            <div id="sf-uniform-section">
+              <div style="margin-bottom:10px;">
                 <label class="sched-label">Relay</label>
-                <select class="sched-select" id="sf-relay-select" onchange="document.getElementById('sf-action').value=this.value;document.getElementById('sf-action-adv').value=this.value;">
+                <select class="sched-select" id="sf-relay-select" onchange="document.getElementById('sf-action').value=this.value;document.getElementById('sf-action-adv').value=this.value;" style="max-width:220px;">
                   <option value="all_on">All Relays (default)</option>
                   <option value="relay1_on">Relay 1 only</option>
                   <option value="relay2_on">Relay 2 only</option>
@@ -983,9 +994,8 @@
                   <option value="relay4_on">Relay 4 only</option>
                 </select>
               </div>
-            </div>
-            <label class="sched-label">Duty Cycle <span id="sf-shed-hint" style="font-size:10px;font-weight:400;color:var(--text-hint);margin-left:6px;"></span></label>
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:6px;" id="sf-shed-tiles">
+              <label class="sched-label">Duty Cycle <span id="sf-shed-hint" style="font-size:10px;font-weight:400;color:var(--text-hint);margin-left:6px;"></span></label>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:6px;" id="sf-shed-tiles">
               <button type="button" class="sf-shed-tile" data-shed="100" onclick="selectShedLevel(this)" style="padding:10px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);background:var(--surface2);text-align:center;cursor:pointer;transition:all .15s;">
                 <div style="font-size:15px;font-weight:800;color:var(--red);">100%</div>
                 <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Full Shed</div>
@@ -1017,6 +1027,26 @@
                 <div style="font-size:9px;color:var(--text-hint);">On 7.5 / Off 22.5 min</div>
               </button>
             </div>
+            </div> <!-- end sf-uniform-section -->
+
+            <!-- Hybrid mode: per-relay DLC / BAS picker -->
+            <div id="sf-hybrid-section" style="display:none;">
+              <label class="sched-label" style="margin-bottom:8px;display:block;">Per-Relay Mode Configuration</label>
+              <div style="border:0.5px solid var(--border-md);border-radius:var(--radius-sm);overflow:hidden;">
+                <!-- Header -->
+                <div style="display:grid;grid-template-columns:80px 120px 1fr;gap:0;background:var(--surface2);padding:7px 12px;border-bottom:0.5px solid var(--border-md);">
+                  <span style="font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;">Relay</span>
+                  <span style="font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;">Mode</span>
+                  <span style="font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;">Setting</span>
+                </div>
+                <!-- Relay rows -->
+                <div id="sf-hybrid-rows">
+                  <!-- populated by onSwitchModeChange() -->
+                </div>
+              </div>
+              <div style="font-size:11px;color:var(--text-hint);margin-top:6px;">DLC relays will cycle at the selected duty cycle. BAS relays stay ON at the selected priority level. Two LC commands are sent sequentially.</div>
+            </div>
+
             <!-- Hidden LC fields -->
             <input type="hidden" id="sf-action"   value="all_on"/>
             <input type="hidden" id="sf-mode"     value="dlc"/>
@@ -1042,7 +1072,7 @@
                   <label class="sched-label">Mode</label>
                   <select class="sched-select" id="sf-mode-adv" onchange="document.getElementById('sf-mode').value=this.value">
                     <option value="dlc" selected>DLC</option>
-                    <option value="di">DI</option>
+                    <option value="di">BAS</option>
                   </select>
                 </div>
                 <div>
@@ -1087,7 +1117,7 @@
                 </select>
               </div>
             </div>
-            <label class="sched-label">DI Setpoint</label>
+            <label class="sched-label">BAS Setpoint</label>
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:6px;">
               <button type="button" class="sf-shed-tile sf-di-tile" data-di="19|30|30" onclick="selectDILevel(this,'19|30|30','Full — 100%')" style="padding:10px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);background:var(--surface2);text-align:center;cursor:pointer;">
                 <div style="font-size:14px;font-weight:800;color:var(--red);">Full Off</div>
@@ -1951,7 +1981,7 @@
           <div>
             <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Control Mode</label>
             <select id="rule-mode" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
-              <option value="dlc">DLC</option><option value="di">DI</option>
+              <option value="dlc">DLC</option><option value="di">BAS</option>
             </select>
           </div>
           <div>
@@ -3143,7 +3173,7 @@
         <!-- Global bulk action bar -->
         <div style="background:var(--surface2);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
           <span style="font-size:11px;font-weight:600;color:var(--text-secondary);">Set All Devices:</span>
-          <button class="queue-refresh" onclick="drSetAllMode('bas_di')" style="font-size:11px;">&#127970; All &#8594; BAS/DI Mode</button>
+          <button class="queue-refresh" onclick="drSetAllMode('bas_di')" style="font-size:11px;">&#127970; All → BAS Mode</button>
           <button class="queue-refresh" onclick="drSetAllMode('direct_load')" style="font-size:11px;">&#128268; All &#8594; Direct Load Mode</button>
           <div style="width:1px;height:18px;background:var(--border-md);"></div>
           <button class="queue-refresh" onclick="drSetAllVEN(true)" style="font-size:11px;color:var(--green-dark);border-color:var(--green);">Enable All as VEN Resource</button>
@@ -5993,9 +6023,9 @@ function showSchedConfirm() {
     stratVal      = getVal("sf-bas-strategy") || stratVal;
     type          = basType || "device";
     if (!targetVal) { setStatus("error", "Please select a BAS target."); return; }
-    if (!stratVal)  { setStatus("error", "Please select a DI setpoint."); return; }
+    if (!stratVal)  { setStatus("error", "Please select a BAS setpoint."); return; }
     targetName    = targetVal;
-    actionSummary = `DI Mode — Strategy ${stratVal.split("|")[0]}`;
+    actionSummary = `BAS Mode — Strategy ${stratVal.split("|")[0]}`;
 
   } else if (eventType === "ev") {
     targetVal     = getVal("sf-ev-target");
@@ -6207,7 +6237,43 @@ async function _executeCreateSchedule() {
     await loadSchedules(); return;
   }
 
-  // ── Switch / Relay / BAS-DI ─────────────────────────────────────────────────
+  // ── Hybrid Switch ─────────────────────────────────────────────────────────
+  if (evType === "switch" && document.getElementById("sf-switch-mode")?.value === "hybrid") {
+    const type      = getVal("sf-target-type");
+    const targetVal = getVal("sf-target");
+    if (!type)      { setStatus("error", "Please select a target type."); return; }
+    if (!targetVal) { setStatus("error", "Please select a target."); return; }
+    const { dlcRelays, basRelays } = getHybridConfig();
+    if (!dlcRelays.length && !basRelays.length) { setStatus("error", "Configure at least one relay."); return; }
+    setStatus("sending", "Sending hybrid event…");
+    const schedUnix = getScheduleUnixTime(event_date, time, tz);
+    // Send DLC commands
+    for (const rel of dlcRelays) {
+      const [stratNum,,stratCycle] = rel.stratVal.split("|").map(Number);
+      const reps = duration_minutes && stratCycle ? Math.max(1, Math.round(duration_minutes/stratCycle)) : 1;
+      const hex  = buildLCHex(rel.action, "dlc", stratNum, reps, schedUnix);
+      await sendLCToDevice(targetVal, hex);
+    }
+    // Send BAS commands
+    for (const rel of basRelays) {
+      const [stratNum,,stratCycle] = rel.stratVal.split("|").map(Number);
+      const reps = duration_minutes && stratCycle ? Math.max(1, Math.round(duration_minutes/stratCycle)) : 1;
+      const hex  = buildLCHex(rel.action, "di", stratNum, reps, schedUnix);
+      await sendLCToDevice(targetVal, hex);
+    }
+    await supabasePost("schedule_queue", {
+      name, fire_at: new Date(schedUnix*1000).toISOString(),
+      target_type:type, target_id:targetVal,
+      target_name: unitName(targetVal),
+      duration_minutes, timezone:tz, action_time:time,
+      one_time:true, status:"sent", fired_at:new Date().toISOString(),
+      event_type:"hybrid"
+    });
+    setStatus("ready", `"${name}" hybrid event dispatched.`);
+    await loadSchedules(); return;
+  }
+
+  // ── Switch / Relay / BAS Mode ─────────────────────────────────────────────
   const type     = evType === "bas_di" ? getVal("sf-bas-target-type") : getVal("sf-target-type");
   const targetVal= evType === "bas_di" ? getVal("sf-bas-target")      : getVal("sf-target");
   const action   = getVal("sf-action") || "all_on";
@@ -10879,7 +10945,7 @@ let drDeviceConfig = {};
 
 const DR_SHED_LEVELS = ["emergency", "high", "medium", "low"];
 const DR_SHED_LABELS = { emergency: "Emergency", high: "High", medium: "Medium", low: "Low" };
-const DR_MODES = { bas_di: "BAS/DI", direct_load: "Direct Load" };
+const DR_MODES = { bas_di: "BAS Mode", direct_load: "Direct Load" };
 
 async function loadDRConfig() {
   const list = document.getElementById("dr-device-config-list");
@@ -10996,7 +11062,7 @@ function renderDRConfig() {
           <span style="font-size:11px;color:var(--text-hint);">Default Mode:</span>
           <select onchange="drUpdateDevice('${dev.uid}','default_mode',this.value);renderDRConfig();"
             style="padding:4px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface);font-size:11px;font-weight:600;">
-            <option value="bas_di"      ${effMode === "bas_di"      ? "selected" : ""}>🏢 BAS/DI</option>
+            <option value="bas_di"      ${effMode === "bas_di"      ? "selected" : ""}>🏢 BAS Mode</option>
             <option value="direct_load" ${effMode === "direct_load" ? "selected" : ""}>🔌 Direct Load</option>
           </select>
         </div>
@@ -11007,7 +11073,7 @@ function renderDRConfig() {
           <thead><tr style="background:var(--surface);">
             <th style="text-align:left;padding:6px 10px;border-bottom:0.5px solid var(--border);font-size:10px;color:var(--text-hint);font-weight:600;">Relay</th>
             <th style="text-align:left;padding:6px 10px;border-bottom:0.5px solid var(--border);font-size:10px;color:var(--text-hint);font-weight:600;">Mode Override</th>
-            <th style="text-align:left;padding:6px 10px;border-bottom:0.5px solid var(--border);font-size:10px;color:var(--text-hint);font-weight:600;">Shed Level (BAS/DI)</th>
+            <th style="text-align:left;padding:6px 10px;border-bottom:0.5px solid var(--border);font-size:10px;color:var(--text-hint);font-weight:600;">Shed Level (BAS Mode)</th>
             <th style="text-align:left;padding:6px 10px;border-bottom:0.5px solid var(--border);font-size:10px;color:var(--text-hint);font-weight:600;">Designated Relay (Direct Load)</th>
             <th style="text-align:left;padding:6px 10px;border-bottom:0.5px solid var(--border);font-size:10px;color:var(--text-hint);font-weight:600;">Participation</th>
           </tr></thead>
@@ -11732,7 +11798,7 @@ async function loadDispatchLog() {
                   <span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;
                     background:${r.architecture === "bas_di" ? "var(--blue-bg)" : r.architecture === "direct_load" ? "var(--green-bg)" : "var(--surface2)"};
                     color:${r.architecture === "bas_di" ? "var(--blue-dark)" : r.architecture === "direct_load" ? "var(--green-dark)" : "var(--text-hint)"};">
-                    ${r.architecture === "bas_di" ? "BAS/DI" : r.architecture === "direct_load" ? "Direct Load" : r.architecture || "—"}
+                    ${r.architecture === "bas_di" ? "BAS Mode" : r.architecture === "direct_load" ? "Direct Load" : r.architecture || "—"}
                   </span>
                 </td>
                 <td style="padding:6px 8px;border-bottom:0.5px solid var(--border);text-transform:capitalize;">${r.shed_level || "—"}</td>
@@ -22912,6 +22978,116 @@ function onTargetTypeChange(context) {
   if (!type) return;
   populateTargetSelector();
   updateSchedulerTimezone();
+}
+
+
+
+// ── Hybrid / Switch Mode ──────────────────────────────────────────────────────
+const BAS_LEVELS = [
+  { value: "19|30|30", label: "Emergency", sub: "Relay ON — highest priority" },
+  { value: "17|27|30", label: "High",      sub: "Relay ON — high priority"    },
+  { value: "5|7.5|30", label: "Low",       sub: "Relay ON — low priority"     },
+  { value: "61|30|30", label: "Restore",   sub: "Relay ON — restore normal"   },
+];
+
+function onSwitchModeChange() {
+  const mode = document.getElementById("sf-switch-mode")?.value;
+  const uniformEl = document.getElementById("sf-uniform-section");
+  const hybridEl  = document.getElementById("sf-hybrid-section");
+  if (!uniformEl || !hybridEl) return;
+
+  if (mode === "hybrid") {
+    uniformEl.style.display = "none";
+    hybridEl.style.display  = "block";
+    renderHybridRows();
+  } else {
+    uniformEl.style.display = "block";
+    hybridEl.style.display  = "none";
+  }
+}
+
+function onSwitchTargetChange() {
+  const typeEl = document.getElementById("sf-target-type");
+  const modeEl = document.getElementById("sf-switch-mode");
+  // Hybrid only makes sense for individual devices — hide option for groups
+  if (!modeEl) return;
+  const isGroup = typeEl?.value === "group";
+  const hybridOpt = modeEl.querySelector('option[value="hybrid"]');
+  if (hybridOpt) hybridOpt.disabled = isGroup;
+  if (isGroup && modeEl.value === "hybrid") {
+    modeEl.value = "uniform";
+    onSwitchModeChange();
+  }
+}
+
+function renderHybridRows() {
+  const container = document.getElementById("sf-hybrid-rows");
+  if (!container) return;
+
+  container.innerHTML = [1,2,3,4].map(r => `
+    <div style="display:grid;grid-template-columns:80px 120px 1fr;gap:0;padding:10px 12px;border-bottom:0.5px solid var(--border);align-items:center;" id="sf-relay-row-${r}">
+      <span style="font-size:13px;font-weight:700;color:var(--text-primary);">Relay ${r}</span>
+      <div>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:4px;">
+          <input type="radio" name="sf-relay-${r}-mode" value="dlc" checked
+            onchange="onRelayModeChange(${r})" style="accent-color:var(--blue-dark);" />
+          <span style="font-size:12px;font-weight:600;color:var(--blue-dark);">DLC</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="radio" name="sf-relay-${r}-mode" value="bas"
+            onchange="onRelayModeChange(${r})" style="accent-color:var(--green-dark);" />
+          <span style="font-size:12px;font-weight:600;color:var(--green-dark);">BAS</span>
+        </label>
+      </div>
+      <div id="sf-relay-${r}-setting">
+        <!-- DLC: duty cycle select (default) -->
+        <select class="sched-select" id="sf-relay-${r}-dlc" style="font-size:11px;">
+          <option value="19|30|30">100% — Full Shed</option>
+          <option value="17|27|30">90% — High</option>
+          <option value="13|21|30">75% — High-Med</option>
+          <option value="9|15|30" selected>50% — Medium</option>
+          <option value="6|10|30">33% — Low-Med</option>
+          <option value="5|7.5|30">25% — Low</option>
+        </select>
+      </div>
+    </div>
+  `).join("");
+}
+
+function onRelayModeChange(relayNum) {
+  const mode    = document.querySelector(`input[name="sf-relay-${relayNum}-mode"]:checked`)?.value;
+  const setting = document.getElementById(`sf-relay-${relayNum}-setting`);
+  if (!setting) return;
+
+  if (mode === "bas") {
+    setting.innerHTML = `<select class="sched-select" id="sf-relay-${relayNum}-bas" style="font-size:11px;">
+      ${BAS_LEVELS.map(l => `<option value="${l.value}">${l.label} — ${l.sub}</option>`).join("")}
+    </select>`;
+  } else {
+    setting.innerHTML = `<select class="sched-select" id="sf-relay-${relayNum}-dlc" style="font-size:11px;">
+      <option value="19|30|30">100% — Full Shed</option>
+      <option value="17|27|30">90% — High</option>
+      <option value="13|21|30">75% — High-Med</option>
+      <option value="9|15|30" selected>50% — Medium</option>
+      <option value="6|10|30">33% — Low-Med</option>
+      <option value="5|7.5|30">25% — Low</option>
+    </select>`;
+  }
+}
+
+function getHybridConfig() {
+  // Returns { dlcRelays: [{num, action, strategy}], basRelays: [{num, action, strategy}] }
+  const dlcRelays = [], basRelays = [];
+  [1,2,3,4].forEach(r => {
+    const mode     = document.querySelector(`input[name="sf-relay-${r}-mode"]:checked`)?.value || "dlc";
+    const stratVal = mode === "bas"
+      ? document.getElementById(`sf-relay-${r}-bas`)?.value
+      : document.getElementById(`sf-relay-${r}-dlc`)?.value;
+    const action = `relay${r}_on`;
+    if (mode === "bas") basRelays.push({ num:r, action, stratVal });
+    else               dlcRelays.push({ num:r, action, stratVal });
+  });
+  return { dlcRelays, basRelays };
 }
 
 
