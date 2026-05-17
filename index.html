@@ -22525,11 +22525,15 @@ async function searchOutageMap() {
   if (resultEl) resultEl.innerHTML = '<span style="color:var(--text-hint);">&#128269; Searching for outage map…</span>';
 
   try {
+    const controller = new AbortController();
+    const fetchTimeout = setTimeout(() => controller.abort(), 15000); // 15s hard cap
     const res  = await fetch(PROXY_URL + "utility/search-outage-map", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ name, state: state || "", util_type: document.getElementById("new-util-type")?.value || "iou" })
+      body:    JSON.stringify({ name, state: state || "", util_type: document.getElementById("new-util-type")?.value || "iou" }),
+      signal:  controller.signal
     });
+    clearTimeout(fetchTimeout);
     const data = await res.json();
 
     if (data.found && data.url) {
@@ -22550,8 +22554,10 @@ async function searchOutageMap() {
         `The utility will still be tracked — you can add a URL later if one becomes available.</span>`;
     }
   } catch(e) {
-    if (resultEl) resultEl.innerHTML =
-      `<span style="color:var(--red);">Search error: ${e.message}</span>`;
+    const msg = e.name === "AbortError"
+      ? "Search timed out — try entering the URL manually or leave blank."
+      : `Search error: ${e.message}`;
+    if (resultEl) resultEl.innerHTML = `<span style="color:var(--amber);">${msg}</span>`;
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = "&#128269; Search"; }
   }
