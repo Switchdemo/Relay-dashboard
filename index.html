@@ -984,7 +984,7 @@
                 </select>
               </div>
             </div>
-            <label class="sched-label">Shed Level <span id="sf-shed-hint" style="font-size:10px;font-weight:400;color:var(--text-hint);margin-left:6px;"></span></label>
+            <label class="sched-label">Duty Cycle <span id="sf-shed-hint" style="font-size:10px;font-weight:400;color:var(--text-hint);margin-left:6px;"></span></label>
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:6px;" id="sf-shed-tiles">
               <button type="button" class="sf-shed-tile" data-shed="100" onclick="selectShedLevel(this)" style="padding:10px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);background:var(--surface2);text-align:center;cursor:pointer;transition:all .15s;">
                 <div style="font-size:15px;font-weight:800;color:var(--red);">100%</div>
@@ -1234,9 +1234,9 @@
             </select>
           </div>
 
-          <!-- ── Row 3: Shed Level (replaces Mode + Strategy + Action) ── -->
+          <!-- ── Row 3: Duty Cycle ── -->
           <div class="sched-field full">
-            <label class="sched-label">Shed Level <span id="sf-shed-hint" style="font-size:10px;font-weight:400;color:var(--text-hint);margin-left:6px;"></span></label>
+            <label class="sched-label">Duty Cycle <span id="sf-shed-hint" style="font-size:10px;font-weight:400;color:var(--text-hint);margin-left:6px;"></span></label>
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;" id="sf-shed-tiles">
               <button type="button" class="sf-shed-tile" data-shed="100"
                 onclick="selectShedLevel(this)"
@@ -22763,7 +22763,7 @@ async function deleteDRProgram(programId) {
 
 
 
-// ── Create New Event — Shed Level Tiles ──────────────────────────────────────
+// ── Create New Event — Duty Cycle Tiles ─────────────────────────────────────
 const SHED_LEVEL_MAP = {
   100: { strategy:"19|30|30", mode:"dlc", action:"all_on", label:"Full Shed — 100%"   },
   90:  { strategy:"17|27|30", mode:"dlc", action:"all_on", label:"High Shed — 90%"    },
