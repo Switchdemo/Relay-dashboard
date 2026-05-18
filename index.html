@@ -491,6 +491,23 @@
   .scada-hier-node { padding:4px 8px;border-radius:4px;font-size:11px;background:var(--surface2);border:0.5px solid var(--border);display:inline-block;margin:2px; }
 
   .outage-util-card.no-map-card { cursor:default; opacity:0.85; }
+
+  /* ── Asset Cards (EV / Battery / Generator) on Device Controls tab ── */
+  .asset-status-row { display:flex; justify-content:space-between; align-items:center; font-size:12px; padding:6px 0; border-bottom:0.5px solid var(--border); }
+  .asset-status-row:last-of-type { border-bottom:none; }
+  .asset-status-label { color:var(--text-secondary); }
+  .asset-status-value { font-weight:500; color:var(--text-primary); font-family:monospace; }
+  .asset-actions { display:flex; gap:8px; margin-top:10px; }
+  .asset-btn { flex:1; padding:8px; border-radius:var(--radius-sm); border:0.5px solid var(--border-md); font-size:12px; font-weight:600; cursor:pointer; transition:all 0.2s; background:var(--surface2); color:var(--text-secondary); }
+  .asset-btn.shed { background:var(--amber-bg); border-color:var(--amber); color:var(--amber); }
+  .asset-btn.shed:hover { background:var(--amber); color:#fff; }
+  .asset-btn.restore { background:var(--green-bg); border-color:var(--green); color:var(--green-dark); }
+  .asset-btn.restore:hover { background:var(--green); color:#fff; }
+  .asset-type-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:600; font-family:monospace; margin-top:3px; }
+  .asset-type-badge.ev       { background:var(--blue-bg); color:var(--blue-dark); }
+  .asset-type-badge.battery  { background:var(--green-bg); color:var(--green-dark); }
+  .asset-type-badge.generator{ background:var(--amber-bg); color:var(--amber); }
+
   /* ── EV Charging CSMS ── */
   .ev-charger-card { border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:14px;background:var(--surface);margin-bottom:8px; }
   .ev-charger-header { display:flex;align-items:center;gap:10px;margin-bottom:8px; }
@@ -5430,6 +5447,46 @@ async function loadDevicesFromDB() {
   });
   // Inject EV charger assets as device entries so they appear in groups and target selectors
   injectEVIntoDevices();
+  // Load batteries and generators so they appear on the device controls list at login
+  await loadAllAssetsForDeviceList();
+}
+
+async function loadAllAssetsForDeviceList() {
+  try {
+    const [battRows, genRows, evRows] = await Promise.all([
+      supabaseGet("battery_assets?enabled=eq.true&order=enrolled_at.asc").catch(() => []),
+      supabaseGet("generator_assets?enabled=eq.true&order=enrolled_at.asc").catch(() => []),
+      supabaseGet("ev_chargers?enabled=eq.true&order=enrolled_at.asc").catch(() => [])
+    ]);
+    if (Array.isArray(battRows) && battRows.length) {
+      batteryAssets = battRows.map(a => ({
+        ...a,
+        integ_config: typeof a.integ_config === "string"
+          ? (() => { try { return JSON.parse(a.integ_config); } catch(e) { return {}; } })()
+          : (a.integ_config || {})
+      }));
+      injectBatteriesIntoDevices();
+    }
+    if (Array.isArray(genRows) && genRows.length) {
+      generatorAssets = genRows.map(a => ({
+        ...a,
+        integ_config: typeof a.integ_config === "string"
+          ? (() => { try { return JSON.parse(a.integ_config); } catch(e) { return {}; } })()
+          : (a.integ_config || {})
+      }));
+      injectGeneratorsIntoDevices();
+    }
+    if (Array.isArray(evRows) && evRows.length) {
+      evDevAssets = evRows.map(a => ({
+        ...a,
+        shed_limits:  typeof a.shed_limits  === "string" ? JSON.parse(a.shed_limits  || "{}") : (a.shed_limits  || {}),
+        integ_config: typeof a.integ_config === "string" ? JSON.parse(a.integ_config || "{}") : (a.integ_config || {})
+      }));
+      injectEVIntoDevices();
+    }
+  } catch(e) {
+    console.warn("loadAllAssetsForDeviceList:", e);
+  }
 }
 
 function injectEVIntoDevices() {
@@ -11860,30 +11917,106 @@ function buildControls() {
   DEVICES.forEach(device => {
     const card = document.createElement("div");
     card.className = "device-card";
-    card.innerHTML = `
-      <div class="device-header">
-        <div><div class="device-name">${device.name}</div><div class="device-uid">${device.uid}</div></div>
-        <div class="device-badge" id="badge-${device.id}"></div>
-      </div>
-      ${buildTzSelector(device.id, deviceTimezones[device.id] || "America/Chicago")}
-      <div class="relay-rows">
-        ${[1,2,3,4].map(n => `
-          <div class="relay-row" id="row-${device.id}-${n}" onclick="toggleRelay('${device.id}',${n})">
-            <span class="relay-row-label">Relay ${n}</span>
-            <div style="display:flex;align-items:center;gap:10px;">
-              <span class="relay-row-state" id="rlbl-${device.id}-${n}">Off</span>
-              <div class="toggle" id="rtgl-${device.id}-${n}"><div class="track"></div><div class="thumb"></div></div>
-            </div>
-          </div>`).join("")}
-      </div>
-      <div class="all-row" id="allrow-${device.id}" onclick="toggleAll('${device.id}')">
-        <span class="all-row-label">All Relays</span>
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span class="all-row-state" id="alllbl-${device.id}">All off</span>
-          <div class="toggle blue" id="atgl-${device.id}"><div class="track"></div><div class="thumb"></div></div>
+
+    if (device.type === "ev") {
+      const a    = device.evAsset || {};
+      const sess = (typeof evSessions !== "undefined" && evSessions[a.station_id]) || {};
+      const statusLabel = sess.status || a.status || "unknown";
+      const isOnline    = statusLabel === "available" || statusLabel === "charging";
+      const INTEG_LABELS = { ocpp201:"OCPP 2.0.1", ocpp16:"OCPP 1.6J", chargepoint:"ChargePoint", enelx:"Enel X", blink:"Blink", tesla:"Tesla Fleet", relay:"Relay" };
+      const integ = INTEG_LABELS[a.protocol] || a.protocol || "EV";
+      card.innerHTML = `
+        <div class="device-header">
+          <div>
+            <div class="device-name">${device.name}</div>
+            <div class="device-uid">${a.station_id || ""}</div>
+            <span class="asset-type-badge ev">${integ}</span>
+          </div>
+          <div class="device-badge ${isOnline ? "online" : ""}"></div>
         </div>
-      </div>
-`;
+        <div class="asset-status-row"><span class="asset-status-label">Status</span><span class="asset-status-value">${statusLabel}</span></div>
+        ${sess.power_kw != null ? `<div class="asset-status-row"><span class="asset-status-label">Power</span><span class="asset-status-value">${Number(sess.power_kw).toFixed(1)} kW</span></div>` : ""}
+        <div class="asset-status-row"><span class="asset-status-label">Max</span><span class="asset-status-value">${a.max_kw != null ? a.max_kw + " kW" : "—"}</span></div>
+        <div class="asset-actions">
+          <button class="asset-btn shed" onclick="dispatchEVDRSingle('${a.station_id}', 0.75)">Shed</button>
+          <button class="asset-btn restore" onclick="restoreEVSingle('${a.station_id}')">Restore</button>
+        </div>`;
+
+    } else if (device.type === "battery") {
+      const a    = device.battAsset || {};
+      const live = (typeof batteryLiveData !== "undefined" && batteryLiveData[a.asset_id]) || {};
+      const isOnline = live.status === "online" || (!live.status && a.status !== "offline");
+      const INTEG_LABELS = { tesla_powerwall:"Tesla Powerwall", enphase:"Enphase IQ", solaredge:"SolarEdge", sonnen:"Sonnen", victron:"Victron", local:"Local REST" };
+      const integ = INTEG_LABELS[a.integration] || a.integration || "Battery";
+      card.innerHTML = `
+        <div class="device-header">
+          <div>
+            <div class="device-name">${device.name}</div>
+            <div class="device-uid">${a.asset_id || ""}</div>
+            <span class="asset-type-badge battery">${integ}</span>
+          </div>
+          <div class="device-badge ${isOnline ? "online" : ""}"></div>
+        </div>
+        ${live.soc != null ? `<div class="asset-status-row"><span class="asset-status-label">SOC</span><span class="asset-status-value">${live.soc}%</span></div>` : ""}
+        ${live.power_kw != null ? `<div class="asset-status-row"><span class="asset-status-label">Power</span><span class="asset-status-value">${Number(live.power_kw).toFixed(1)} kW</span></div>` : ""}
+        ${live.mode ? `<div class="asset-status-row"><span class="asset-status-label">Mode</span><span class="asset-status-value">${live.mode}</span></div>` : ""}
+        <div class="asset-status-row"><span class="asset-status-label">Capacity</span><span class="asset-status-value">${a.capacity_kwh != null ? a.capacity_kwh + " kWh" : "—"}</span></div>
+        <div class="asset-actions">
+          <button class="asset-btn shed" onclick="dispatchBatteryDRSingle('${a.asset_id}', 'hold')">Hold (Shed)</button>
+          <button class="asset-btn restore" onclick="restoreBatterySingle('${a.asset_id}')">Restore</button>
+        </div>`;
+
+    } else if (device.type === "generator") {
+      const a    = device.genAsset || {};
+      const live = (typeof generatorLiveData !== "undefined" && generatorLiveData[a.asset_id]) || {};
+      const status    = live.status || a.status || "standby";
+      const isRunning = status === "running";
+      const INTEG_LABELS = { generac_ml:"Generac MobileLink", modbus:"Modbus", manual:"Manual" };
+      const integ = INTEG_LABELS[a.integration] || a.integration || "Generator";
+      card.innerHTML = `
+        <div class="device-header">
+          <div>
+            <div class="device-name">${device.name}</div>
+            <div class="device-uid">${a.asset_id || ""}</div>
+            <span class="asset-type-badge generator">${integ}</span>
+          </div>
+          <div class="device-badge ${isRunning ? "online" : ""}"></div>
+        </div>
+        <div class="asset-status-row"><span class="asset-status-label">Status</span><span class="asset-status-value">${status}</span></div>
+        ${live.kw != null ? `<div class="asset-status-row"><span class="asset-status-label">Output</span><span class="asset-status-value">${live.kw} kW</span></div>` : ""}
+        <div class="asset-status-row"><span class="asset-status-label">Rated</span><span class="asset-status-value">${a.rated_kw != null ? a.rated_kw + " kW" : "—"}${a.fuel ? " · " + a.fuel : ""}</span></div>
+        <div class="asset-actions">
+          <button class="asset-btn shed" onclick="startGeneratorSingle('${a.asset_id}')">Start</button>
+          <button class="asset-btn restore" onclick="stopGeneratorSingle('${a.asset_id}')">Stop</button>
+        </div>`;
+
+    } else {
+      // LC switch — relay card
+      card.innerHTML = `
+        <div class="device-header">
+          <div><div class="device-name">${device.name}</div><div class="device-uid">${device.uid}</div></div>
+          <div class="device-badge" id="badge-${device.id}"></div>
+        </div>
+        ${buildTzSelector(device.id, deviceTimezones[device.id] || "America/Chicago")}
+        <div class="relay-rows">
+          ${[1,2,3,4].map(n => `
+            <div class="relay-row" id="row-${device.id}-${n}" onclick="toggleRelay('${device.id}',${n})">
+              <span class="relay-row-label">Relay ${n}</span>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span class="relay-row-state" id="rlbl-${device.id}-${n}">Off</span>
+                <div class="toggle" id="rtgl-${device.id}-${n}"><div class="track"></div><div class="thumb"></div></div>
+              </div>
+            </div>`).join("")}
+        </div>
+        <div class="all-row" id="allrow-${device.id}" onclick="toggleAll('${device.id}')">
+          <span class="all-row-label">All Relays</span>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="all-row-state" id="alllbl-${device.id}">All off</span>
+            <div class="toggle blue" id="atgl-${device.id}"><div class="track"></div><div class="thumb"></div></div>
+          </div>
+        </div>`;
+    }
+
     grid.appendChild(card);
   });
 }
