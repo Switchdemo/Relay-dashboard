@@ -19757,6 +19757,45 @@ function applyUtilityPreset() {
   if (typeEl && u.type) typeEl.value = u.type;
 }
 
+function editUtility(id) {
+  const u = configuredUtilities.find(x => String(x.id) === String(id));
+  if (!u) return;
+
+  // Store edit ID
+  const form = document.getElementById("add-utility-form");
+  if (!form) { toggleAddUtility(); return; }
+
+  // Show form if hidden
+  if (form.style.display === "none" || !form.style.display) toggleAddUtility();
+
+  // Populate fields
+  const setVal = (elId, val) => { const el = document.getElementById(elId); if (el) el.value = val || ""; };
+  setVal("new-util-name",    u.utility_name);
+  setVal("new-util-state",   u.state);
+  setVal("new-util-county",  u.county);
+  setVal("new-util-map-url", u.map_url || "");
+  setVal("new-util-odin-id", u.odin_id || "");
+  setVal("new-util-type",    u.utility_type || "iou");
+
+  // Set edit mode
+  let editInput = document.getElementById("util-edit-id");
+  if (!editInput) {
+    editInput = document.createElement("input");
+    editInput.type = "hidden";
+    editInput.id   = "util-edit-id";
+    form.appendChild(editInput);
+  }
+  editInput.value = String(id);
+
+  // Update form title and button
+  const title = document.querySelector("#add-utility-form .sched-card-title");
+  if (title) title.textContent = "✏️ Edit Utility";
+  const saveBtn = document.querySelector("#add-utility-form button[onclick*='saveUtilityConfig']");
+  if (saveBtn) saveBtn.textContent = "Save Changes";
+
+  form.scrollIntoView({ behavior:"smooth" });
+}
+
 async function saveUtilityConfig() {
   const stateEl  = document.getElementById("new-util-state");
   const selEl    = document.getElementById("new-util-preset");
@@ -19794,11 +19833,19 @@ async function saveUtilityConfig() {
     added_at:     new Date().toISOString()
   };
 
+  // Check if editing
+  const editId = document.getElementById("util-edit-id")?.value;
+  const isEdit = !!editId;
+
   // Try Supabase first, fall back to localStorage
   let savedToDb = false;
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/utility_outage_config`, {
-      method: "POST",
+    const url    = isEdit && !String(editId).startsWith("local_")
+      ? `${SUPABASE_URL}/rest/v1/utility_outage_config?id=eq.${editId}`
+      : `${SUPABASE_URL}/rest/v1/utility_outage_config`;
+    const method = isEdit && !String(editId).startsWith("local_") ? "PATCH" : "POST";
+    const res = await fetch(url, {
+      method,
       headers: {
         "apikey": SUPABASE_KEY,
         "Authorization": `Bearer ${SUPABASE_KEY}`,
@@ -19818,20 +19865,31 @@ async function saveUtilityConfig() {
   }
 
   if (!savedToDb) {
-    // Fall back to localStorage
     try {
       const existing = JSON.parse(localStorage.getItem(OUTAGE_CONFIG_KEY) || "[]");
-      const newEntry = { ...record, id: `local_${Date.now()}` };
-      existing.push(newEntry);
+      if (isEdit) {
+        const idx = existing.findIndex(r => String(r.id) === String(editId));
+        if (idx >= 0) existing[idx] = { ...existing[idx], ...record };
+        else existing.push({ ...record, id: `local_${Date.now()}` });
+      } else {
+        existing.push({ ...record, id: `local_${Date.now()}` });
+      }
       localStorage.setItem(OUTAGE_CONFIG_KEY, JSON.stringify(existing));
-      console.log("Utility saved to localStorage (Supabase table may not exist yet)");
     } catch(e) {
       setStatus("error", "Failed to save utility: " + e.message);
       return;
     }
   }
 
-  setStatus("ready", `${name} added to outage tracker.`);
+  // Reset edit mode
+  const editInput = document.getElementById("util-edit-id");
+  if (editInput) editInput.value = "";
+  const title = document.querySelector("#add-utility-form .sched-card-title");
+  if (title) title.textContent = "➕ Add Utility";
+  const saveBtn = document.querySelector("#add-utility-form button[onclick*='saveUtilityConfig']");
+  if (saveBtn) saveBtn.textContent = "Save Utility";
+
+  setStatus("ready", `${name} ${isEdit ? "updated" : "added"} successfully.`);
   toggleAddUtility();
   await loadConfiguredUtilities();
   await refreshOutageData();
@@ -19891,9 +19949,11 @@ function renderUtilityList() {
     const pct     = u._pctOut;
     const age     = u._lastUpdated ? Math.round((Date.now() - new Date(u._lastUpdated).getTime()) / 60000) : null;
     const badgeClass = count == null ? "" : count === 0 ? "outage-count-none" : count < 100 ? "outage-count-low" : "outage-count-high";
-    const badge = count != null
+
+
+    const badgeFinal = count != null
       ? `<span class="outage-count-badge ${badgeClass}">${count.toLocaleString()} out${pct ? ` (${pct}%)` : ""}</span>`
-      : `<span class="outage-count-badge" style="background:var(--surface2);color:var(--text-hint);">Loading...</span>`;
+      : `<span class="outage-count-badge" style="background:var(--surface2);color:var(--text-hint);">—</span>`;
 
     return `<div class="outage-util-card${!u.map_url ? ' no-map-card' : ''}" onclick="${u.map_url ? `openOutageMap('${u.map_url}','${u.utility_name}')` : ''}">
       <div class="outage-util-icon">&#9889;</div>
@@ -19908,8 +19968,11 @@ function renderUtilityList() {
           : `<div style="font-size:10px;color:var(--text-hint);margin-top:2px;">&#128683; No public outage map — data tracking only</div>`
         }
       </div>
-      ${badge}
-      <button onclick="event.stopPropagation();removeUtility('${u.id}')" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;flex-shrink:0;">Remove</button>
+      ${badgeFinal}
+      <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">
+        <button onclick="event.stopPropagation();editUtility('${u.id}')" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--blue-dark);background:none;color:var(--blue-dark);font-size:10px;cursor:pointer;white-space:nowrap;">✏️ Edit</button>
+        <button onclick="event.stopPropagation();removeUtility('${u.id}')" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;white-space:nowrap;">✕ Remove</button>
+      </div>
     </div>`;
   }).join("");
 }
@@ -19952,62 +20015,57 @@ async function refreshOutageData() {
 async function fetchODINData() {
   const odinList = document.getElementById("odin-county-list");
   const lastEl   = document.getElementById("outage-last-updated");
-  if (odinList) odinList.innerHTML = '<div class="sched-empty">Fetching ODIN data...</div>';
+  if (odinList) odinList.innerHTML = '<div class="sched-empty">Fetching ODIN data…</div>';
 
-  const stateSet = [...new Set(configuredUtilities.map(u => u.state).filter(Boolean))];
-  if (!stateSet.length) {
+  if (!configuredUtilities.length) {
     if (odinList) odinList.innerHTML = '<div class="sched-empty">Configure a utility above to load ODIN county data.</div>';
     return;
   }
 
-  const allResults = [];
+  const allCounties = [];
 
-  for (const state of stateSet) {
+  // Query per utility through worker (handles CORS + better name matching)
+  for (const u of configuredUtilities) {
     try {
-      // ODIN API via OpenEnergyHub — county-level, filter by state
-      const url = `https://ornl.opendatasoft.com/api/explore/v2.1/catalog/datasets/odin-real-time-outages-county/records?where=state_abbr="${state}"&limit=50&order_by=customers_out desc`;
-      const res = await fetch(url, { headers: { "Accept": "application/json" } });
-      if (!res.ok) throw new Error(`ODIN API: ${res.status}`);
+      const res  = await fetch(`${PROXY_URL}utility/odin`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ utility_name: u.utility_name, state: u.state, odin_id: u.odin_id || null })
+      });
       const data = await res.json();
-      const records = data?.results || [];
-      allResults.push(...records.map(r => ({ ...r, _state: state })));
+      if (data.ok) {
+        u._outageCount    = data.total_out ?? 0;
+        u._customersTotal = data.total_customers || null;
+        u._pctOut         = data.pct_out != null ? data.pct_out : null;
+        u._lastUpdated    = data.last_updated || new Date().toISOString();
+        allCounties.push(...(data.counties || []).map(c => ({ ...c, _utility: u.utility_name })));
+      } else {
+        console.warn(`ODIN no data for ${u.utility_name}:`, data.error);
+        u._outageCount = 0;
+        u._lastUpdated = new Date().toISOString();
+      }
     } catch(e) {
-      console.warn(`ODIN fetch for ${state}:`, e.message);
+      console.warn(`ODIN fetch error for ${u.utility_name}:`, e.message);
+      u._outageCount = 0;
     }
   }
-
-  // Match ODIN results to configured utilities and update counts
-  configuredUtilities.forEach(u => {
-    const match = allResults.find(r =>
-      r.state_abbr === u.state &&
-      (r.utility_name?.toLowerCase().includes(u.utility_name?.toLowerCase().split(" ")[0].toLowerCase()) ||
-       (u.odin_id && String(r.utility_id) === String(u.odin_id)))
-    );
-    if (match) {
-      u._outageCount    = match.customers_out || 0;
-      u._customersTotal = match.customers_tracked || match.customers_total || null;
-      u._pctOut         = match.percent_out != null ? parseFloat(match.percent_out).toFixed(2) : null;
-      u._lastUpdated    = match.recorded_at || new Date().toISOString();
-    } else {
-      // No ODIN match — try to get state-level total
-      const stateTotal = allResults.filter(r => r._state === u.state);
-      if (stateTotal.length) {
-        u._outageCount = stateTotal.reduce((sum, r) => sum + (r.customers_out || 0), 0);
-        u._lastUpdated = new Date().toISOString();
-        u._pctOut = null;
-      }
-    }
-  });
 
   renderUtilityList();
 
   // Render ODIN county breakdown
   if (odinList) {
-    if (!allResults.length) {
-      odinList.innerHTML = '<div class="sched-empty">No ODIN data available for configured states. ODIN covers utilities that participate in the DOE data initiative.</div>';
+    if (!allCounties.length) {
+      odinList.innerHTML = `<div class="sched-empty">
+        No active outages found in ODIN for configured utilities.<br>
+        <span style="font-size:10px;color:var(--text-hint);">
+          ODIN only shows utilities actively pushing data to DOE/Oak Ridge National Lab.
+          If a utility participates but shows no data, they may not have active outages
+          or may not yet be transmitting live data.
+        </span>
+      </div>`;
     } else {
-      const topCounties = allResults.filter(r => (r.customers_out || 0) > 0).slice(0, 20);
-      odinList.innerHTML = topCounties.length ? `
+      const sorted = allCounties.sort((a,b) => b.out - a.out);
+      odinList.innerHTML = `
         <table style="width:100%;border-collapse:collapse;font-size:11px;">
           <thead><tr>
             <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">County</th>
@@ -20016,48 +20074,26 @@ async function fetchODINData() {
             <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">% Out</th>
             <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Updated</th>
           </tr></thead>
-          <tbody>${topCounties.map(r => {
-            const pct = r.percent_out != null ? parseFloat(r.percent_out).toFixed(2) : "—";
-            const pctColor = parseFloat(r.percent_out) > 5 ? "var(--red)" : parseFloat(r.percent_out) > 1 ? "var(--amber)" : "var(--text-primary)";
+          <tbody>${sorted.map(r => {
+            const pctColor = (r.pct||0) > 5 ? "var(--red)" : (r.pct||0) > 1 ? "var(--amber)" : "var(--text-primary)";
             return `<tr>
-              <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-weight:600;">${r.county_name || "—"}, ${r.state_abbr}</td>
-              <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);color:var(--text-secondary);">${r.utility_name || "—"}</td>
-              <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;font-family:monospace;font-weight:700;color:var(--red);">${(r.customers_out||0).toLocaleString()}</td>
-              <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;font-weight:600;color:${pctColor};">${pct}%</td>
-              <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;color:var(--text-hint);">${r.recorded_at ? new Date(r.recorded_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) : "—"}</td>
+              <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-weight:600;">${r.county}, ${r.state}</td>
+              <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);color:var(--text-secondary);">${r._utility || "—"}</td>
+              <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;font-family:monospace;font-weight:700;color:var(--red);">${r.out.toLocaleString()}</td>
+              <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;font-weight:600;color:${pctColor};">${r.pct != null ? r.pct+"%" : "—"}</td>
+              <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;color:var(--text-hint);">${r.updated ? new Date(r.updated).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) : "—"}</td>
             </tr>`;
           }).join("")}
           </tbody>
-        </table>` : '<div class="sched-empty">&#10003; No active outages reported in ODIN for configured states.</div>';
+        </table>`;
     }
   }
 
-  // Save to Supabase outage_readings for correlation
-  const now = new Date().toISOString();
-  for (const u of configuredUtilities) {
-    if (u._outageCount == null) continue;
-    try {
-      await supabasePost("outage_readings", {
-        utility_name:    u.utility_name,
-        county:          u.county || u.state,
-        state:           u.state,
-        customers_out:   u._outageCount,
-        customers_total: u._customersTotal || null,
-        pct_out:         u._pctOut || null,
-        source:          "odin",
-        outage_map_url:  u.map_url || null,
-        recorded_at:     now
-      });
-    } catch(e) { /* table might not exist yet */ }
-  }
-
-  if (lastEl) {
-    lastEl.textContent = `Last updated: ${new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})} — Source: DOE/ODIN`;
-    lastEl.style.display = "block";
-  }
+  if (lastEl) lastEl.textContent = `ODIN updated: ${new Date().toLocaleTimeString()}`;
 }
 
-// ── Correlation Chart ──────────────────────────────────────────────────────────
+
+// ── Correlation Chart ──────────────────────────────────────────────────────────// ── Correlation Chart ──────────────────────────────────────────────────────────
 async function loadCorrelationChart() {
   const rangeHrs = parseInt(document.getElementById("corr-range")?.value || "24");
   const since    = new Date(Date.now() - rangeHrs * 60 * 60 * 1000).toISOString();
