@@ -9640,12 +9640,28 @@ async function renderMasterAssets() {
       } catch(e) { return []; }
     };
 
+    // Helper: merge Supabase rows with localStorage fallback (same pattern as battery/generator tabs)
+    const safeGetWithLocal = async (q, storageKey) => {
+      let dbRows = [];
+      try {
+        const r = await supabaseGet(q);
+        if (Array.isArray(r)) dbRows = r;
+      } catch(e) {}
+      let localRows = [];
+      try {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) localRows = JSON.parse(saved);
+      } catch(e) {}
+      const dbIds = new Set(dbRows.map(r => r.asset_id));
+      return [...dbRows, ...localRows.filter(r => !dbIds.has(r.asset_id))];
+    };
+
     const [devices, assignments, ev, batt, gen] = await Promise.all([
       safeGet("devices?order=name.asc"),
       safeGet("device_groups?order=group_number"),
-      safeGet("ev_chargers?enabled=eq.true&order=enrolled_at.asc"),
-      safeGet("battery_assets?enabled=eq.true&order=enrolled_at.asc"),
-      safeGet("generator_assets?enabled=eq.true&order=enrolled_at.asc"),
+      safeGetWithLocal("ev_chargers?enabled=eq.true&order=enrolled_at.asc",       "lcp_ev_chargers_v1"),
+      safeGetWithLocal("battery_assets?enabled=eq.true&order=enrolled_at.asc",   "lcp_battery_assets_v1"),
+      safeGetWithLocal("generator_assets?enabled=eq.true&order=enrolled_at.asc", "lcp_generator_assets_v1"),
     ]);
 
     relayDevs = (Array.isArray(devices) ? devices : []).filter(d => !d.uid?.includes("PLACEHOLDER"));
