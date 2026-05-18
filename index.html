@@ -708,6 +708,7 @@
   </div>
   <div class="sub-tabs" id="sub-tabs-events" style="display:none;">
     <button class="sub-tab-btn active" id="sub-scheduler" onclick="switchSub('events','scheduler',this)">Event Scheduler</button>
+    <button class="sub-tab-btn" id="sub-event-history" onclick="switchSub('events','event-history',this)">Event History</button>
     <button class="sub-tab-btn" id="sub-eventstats" onclick="switchSub('events','eventstats',this)">Event Statistics</button>
   </div>
   <div class="sub-tabs" id="sub-tabs-devices" style="display:none;">
@@ -1394,10 +1395,19 @@
         </div>
       </div>
 
-      <!-- Saved Schedules -->
+    </div>
+  </div>
+</div>
+</div>
+</div>
+<div class="tab-pane" id="tab-event-history">
+  <div class="scroll-content">
+    <div style="max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <!-- Scheduled Events -->
       <div class="sched-card">
         <div class="sched-card-header">
-          <div class="sched-card-title">Scheduled Events</div>
+          <div class="sched-card-title">📅 Scheduled Events</div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
             <select class="history-select" id="sched-range" onchange="loadSchedules()">
               <option value="future" selected>Current &amp; Upcoming</option>
@@ -1414,11 +1424,11 @@
         </div>
       </div>
 
-      <!-- Events Received by Device -->
+      <!-- Events Received -->
       <div class="sched-card">
         <div class="sched-card-header">
-          <div class="sched-card-title">Events Received</div>
-          <div style="display:flex;gap:8px;align-items:center;">
+          <div class="sched-card-title">📨 Events Received</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
             <select class="history-select" id="device-events-range" onchange="loadDeviceEvents()">
               <option value="24" selected>Last 24 Hours</option>
               <option value="168">Last 7 Days</option>
@@ -1436,8 +1446,6 @@
 
     </div>
   </div>
-</div>
-</div>
 </div>
 
 <!-- ── MAP TAB ── -->
@@ -5942,6 +5950,7 @@ function activateSubBtn(main, sub) {
 function runTabInit(name) {
   if (name === "summary")    initSummaryTab();
   if (name === "scheduler")  initScheduler().catch(e => console.error(e));
+  if (name === "event-history") { loadSchedules(); loadDeviceEvents(); }
   if (name === "eventstats") initEventStats();
   if (name === "data")       loadLatest();
   if (name === "history")    { loadHistory(); loadCharts(); }
@@ -7983,8 +7992,8 @@ async function loadEventsBar() {
 function switchToScheduler() {
   const mainBtn = document.getElementById("main-events");
   if (mainBtn) switchMain("events", mainBtn);
-  const subBtn = document.getElementById("sub-scheduler");
-  if (subBtn) switchSub("events", "scheduler", subBtn);
+  const subBtn = document.getElementById("sub-event-history");
+  if (subBtn) switchSub("events", "event-history", subBtn);
 }
 
 // Refresh events bar every 60 seconds
@@ -14725,8 +14734,8 @@ function showSuggestModal(rule, fv) {
   const msg = `📡 Monitor Trigger: ${rule.name || def.label}\n\nCurrent value: ${fv?.value} ${def.unit}\nThreshold: ${rule.operator} ${rule.threshold} ${def.unit}\n\nSuggested action:\n${rule.relay_action} on ${rule.target_name || rule.target_id}\nStrategy ${(rule.strategy_val||"").split("|")[0]} — ${rule.duration_mins} min\n\nOpen the Event Scheduler to confirm this event?`;
   if (confirm(msg)) {
     switchMain("events", document.getElementById("main-events"));
-    const schedBtn = document.getElementById("sub-scheduler");
-    if (schedBtn) switchSub("events", "scheduler", schedBtn);
+    const histBtn = document.getElementById("sub-event-history");
+    if (histBtn) switchSub("events", "event-history", histBtn);
   }
 }
 
