@@ -93,7 +93,7 @@
   .relay-dot.off { background: #d3d1c7; }
 
   /* ── History ── */
-  .history-panel { max-width: 900px; margin: 0 auto; background: var(--surface); border: 0.5px solid var(--border-md); border-radius: var(--radius); padding: 1.25rem; }
+  .history-panel { max-width: 900px; width:100%; margin: 0 auto; background: var(--surface); border: 0.5px solid var(--border-md); border-radius: var(--radius); padding: 1.25rem; overflow:hidden; box-sizing:border-box; }
   .history-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
   .history-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
   .history-controls { display: flex; gap: 8px; align-items: center; }
@@ -841,21 +841,21 @@
         </div>
 
         <!-- Individual chart panels -->
-        <div id="chart-panel-voltage" class="chart-panel" style="display:block;">
+        <div id="chart-panel-voltage" class="chart-panel" style="display:block;width:100%;overflow:hidden;">
           <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Voltage (V)</div>
-          <div style="position:relative;height:260px;width:100%;"><canvas id="chart-voltage"></canvas></div>
+          <div style="position:relative;height:300px;width:100%;overflow:hidden;"><canvas id="chart-voltage" style="max-width:100%;"></canvas></div>
         </div>
-        <div id="chart-panel-current" class="chart-panel" style="display:none;">
+        <div id="chart-panel-current" class="chart-panel" style="display:none;width:100%;overflow:hidden;">
           <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Current (A)</div>
-          <div style="position:relative;height:260px;width:100%;"><canvas id="chart-current"></canvas></div>
+          <div style="position:relative;height:300px;width:100%;overflow:hidden;"><canvas id="chart-current" style="max-width:100%;"></canvas></div>
         </div>
-        <div id="chart-panel-watts" class="chart-panel" style="display:none;">
+        <div id="chart-panel-watts" class="chart-panel" style="display:none;width:100%;overflow:hidden;">
           <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Power (W)</div>
-          <div style="position:relative;height:260px;width:100%;"><canvas id="chart-watts"></canvas></div>
+          <div style="position:relative;height:300px;width:100%;overflow:hidden;"><canvas id="chart-watts" style="max-width:100%;"></canvas></div>
         </div>
-        <div id="chart-panel-pf" class="chart-panel" style="display:none;">
+        <div id="chart-panel-pf" class="chart-panel" style="display:none;width:100%;overflow:hidden;">
           <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Power Factor</div>
-          <div style="position:relative;height:260px;width:100%;"><canvas id="chart-pf"></canvas></div>
+          <div style="position:relative;height:300px;width:100%;overflow:hidden;"><canvas id="chart-pf" style="max-width:100%;"></canvas></div>
         </div>
 
         <div id="charts-empty" style="text-align:center;padding:1rem;color:var(--text-hint);font-size:13px;display:none;">No data available for selected range.</div>
@@ -7975,22 +7975,24 @@ async function loadCharts() {
         d.toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" });
   });
 
+  const activeBtn = document.querySelector(".chart-tab-btn.active");
+  const activeChart = activeBtn?.dataset?.chart || "voltage";
+
+  // Show active panel BEFORE building charts so canvas has real dimensions
+  document.querySelectorAll(".chart-panel").forEach(p => p.style.display = "none");
+  const activePanel = document.getElementById(`chart-panel-${activeChart}`);
+  if (activePanel) activePanel.style.display = "block";
+
   buildChart("chart-voltage", "Voltage (V)",    labels, rows.map(r => r.voltage ?? null),        "#378ADD");
   buildChart("chart-current", "Current (A)",    labels, rows.map(r => r.current ?? null),        "#1D9E75");
   buildChart("chart-watts",   "Power (W)",      labels, rows.map(r => r.watts_consumed ?? null), "#BA7517");
   buildChart("chart-pf",      "Power Factor",   labels, rows.map(r => r.power_factor ?? null),   "#7C3AED");
 
-  // Show the currently active chart panel
-  const activeBtn = document.querySelector(".chart-tab-btn.active");
-  const activeChart = activeBtn?.dataset?.chart || "voltage";
-  document.querySelectorAll(".chart-panel").forEach(p => p.style.display = "none");
-  const activePanel = document.getElementById(`chart-panel-${activeChart}`);
-  if (activePanel) activePanel.style.display = "block";
-  // Resize to fill container
-  setTimeout(() => {
+  // Resize active chart after a frame to ensure proper fit
+  requestAnimationFrame(() => {
     const inst = chartInstances[`chart-${activeChart}`];
     if (inst) inst.resize();
-  }, 50);
+  });
 }
 
 async function loadEventsBar() {
@@ -24633,9 +24635,13 @@ function selectChart(which, btn) {
   const panel = document.getElementById(`chart-panel-${which}`);
   if (panel) {
     panel.style.display = "block";
-    // Trigger chart resize so canvas fills correctly
-    const instance = chartInstances[`chart-${which}`];
-    if (instance) { instance.resize(); }
+    // Must resize AFTER display:block so Chart.js can read actual container dimensions
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const instance = chartInstances[`chart-${which}`];
+        if (instance) instance.resize();
+      });
+    });
   }
 }
 // ── End Chart Tab ─────────────────────────────────────────────────────────────
