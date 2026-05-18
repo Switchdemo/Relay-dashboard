@@ -708,7 +708,7 @@
   </div>
   <div class="sub-tabs" id="sub-tabs-events" style="display:none;">
     <button class="sub-tab-btn active" id="sub-scheduler" onclick="switchSub('events','scheduler',this)">Event Scheduler</button>
-    <button class="sub-tab-btn" id="sub-event-history" onclick="switchSub('events','event-history',this)">Event History</button>
+    <button class="sub-tab-btn" id="sub-event-history" onclick="switchSub('events','event-history',this)">Event Activity</button>
     <button class="sub-tab-btn" id="sub-eventstats" onclick="switchSub('events','eventstats',this)">Event Statistics</button>
   </div>
   <div class="sub-tabs" id="sub-tabs-devices" style="display:none;">
@@ -6776,7 +6776,7 @@ async function loadSchedules() {
     const fireStr = s.fire_at ? new Date(s.fire_at).toLocaleString() : "—";
     const dur     = s.duration_minutes ? formatDuration(s.duration_minutes) : "—";
     const sc      = statusColors[s.status] || "var(--text-secondary)";
-    const isCancellable = ["sent","received","started","pending"].includes(s.status);
+    const isCancellable = ["sent","received","started","pending","fired"].includes(s.status);
     const displayName = s.name || s.target_name || `Queue #${s.id}`;
     const evType  = s.event_type || "switch";
 
