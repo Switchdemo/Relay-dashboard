@@ -881,7 +881,7 @@
         <div class="sched-card" style="text-align:center;padding:1rem;">
           <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;">Enrolled</div>
           <div id="stat-enrolled" style="font-size:32px;font-weight:700;color:var(--text-primary);margin:6px 0;">—</div>
-          <div style="font-size:11px;color:var(--text-hint);">Total Devices</div>
+          <div style="font-size:11px;color:var(--text-hint);">Total Assets</div>
         </div>
         <div class="sched-card" style="text-align:center;padding:1rem;">
           <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;">Online</div>
@@ -2612,7 +2612,7 @@
       <!-- Threshold Settings (existing) -->
       <div class="sched-card">
         <div class="sched-card-header">
-          <div class="sched-card-title">⚙️ Alert Thresholds</div>
+          <div class="sched-card-title">⚙️ Switch Device Notecard Alert Thresholds</div>
           <button class="queue-refresh" onclick="saveThresholds()">Save</button>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
@@ -8317,9 +8317,11 @@ async function loadProgramSummary() {
 
   // Calculate stats from device data fetched above
   let online = 0, offline = 0, noEvent = 0;
-  const enrolled = DEVICES.filter(d => d.type !== "ev" && d.type !== "battery" && d.type !== "generator" && !d.uid.includes("PLACEHOLDER")).length;
+  // Count ALL assets — relay devices + EV chargers + batteries + generators
+  const relayDevices = DEVICES.filter(d => (!d.type || d.type === "relay") && !d.uid.includes("PLACEHOLDER"));
+  const enrolled = DEVICES.filter(d => !d.uid.includes("PLACEHOLDER")).length;
 
-  for (const device of DEVICES.filter(d => d.type !== "ev" && d.type !== "battery" && d.type !== "generator" && !d.uid.includes("PLACEHOLDER"))) {
+  for (const device of relayDevices) {
     const reading    = deviceData[device.uid];
     const evData     = eventData[device.uid];
     const lastReport = reading?.recorded_at ? new Date(reading.recorded_at) : null;
@@ -16024,6 +16026,11 @@ function showCancellationBanner(rule, fv, tier, token) {
                    font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">
             ✓ Confirm Now
           </button>` : ""}
+          <button onclick="showPendingEventDetail(${rule.id})"
+            style="padding:8px 18px;border-radius:8px;border:1.5px solid ${accentClr};background:#fff;
+                   color:${accentClr};font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">
+            📋 Pending Actions
+          </button>
           <button onclick="hideCancellationBanner(${rule.id})"
             style="padding:8px 14px;border-radius:8px;border:1.5px solid #ddd;background:#f9f9f9;
                    color:#666;font-size:13px;cursor:pointer;flex-shrink:0;">
@@ -16069,9 +16076,38 @@ function showCancellationBanner(rule, fv, tier, token) {
     const s = remaining % 60;
     if (countdownEl) countdownEl.textContent = `${m}:${String(s).padStart(2,"0")}`;
     if (progressEl)  progressEl.style.width  = `${(remaining / totalSecs) * 100}%`;
+    // Keep remaining in sync for showPendingEventDetail
+    if (activeCancellationTimers[rule.id]) activeCancellationTimers[rule.id].remaining = remaining;
   }, 1000);
 
-  activeCancellationTimers[rule.id] = { ticker, token, rule, fv, tier };
+  activeCancellationTimers[rule.id] = { ticker, token, rule, fv, tier, remaining };
+}
+
+function showPendingEventDetail(ruleId) {
+  const pending = activeCancellationTimers[ruleId];
+  if (!pending) return;
+  const rule = pending.rule;
+  const evType = rule.event_type || "switch";
+  const typeLabels = { switch:"⚡ Switch / Relay", bas_di:"🏢 BAS Mode", ev:"🔌 EV Charger",
+    battery:"🔋 Battery Backup", generator:"⚙️ Generator", openadr:"📡 OpenADR", hybrid:"🔀 Hybrid" };
+
+  // Build a synthetic queue-style item from the rule
+  const item = {
+    name:             rule.name || "Autopilot Event",
+    event_type:       evType,
+    target_name:      rule.target_name || rule.target_id,
+    target_type:      rule.target_type,
+    relay_action:     rule.relay_action || "all_on",
+    lc_mode:          rule.mode || "dlc",
+    lc_strategy:      rule.strategy_val ? parseInt(rule.strategy_val.split("|")[0]) : null,
+    lc_reps:          null,
+    duration_minutes: rule.duration_mins || 60,
+    fire_at:          new Date(Date.now() + (activeCancellationTimers[ruleId]?.remaining || 0) * 1000).toISOString(),
+    status:           "pending",
+    fired_at:         null
+  };
+
+  showEventDetail({ type:"pending", item });
 }
 
 function hideCancellationBanner(ruleId) {
