@@ -6715,33 +6715,46 @@ async function loadDeviceEvents() {
   list.innerHTML = `<div class="sched-empty">Loading...</div>`;
   try {
     const rangeHours = document.getElementById("device-events-range")?.value;
-    let query = `device_events?order=received_at.desc&limit=100`;
+    let query = `device_events?order=received_at.desc&limit=200`;
+    let qQuery = `schedule_queue?order=fired_at.desc&limit=500`;
     if (rangeHours) {
       const since = new Date(Date.now() - parseInt(rangeHours)*60*60*1000).toISOString();
-      query += `&received_at=gte.${since}`;
+      query  += `&received_at=gte.${since}`;
+      qQuery += `&fired_at=gte.${since}`;
     }
     const devRows = await supabaseGet(query);
-    // Cross-reference schedule_queue to get full event details by lc_event_id
-    const qRows = await supabaseGet(`schedule_queue?order=fired_at.desc&limit=500`);
+    const qRows   = await supabaseGet(qQuery);
     const qMap = {};
     if (Array.isArray(qRows)) qRows.forEach(q => { if (q.lc_event_id) qMap[q.lc_event_id] = q; });
+
     // Merge device_events with schedule_queue data
-    const rows = Array.isArray(devRows) ? devRows.map(e => {
-      const q = qMap[e.event_id] || {};
-      return {
-        ...e,
-        name:             q.name || "—",
-        target_name:      q.target_name || DEVICES.find(d => d.uid === e.device_uid)?.name || unitName(e.device_uid || ""),
-        relay_action:     q.relay_action || "—",
-        status:           e.lc_status_label || "—",
-        lc_mode:          q.lc_mode || "—",
-        lc_strategy:      q.lc_strategy || "—",
-        lc_reps:          q.lc_reps || "—",
-        fire_at:          q.fire_at || e.event_time,
-        duration_minutes: q.duration_minutes || null,
-        _raw:             e
-      };
-    }) : [];
+    let rows = [];
+    if (Array.isArray(devRows) && devRows.length) {
+      rows = devRows.map(e => {
+        const q = qMap[e.event_id] || {};
+        return {
+          ...e,
+          name:             q.name || "—",
+          target_name:      q.target_name || DEVICES.find(d => d.uid === e.device_uid)?.name || unitName(e.device_uid || ""),
+          relay_action:     q.relay_action || "—",
+          status:           e.lc_status_label || "—",
+          lc_mode:          q.lc_mode || "—",
+          lc_strategy:      q.lc_strategy || "—",
+          lc_reps:          q.lc_reps || "—",
+          fire_at:          q.fire_at || e.event_time,
+          duration_minutes: q.duration_minutes || null,
+          event_type:       q.event_type || "switch",
+          _raw:             e
+        };
+      });
+    } else if (Array.isArray(qRows) && qRows.length) {
+      // No device_events — fall back to schedule_queue directly
+      rows = qRows.map(q => ({
+        ...q,
+        lc_status: null,
+        _raw: q
+      }));
+    }
     if (!Array.isArray(rows)) {
       list.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error loading — check console.</div>`;
       console.error("loadDeviceEvents:", rows);
