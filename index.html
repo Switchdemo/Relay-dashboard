@@ -700,7 +700,8 @@
     <button class="sub-tab-btn" id="sub-admin-devices" onclick="switchSub('admin','admin-devices',this)">Devices</button>
     <button class="sub-tab-btn" id="sub-admin-health" onclick="switchSub('admin','admin-health',this)">Fleet Health</button>
 
-    <button class="sub-tab-btn" id="sub-admin-openadr" onclick="switchSub('admin','admin-openadr',this)">OpenADR Config</button>
+    <button class="sub-tab-btn" id="sub-admin-openadr" onclick="switchSub('admin','admin-openadr',this)">OpenADR 2.0b</button>
+    <button class="sub-tab-btn" id="sub-admin-oadr3" onclick="switchSub('admin','admin-oadr3',this)">OpenADR 3.0</button>
     <button class="sub-tab-btn" id="sub-admin-drprograms" onclick="switchSub('admin','admin-drprograms',this)">DR Programs</button>
     <button class="sub-tab-btn" id="sub-admin-help" onclick="switchSub('admin','admin-help',this)">Help & Reference</button>
     <button class="sub-tab-btn" id="sub-admin-monitor-triggers" onclick="switchSub('admin','admin-monitor-triggers',this)">Monitor & Triggers</button>
@@ -3404,7 +3405,218 @@
   </div>
 </div>
 
+<!-- ── OPENADR 3.0 TAB ── -->
+<div class="tab-pane" id="tab-admin-oadr3">
+  <div class="scroll-content">
+    <div style="max-width:1060px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
 
+      <!-- Header banner -->
+      <div style="background:var(--blue-lt);border:1px solid var(--blue-dark);border-radius:var(--radius-sm);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--blue-dark);">OpenADR 3.0 — VEN Client</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">REST/JSON · Bearer Token or OAuth2 · No certificates required</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span id="oadr3-poller-status" style="font-size:11px;padding:3px 10px;border-radius:10px;background:var(--surface2);color:var(--text-hint);">⚫ Poller idle</span>
+          <button class="queue-refresh" onclick="oadr3PollNow()" style="color:var(--blue-dark);border-color:var(--blue-dark);">▶ Poll Now</button>
+          <button class="queue-refresh" onclick="initOadr3Tab()">🔄 Refresh</button>
+        </div>
+      </div>
+
+      <!-- VTN Connections -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">🔗 VTN Connections</div>
+          <button class="queue-refresh" onclick="showOadr3VtnForm()" style="color:var(--green-dark);border-color:var(--green);">+ Add VTN</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Each VTN connection is polled independently every 5 minutes. Multiple VTNs from different utilities are supported.</div>
+        <div id="oadr3-vtn-list"><div class="sched-empty">No VTN connections configured.</div></div>
+      </div>
+
+      <!-- Add/Edit VTN Form -->
+      <div class="sched-card" id="oadr3-vtn-form" style="display:none;">
+        <div class="sched-card-header">
+          <div class="sched-card-title" id="oadr3-vtn-form-title">➕ Add VTN Connection</div>
+          <button class="queue-refresh" onclick="document.getElementById('oadr3-vtn-form').style.display='none'">✕ Cancel</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <input type="hidden" id="oadr3-vtn-edit-id" value="" />
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Connection Name</label>
+            <input type="text" id="oadr3-vtn-name" placeholder="e.g. OG&E OpenADR 3.0"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Auth Type</label>
+            <select id="oadr3-vtn-auth-type" onchange="oadr3ToggleAuth()" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="bearer">Bearer Token</option>
+              <option value="oauth2">OAuth2 Client Credentials</option>
+            </select>
+          </div>
+          <div style="grid-column:1/-1;">
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">VTN Base URL</label>
+            <input type="url" id="oadr3-vtn-url" placeholder="https://vtn.utility.com/oadr3"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <!-- Bearer auth fields -->
+          <div style="grid-column:1/-1;" id="oadr3-auth-bearer">
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Bearer Token</label>
+            <input type="password" id="oadr3-vtn-bearer-token" placeholder="Static bearer token from VTN operator"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;" />
+          </div>
+          <!-- OAuth2 fields -->
+          <div id="oadr3-auth-oauth2" style="display:none;grid-column:1/-1;display:none;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Token URL</label>
+                <input type="url" id="oadr3-vtn-token-url" placeholder="https://auth.utility.com/token"
+                  style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Client ID</label>
+                <input type="text" id="oadr3-vtn-client-id" placeholder="client_id"
+                  style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Client Secret</label>
+                <input type="password" id="oadr3-vtn-client-secret" placeholder="client_secret"
+                  style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;" />
+              </div>
+            </div>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">VEN Name (your identifier)</label>
+            <input type="text" id="oadr3-vtn-ven-name" placeholder="e.g. LCP-Site-001"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Polling Interval (min)</label>
+            <input type="number" id="oadr3-vtn-poll-interval" value="5" min="1" max="60"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+          <button onclick="saveOadr3Vtn()" style="padding:7px 18px;border-radius:var(--radius-sm);border:none;background:var(--blue-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Save Connection</button>
+          <button onclick="testOadr3Vtn()" style="padding:7px 18px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;cursor:pointer;">🔌 Test</button>
+          <span id="oadr3-vtn-form-status" style="font-size:11px;color:var(--text-hint);align-self:center;"></span>
+        </div>
+      </div>
+
+      <!-- Program Enrollments -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">📋 Program Enrollments</div>
+          <button class="queue-refresh" onclick="showOadr3ProgramForm()" style="color:var(--green-dark);border-color:var(--green);">+ Enroll in Program</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Each program defines which devices respond to DR events, the control mode (DLC or BAS), and the signal level → action mapping.</div>
+        <div id="oadr3-program-list"><div class="sched-empty">No program enrollments.</div></div>
+      </div>
+
+      <!-- Add/Edit Program Form -->
+      <div class="sched-card" id="oadr3-program-form" style="display:none;">
+        <div class="sched-card-header">
+          <div class="sched-card-title" id="oadr3-prog-form-title">➕ Enroll in Program</div>
+          <button class="queue-refresh" onclick="document.getElementById('oadr3-program-form').style.display='none'">✕ Cancel</button>
+        </div>
+        <input type="hidden" id="oadr3-prog-edit-id" value="" />
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">VTN</label>
+            <select id="oadr3-prog-vtn-id" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="" disabled selected>— Select VTN —</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Program Name / ID</label>
+            <input type="text" id="oadr3-prog-name" placeholder="e.g. SUMMER_DR_2025"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">VEN Name</label>
+            <input type="text" id="oadr3-prog-ven-name" placeholder="Your VEN name for this program"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Target Type</label>
+            <select id="oadr3-prog-target-type" onchange="oadr3PopulateTargets()" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="" disabled selected>— Select —</option>
+              <option value="device">Individual Device</option>
+              <option value="group">Group</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Target</label>
+            <select id="oadr3-prog-target" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="" disabled selected>— Choose —</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Control Mode</label>
+            <select id="oadr3-prog-mode" onchange="oadr3UpdateSignalMapping()" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="dlc">DLC — Duty Cycle</option>
+              <option value="bas">BAS Mode</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Signal mapping table -->
+        <div style="margin-bottom:12px;">
+          <label style="font-size:10px;font-weight:700;color:var(--text-hint);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;">Signal Level → Action Mapping</label>
+          <div style="border:0.5px solid var(--border-md);border-radius:var(--radius-sm);overflow:hidden;">
+            <div style="display:grid;grid-template-columns:80px 120px 1fr;background:var(--surface2);padding:6px 12px;border-bottom:0.5px solid var(--border-md);">
+              <span style="font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;">Level</span>
+              <span style="font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;">Name</span>
+              <span style="font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;">Action</span>
+            </div>
+            <div id="oadr3-signal-map-rows"></div>
+          </div>
+        </div>
+
+        <!-- Webhook -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;">
+            <input type="checkbox" id="oadr3-prog-webhook" onchange="oadr3ToggleWebhook()" style="accent-color:var(--blue-dark);" />
+            Enable webhook push (VTN sends events to LCP instead of polling)
+          </label>
+        </div>
+        <div id="oadr3-webhook-info" style="display:none;background:var(--surface2);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:10px 12px;font-size:11px;color:var(--text-secondary);margin-bottom:12px;">
+          Configure this URL in your VTN as the subscription callback:<br/>
+          <code style="font-family:monospace;color:var(--blue-dark);font-size:11px;">${PROXY_URL}oadr3/webhook</code>
+        </div>
+
+        <div style="display:flex;gap:8px;">
+          <button onclick="saveOadr3Program()" style="padding:7px 18px;border-radius:var(--radius-sm);border:none;background:var(--blue-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Save Enrollment</button>
+          <span id="oadr3-prog-form-status" style="font-size:11px;color:var(--text-hint);align-self:center;"></span>
+        </div>
+      </div>
+
+      <!-- Active Events -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">⚡ Active DR Events</div>
+          <div style="display:flex;gap:8px;">
+            <select id="oadr3-events-filter" style="padding:5px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;" onchange="loadOadr3Events()">
+              <option value="">All VTNs</option>
+            </select>
+            <button class="queue-refresh" onclick="loadOadr3Events()">🔄 Refresh</button>
+          </div>
+        </div>
+        <div id="oadr3-events-list"><div class="sched-empty">No events received yet.</div></div>
+      </div>
+
+      <!-- Report Log -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">📊 Report Log</div>
+          <button class="queue-refresh" onclick="loadOadr3Reports()">🔄 Refresh</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Relay status reports sent back to VTNs after event execution.</div>
+        <div id="oadr3-reports-list"><div class="sched-empty">No reports sent yet.</div></div>
+      </div>
+
+    </div>
+  </div>
+</div>
 
 <!-- ── MONITOR & TRIGGERS TAB ── -->
 <div class="tab-pane" id="tab-admin-monitor-triggers">
@@ -5744,6 +5956,7 @@ function runTabInit(name) {
   if (name === "admin-energy")    { initEnergyMonitor(); }
   if (name === "openadr")         { initOpenADREvents(); }
   if (name === "admin-openadr")   { initOpenADRConfig(); }
+  if (name === "admin-oadr3")     { initOadr3Tab(); }
   if (name === "admin-drprograms") { initDRPrograms(); }
   if (name === "data")             { initDeviceStatusTab(); }
   if (name === "admin-help")      { showHelpTab("scheduling"); }
@@ -23551,6 +23764,741 @@ function onTargetTypeChange(context) {
 
 
 
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// OpenADR 3.0 — VEN Client
+// ═══════════════════════════════════════════════════════════════════════════════
+
+let oadr3VTNs     = [];
+let oadr3Programs = [];
+let oadr3PollTimer = null;
+
+// ── Signal mapping defaults ───────────────────────────────────────────────────
+const OADR3_DLC_MAP = [
+  { level:0, name:"Normal / Restore", action:"restore",                  strategy:"",          relay:"all_on" },
+  { level:1, name:"Low",              action:"25% Duty Cycle",           strategy:"5|7.5|30",  relay:"all_on" },
+  { level:2, name:"Medium",           action:"50% Duty Cycle",           strategy:"9|15|30",   relay:"all_on" },
+  { level:3, name:"High / Emergency", action:"100% Shed",                strategy:"19|30|30",  relay:"all_on" },
+];
+const OADR3_BAS_MAP = [
+  { level:0, name:"Normal / Restore", action:"Restore (Relay ON)",       strategy:"61|30|30",  relay:"all_on" },
+  { level:1, name:"Low",              action:"Low Priority (Relay ON)",   strategy:"5|7.5|30",  relay:"all_on" },
+  { level:2, name:"Medium",           action:"High Priority (Relay ON)",  strategy:"17|27|30",  relay:"all_on" },
+  { level:3, name:"High / Emergency", action:"Emergency (Relay ON)",      strategy:"19|30|30",  relay:"all_on" },
+];
+
+// ── Tab init ──────────────────────────────────────────────────────────────────
+async function initOadr3Tab() {
+  await loadOadr3VTNs();
+  await loadOadr3Programs();
+  await loadOadr3Events();
+  await loadOadr3Reports();
+  startOadr3Poller();
+}
+
+// ── Auth helper ───────────────────────────────────────────────────────────────
+async function oadr3GetToken(vtn) {
+  if (vtn.auth_type === "bearer") return vtn.bearer_token;
+  // OAuth2 — check if cached token is still valid
+  if (vtn.access_token && vtn.token_expires_at) {
+    const exp = new Date(vtn.token_expires_at).getTime();
+    if (Date.now() < exp - 30000) return vtn.access_token;
+  }
+  // Fetch new token
+  try {
+    const params = new URLSearchParams({
+      grant_type:    "client_credentials",
+      client_id:     vtn.client_id,
+      client_secret: vtn.client_secret,
+      scope:         "openADR"
+    });
+    const res  = await fetch(vtn.token_url, {
+      method:  "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body:    params.toString()
+    });
+    if (!res.ok) throw new Error(`Token fetch ${res.status}`);
+    const data = await res.json();
+    const token    = data.access_token;
+    const expiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString();
+    // Cache in Supabase
+    await fetch(`${SUPABASE_URL}/rest/v1/oadr3_vtns?id=eq.${vtn.id}`, {
+      method:  "PATCH",
+      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`,
+                 "Content-Type":"application/json", "Prefer":"return=minimal" },
+      body: JSON.stringify({ access_token:token, token_expires_at:expiresAt })
+    });
+    return token;
+  } catch(e) {
+    console.error("oadr3GetToken:", e);
+    return null;
+  }
+}
+
+// ── VTN API call wrapper ──────────────────────────────────────────────────────
+async function oadr3Fetch(vtn, path, method="GET", body=null) {
+  const token = await oadr3GetToken(vtn);
+  if (!token) throw new Error("No auth token");
+  const url = vtn.vtn_url.replace(/\/$/, "") + path;
+  const opts = {
+    method,
+    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Accept": "application/json" }
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`${res.status}: ${text}`);
+  }
+  return method === "GET" || method === "POST" ? res.json() : res;
+}
+
+// ── Poll a single VTN ─────────────────────────────────────────────────────────
+async function oadr3PollVTN(vtn) {
+  try {
+    // Get programs this VEN is enrolled in
+    const progs = oadr3Programs.filter(p => p.vtn_id === vtn.id && p.enabled);
+    if (!progs.length) return;
+
+    for (const prog of progs) {
+      // Fetch events for this program
+      let events;
+      try {
+        events = await oadr3Fetch(vtn, `/events?programID=${encodeURIComponent(prog.program_id)}`);
+      } catch(e) {
+        // Some VTNs use programName instead
+        events = await oadr3Fetch(vtn, `/events`);
+      }
+
+      if (!Array.isArray(events)) continue;
+
+      const now = new Date();
+      for (const ev of events) {
+        // Only process active events (state = ACTIVE or started)
+        const start   = ev.intervalPeriod?.start ? new Date(ev.intervalPeriod.start) : null;
+        const dur     = ev.intervalPeriod?.duration; // ISO8601 duration e.g. PT1H
+        const end     = start && dur ? new Date(start.getTime() + parseDurationMs(dur)) : null;
+        const isActive = start && start <= now && (!end || end > now);
+        if (!isActive) continue;
+
+        // Check if already executed
+        const existing = await supabaseGet(
+          `oadr3_events?event_id=eq.${encodeURIComponent(ev.id)}&executed=eq.true`
+        );
+        if (Array.isArray(existing) && existing.length) continue;
+
+        // Extract signal level
+        const signalLevel = extractOadr3SignalLevel(ev);
+
+        // Store event
+        await supabasePost("oadr3_events", {
+          vtn_id:       vtn.id,
+          program_id:   prog.program_id,
+          event_id:     ev.id,
+          event_name:   ev.eventName || ev.id,
+          state:        "active",
+          start_time:   start?.toISOString() || null,
+          end_time:     end?.toISOString()   || null,
+          signal_type:  "SIMPLE",
+          signal_level: signalLevel,
+          payload:      ev
+        }).catch(() => {});
+
+        // Execute the event
+        await oadr3ExecuteEvent(vtn, prog, ev, signalLevel);
+
+        // Send report back
+        await oadr3SendReport(vtn, prog, ev, signalLevel);
+      }
+    }
+
+    // Update last_polled_at
+    await fetch(`${SUPABASE_URL}/rest/v1/oadr3_vtns?id=eq.${vtn.id}`, {
+      method: "PATCH",
+      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`,
+                 "Content-Type":"application/json", "Prefer":"return=minimal" },
+      body: JSON.stringify({ last_polled_at: new Date().toISOString(), status:"ok" })
+    });
+  } catch(e) {
+    console.error(`oadr3PollVTN ${vtn.name}:`, e);
+    await fetch(`${SUPABASE_URL}/rest/v1/oadr3_vtns?id=eq.${vtn.id}`, {
+      method: "PATCH",
+      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`,
+                 "Content-Type":"application/json", "Prefer":"return=minimal" },
+      body: JSON.stringify({ status:`error: ${e.message}` })
+    });
+  }
+}
+
+// ── Extract signal level from event payload ───────────────────────────────────
+function extractOadr3SignalLevel(ev) {
+  // OpenADR 3.0 events have intervals with payloads
+  try {
+    const intervals = ev.intervals || [];
+    if (!intervals.length) return 1;
+    const payload = intervals[0]?.payloads?.[0];
+    if (!payload) return 1;
+    // SIMPLE signal: type = SIMPLE, value = 0|1|2|3
+    if (payload.type === "SIMPLE") return parseInt(payload.values?.[0] ?? 1);
+    // PRICE or LOAD_DISPATCH — map to level
+    const val = parseFloat(payload.values?.[0] ?? 1);
+    if (val <= 0)   return 0;
+    if (val <= 0.3) return 1;
+    if (val <= 0.7) return 2;
+    return 3;
+  } catch(e) { return 1; }
+}
+
+// ── Execute event on devices ──────────────────────────────────────────────────
+async function oadr3ExecuteEvent(vtn, prog, ev, signalLevel) {
+  const mode    = prog.control_mode || "dlc";
+  const mapping = prog.signal_mapping || {};
+  const mapEntry = mapping[signalLevel] || mapping["1"] || {};
+
+  const stratVal = mapEntry.strategy || (mode === "bas" ? "19|30|30" : "9|15|30");
+  const relay    = mapEntry.relay    || "all_on";
+
+  let hex;
+  if (signalLevel === 0) {
+    // Restore — send all_off or restore command
+    hex = buildLCHex("all_off", "dlc", 61, 1, Math.floor(Date.now()/1000));
+  } else {
+    const [stratNum,,stratCycle] = stratVal.split("|").map(Number);
+    const reps = 1;
+    const lcMode = mode === "bas" ? "di" : "dlc";
+    hex = buildLCHex(relay, lcMode, stratNum, reps, Math.floor(Date.now()/1000));
+  }
+
+  // Send to target
+  const targetType = prog.target_type;
+  const targetId   = prog.target_id;
+
+  if (targetType === "group") {
+    const gNum    = parseInt(targetId.replace("group_",""));
+    const members = DEVICES.filter(d => (groupAssignments[d.uid]||[]).includes(gNum) && (!d.type || d.type === "relay"));
+    for (const d of members) await sendLCToDevice(d.uid, hex);
+  } else {
+    await sendLCToDevice(targetId, hex);
+  }
+
+  // Mark as executed
+  await fetch(`${SUPABASE_URL}/rest/v1/oadr3_events?event_id=eq.${encodeURIComponent(ev.id)}`, {
+    method: "PATCH",
+    headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`,
+               "Content-Type":"application/json", "Prefer":"return=minimal" },
+    body: JSON.stringify({ executed:true, executed_at:new Date().toISOString() })
+  });
+
+  // Log to schedule_queue for audit
+  await supabasePost("schedule_queue", {
+    name:         `OpenADR3: ${ev.eventName || ev.id}`,
+    fire_at:      new Date().toISOString(),
+    fired_at:     new Date().toISOString(),
+    target_type:  targetType,
+    target_id:    targetId,
+    target_name:  unitName(targetId) || targetId,
+    relay_action: relay,
+    event_type:   "openadr",
+    status:       "sent"
+  }).catch(() => {});
+}
+
+// ── Send report to VTN ────────────────────────────────────────────────────────
+async function oadr3SendReport(vtn, prog, ev, signalLevel) {
+  // Build relay status report
+  const relayDevices = DEVICES.filter(d => !d.type || d.type === "relay");
+  const resources = relayDevices.map(d => ({
+    resourceName: d.name,
+    deviceUID:    d.uid,
+    relayState:   relayState[d.id] || {}
+  }));
+
+  const report = {
+    programID:   prog.program_id,
+    eventID:     ev.id,
+    reportName:  `LCP-Status-${Date.now()}`,
+    resources,
+    intervals:   [{
+      id:           0,
+      intervalPeriod: { start: new Date().toISOString(), duration:"PT1M" },
+      payloads:     [{ type:"USAGE", values:[{ resourceName:"LCP", signalLevel, status:"executed" }] }]
+    }]
+  };
+
+  let responseCode = 0;
+  try {
+    const res = await oadr3Fetch(vtn, `/reports`, "POST", report);
+    responseCode = 200;
+  } catch(e) {
+    responseCode = 500;
+    console.warn("oadr3SendReport:", e);
+  }
+
+  await supabasePost("oadr3_reports", {
+    vtn_id:         vtn.id,
+    program_id:     prog.program_id,
+    event_id:       ev.id,
+    report_payload: report,
+    sent_at:        new Date().toISOString(),
+    response_code:  responseCode
+  }).catch(() => {});
+}
+
+// ── Poll all VTNs ─────────────────────────────────────────────────────────────
+async function oadr3PollAll() {
+  const statusEl = document.getElementById("oadr3-poller-status");
+  if (statusEl) statusEl.textContent = "🟡 Polling…";
+  const vtns = oadr3VTNs.filter(v => v.enabled);
+  for (const vtn of vtns) await oadr3PollVTN(vtn);
+  if (statusEl) statusEl.textContent = `🟢 Last poll: ${new Date().toLocaleTimeString()}`;
+  await loadOadr3Events();
+}
+
+async function oadr3PollNow() { await oadr3PollAll(); }
+
+function startOadr3Poller() {
+  if (oadr3PollTimer) clearInterval(oadr3PollTimer);
+  oadr3PollTimer = setInterval(oadr3PollAll, 5 * 60 * 1000);
+}
+
+// ── ISO8601 duration parser ───────────────────────────────────────────────────
+function parseDurationMs(dur) {
+  if (!dur) return 0;
+  const m = dur.match(/P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!m) return 0;
+  return ((parseInt(m[1]||0)*365*24*60*60) +
+          (parseInt(m[2]||0)*30*24*60*60) +
+          (parseInt(m[3]||0)*24*60*60) +
+          (parseInt(m[4]||0)*60*60) +
+          (parseInt(m[5]||0)*60) +
+           parseInt(m[6]||0)) * 1000;
+}
+
+// ── Load VTNs ─────────────────────────────────────────────────────────────────
+async function loadOadr3VTNs() {
+  const rows = await supabaseGet("oadr3_vtns?order=created_at.asc").catch(() => []);
+  oadr3VTNs  = Array.isArray(rows) ? rows : [];
+  renderOadr3VTNs();
+  // Populate VTN dropdowns
+  ["oadr3-events-filter","oadr3-prog-vtn-id"].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const first = el.options[0];
+    el.innerHTML = "";
+    if (first) el.appendChild(first);
+    oadr3VTNs.forEach(v => {
+      const opt = document.createElement("option");
+      opt.value = v.id; opt.textContent = v.name;
+      el.appendChild(opt);
+    });
+  });
+}
+
+function renderOadr3VTNs() {
+  const list = document.getElementById("oadr3-vtn-list");
+  if (!list) return;
+  if (!oadr3VTNs.length) { list.innerHTML = '<div class="sched-empty">No VTN connections configured.</div>'; return; }
+  list.innerHTML = oadr3VTNs.map(v => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:0.5px solid var(--border);gap:10px;">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-primary);">${v.name}</div>
+        <div style="font-size:11px;color:var(--text-hint);font-family:monospace;">${v.vtn_url}</div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">
+          ${v.auth_type === "oauth2" ? "🔐 OAuth2" : "🔑 Bearer"} &bull;
+          Poll every ${v.polling_interval_mins||5} min &bull;
+          <span style="color:${v.status==='ok'?'var(--green-dark)':'var(--amber)'};">
+            ${v.status||"unknown"}
+          </span>
+          ${v.last_polled_at ? `&bull; Last poll: ${new Date(v.last_polled_at).toLocaleTimeString()}` : ""}
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;">
+          <input type="checkbox" ${v.enabled?"checked":""} onchange="toggleOadr3VTN('${v.id}',this.checked)"
+            style="accent-color:var(--blue-dark);" /> Enabled
+        </label>
+        <button class="queue-refresh" onclick="editOadr3Vtn('${v.id}')">Edit</button>
+        <button class="queue-refresh" onclick="deleteOadr3Vtn('${v.id}')" style="color:var(--red);border-color:var(--red);">Delete</button>
+      </div>
+    </div>`).join("");
+}
+
+// ── VTN form ──────────────────────────────────────────────────────────────────
+function showOadr3VtnForm() {
+  document.getElementById("oadr3-vtn-edit-id").value = "";
+  document.getElementById("oadr3-vtn-form-title").textContent = "➕ Add VTN Connection";
+  ["oadr3-vtn-name","oadr3-vtn-url","oadr3-vtn-bearer-token","oadr3-vtn-token-url",
+   "oadr3-vtn-client-id","oadr3-vtn-client-secret","oadr3-vtn-ven-name"].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = "";
+  });
+  document.getElementById("oadr3-vtn-poll-interval").value = "5";
+  document.getElementById("oadr3-vtn-auth-type").value = "bearer";
+  oadr3ToggleAuth();
+  document.getElementById("oadr3-vtn-form").style.display = "block";
+  document.getElementById("oadr3-vtn-form").scrollIntoView({ behavior:"smooth" });
+}
+
+function editOadr3Vtn(id) {
+  const v = oadr3VTNs.find(x => x.id === id);
+  if (!v) return;
+  document.getElementById("oadr3-vtn-edit-id").value = id;
+  document.getElementById("oadr3-vtn-form-title").textContent = "✏️ Edit VTN Connection";
+  document.getElementById("oadr3-vtn-name").value          = v.name || "";
+  document.getElementById("oadr3-vtn-url").value           = v.vtn_url || "";
+  document.getElementById("oadr3-vtn-bearer-token").value  = v.bearer_token || "";
+  document.getElementById("oadr3-vtn-token-url").value     = v.token_url || "";
+  document.getElementById("oadr3-vtn-client-id").value     = v.client_id || "";
+  document.getElementById("oadr3-vtn-client-secret").value = v.client_secret || "";
+  document.getElementById("oadr3-vtn-ven-name").value      = v.ven_name || "";
+  document.getElementById("oadr3-vtn-poll-interval").value = v.polling_interval_mins || 5;
+  document.getElementById("oadr3-vtn-auth-type").value     = v.auth_type || "bearer";
+  oadr3ToggleAuth();
+  document.getElementById("oadr3-vtn-form").style.display = "block";
+  document.getElementById("oadr3-vtn-form").scrollIntoView({ behavior:"smooth" });
+}
+
+function oadr3ToggleAuth() {
+  const type = document.getElementById("oadr3-vtn-auth-type")?.value;
+  document.getElementById("oadr3-auth-bearer").style.display  = type === "bearer"  ? "block" : "none";
+  document.getElementById("oadr3-auth-oauth2").style.display  = type === "oauth2"  ? "block" : "none";
+}
+
+async function saveOadr3Vtn() {
+  const editId = document.getElementById("oadr3-vtn-edit-id").value;
+  const record = {
+    name:                 document.getElementById("oadr3-vtn-name").value.trim(),
+    vtn_url:              document.getElementById("oadr3-vtn-url").value.trim(),
+    auth_type:            document.getElementById("oadr3-vtn-auth-type").value,
+    bearer_token:         document.getElementById("oadr3-vtn-bearer-token").value.trim() || null,
+    token_url:            document.getElementById("oadr3-vtn-token-url").value.trim() || null,
+    client_id:            document.getElementById("oadr3-vtn-client-id").value.trim() || null,
+    client_secret:        document.getElementById("oadr3-vtn-client-secret").value.trim() || null,
+    ven_name:             document.getElementById("oadr3-vtn-ven-name").value.trim() || null,
+    polling_interval_mins: parseInt(document.getElementById("oadr3-vtn-poll-interval").value) || 5,
+    enabled:              true
+  };
+  const statusEl = document.getElementById("oadr3-vtn-form-status");
+  if (!record.name || !record.vtn_url) { if(statusEl) statusEl.textContent = "Name and URL required."; return; }
+
+  try {
+    if (editId) {
+      await fetch(`${SUPABASE_URL}/rest/v1/oadr3_vtns?id=eq.${editId}`, {
+        method:"PATCH", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+          "Content-Type":"application/json","Prefer":"return=minimal"},
+        body: JSON.stringify(record)
+      });
+    } else {
+      await supabasePost("oadr3_vtns", record);
+    }
+    document.getElementById("oadr3-vtn-form").style.display = "none";
+    await loadOadr3VTNs();
+  } catch(e) {
+    if(statusEl) statusEl.textContent = `Error: ${e.message}`;
+  }
+}
+
+async function testOadr3Vtn() {
+  const statusEl = document.getElementById("oadr3-vtn-form-status");
+  if(statusEl) statusEl.textContent = "Testing…";
+  const vtn = {
+    id: "test", name:"test",
+    vtn_url:      document.getElementById("oadr3-vtn-url").value.trim(),
+    auth_type:    document.getElementById("oadr3-vtn-auth-type").value,
+    bearer_token: document.getElementById("oadr3-vtn-bearer-token").value.trim(),
+    token_url:    document.getElementById("oadr3-vtn-token-url").value.trim(),
+    client_id:    document.getElementById("oadr3-vtn-client-id").value.trim(),
+    client_secret:document.getElementById("oadr3-vtn-client-secret").value.trim(),
+  };
+  try {
+    const programs = await oadr3Fetch(vtn, "/programs");
+    if(statusEl) statusEl.textContent = `✅ Connected — ${Array.isArray(programs)?programs.length:0} program(s) found.`;
+  } catch(e) {
+    if(statusEl) statusEl.textContent = `❌ ${e.message}`;
+  }
+}
+
+async function deleteOadr3Vtn(id) {
+  if (!confirm("Delete this VTN connection? All associated programs and events will also be removed.")) return;
+  await fetch(`${SUPABASE_URL}/rest/v1/oadr3_vtns?id=eq.${id}`, {
+    method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+  });
+  await loadOadr3VTNs();
+  await loadOadr3Programs();
+}
+
+async function toggleOadr3VTN(id, enabled) {
+  await fetch(`${SUPABASE_URL}/rest/v1/oadr3_vtns?id=eq.${id}`, {
+    method:"PATCH", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+      "Content-Type":"application/json","Prefer":"return=minimal"},
+    body: JSON.stringify({ enabled })
+  });
+  oadr3VTNs = oadr3VTNs.map(v => v.id===id ? {...v,enabled} : v);
+}
+
+// ── Programs ──────────────────────────────────────────────────────────────────
+async function loadOadr3Programs() {
+  const rows = await supabaseGet("oadr3_programs?order=created_at.asc").catch(() => []);
+  oadr3Programs = Array.isArray(rows) ? rows.map(r => ({
+    ...r,
+    signal_mapping: typeof r.signal_mapping === "string"
+      ? (() => { try { return JSON.parse(r.signal_mapping); } catch(e) { return {}; } })()
+      : (r.signal_mapping || {})
+  })) : [];
+  renderOadr3Programs();
+}
+
+function renderOadr3Programs() {
+  const list = document.getElementById("oadr3-program-list");
+  if (!list) return;
+  if (!oadr3Programs.length) { list.innerHTML = '<div class="sched-empty">No program enrollments.</div>'; return; }
+  list.innerHTML = oadr3Programs.map(p => {
+    const vtn = oadr3VTNs.find(v => v.id === p.vtn_id);
+    return `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:0.5px solid var(--border);gap:10px;">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-primary);">${p.program_name || p.program_id}</div>
+        <div style="font-size:11px;color:var(--text-hint);">
+          VTN: ${vtn?.name||p.vtn_id} &bull; VEN: ${p.ven_name||"—"} &bull;
+          Target: ${p.target_name||p.target_id||"—"} &bull;
+          Mode: ${(p.control_mode||"dlc").toUpperCase()} &bull;
+          Webhook: ${p.webhook_enabled?"✅":"—"}
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;">
+          <input type="checkbox" ${p.enabled?"checked":""} onchange="toggleOadr3Program('${p.id}',this.checked)"
+            style="accent-color:var(--blue-dark);" /> Enabled
+        </label>
+        <button class="queue-refresh" onclick="editOadr3Program('${p.id}')">Edit</button>
+        <button class="queue-refresh" onclick="deleteOadr3Program('${p.id}')" style="color:var(--red);border-color:var(--red);">Delete</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function showOadr3ProgramForm() {
+  document.getElementById("oadr3-prog-edit-id").value = "";
+  document.getElementById("oadr3-prog-form-title").textContent = "➕ Enroll in Program";
+  ["oadr3-prog-name","oadr3-prog-ven-name"].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = "";
+  });
+  document.getElementById("oadr3-prog-target-type").value = "";
+  document.getElementById("oadr3-prog-target").innerHTML = '<option value="" disabled selected>— Choose —</option>';
+  document.getElementById("oadr3-prog-mode").value = "dlc";
+  document.getElementById("oadr3-prog-webhook").checked = false;
+  document.getElementById("oadr3-webhook-info").style.display = "none";
+  oadr3UpdateSignalMapping();
+  document.getElementById("oadr3-program-form").style.display = "block";
+  document.getElementById("oadr3-program-form").scrollIntoView({ behavior:"smooth" });
+}
+
+function editOadr3Program(id) {
+  const p = oadr3Programs.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById("oadr3-prog-edit-id").value = id;
+  document.getElementById("oadr3-prog-form-title").textContent = "✏️ Edit Program Enrollment";
+  document.getElementById("oadr3-prog-vtn-id").value   = p.vtn_id || "";
+  document.getElementById("oadr3-prog-name").value     = p.program_name || p.program_id || "";
+  document.getElementById("oadr3-prog-ven-name").value = p.ven_name || "";
+  document.getElementById("oadr3-prog-mode").value     = p.control_mode || "dlc";
+  document.getElementById("oadr3-prog-webhook").checked = !!p.webhook_enabled;
+  document.getElementById("oadr3-webhook-info").style.display = p.webhook_enabled ? "block" : "none";
+  document.getElementById("oadr3-prog-target-type").value = p.target_type || "";
+  oadr3PopulateTargets();
+  setTimeout(() => {
+    document.getElementById("oadr3-prog-target").value = p.target_id || "";
+  }, 50);
+  oadr3UpdateSignalMapping(p.signal_mapping);
+  document.getElementById("oadr3-program-form").style.display = "block";
+  document.getElementById("oadr3-program-form").scrollIntoView({ behavior:"smooth" });
+}
+
+function oadr3PopulateTargets() {
+  const type = document.getElementById("oadr3-prog-target-type")?.value;
+  const sel  = document.getElementById("oadr3-prog-target");
+  if (!sel) return;
+  sel.innerHTML = '<option value="" disabled selected>— Choose —</option>';
+  if (type === "device") {
+    DEVICES.filter(d => (!d.type || d.type === "relay") && !d.uid.includes("PLACEHOLDER")).forEach(d => {
+      const o = document.createElement("option"); o.value = d.uid; o.textContent = d.name; sel.appendChild(o);
+    });
+  } else if (type === "group") {
+    const gnums = new Set(Object.values(groupAssignments).flat());
+    [...gnums].sort((a,b)=>a-b).forEach(n => {
+      const o = document.createElement("option"); o.value = `group_${n}`; o.textContent = groupNames[n]||`Group ${n}`; sel.appendChild(o);
+    });
+  }
+}
+
+function oadr3UpdateSignalMapping(existing) {
+  const mode   = document.getElementById("oadr3-prog-mode")?.value || "dlc";
+  const defMap = mode === "bas" ? OADR3_BAS_MAP : OADR3_DLC_MAP;
+  const rows   = document.getElementById("oadr3-signal-map-rows");
+  if (!rows) return;
+  rows.innerHTML = defMap.map(entry => {
+    const ex    = existing?.[entry.level] || {};
+    const strat = ex.strategy || entry.strategy;
+    return `<div style="display:grid;grid-template-columns:80px 120px 1fr;gap:0;padding:8px 12px;border-bottom:0.5px solid var(--border);align-items:center;">
+      <span style="font-size:13px;font-weight:700;color:var(--blue-dark);">${entry.level}</span>
+      <span style="font-size:11px;color:var(--text-secondary);">${entry.name}</span>
+      <select id="oadr3-map-${entry.level}" style="padding:5px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
+        ${mode === "bas"
+          ? `<option value="61|30|30" ${strat==="61|30|30"?"selected":""}>Restore — Relay ON</option>
+             <option value="5|7.5|30" ${strat==="5|7.5|30"?"selected":""}>Low Priority — Relay ON</option>
+             <option value="17|27|30" ${strat==="17|27|30"?"selected":""}>High Priority — Relay ON</option>
+             <option value="19|30|30" ${strat==="19|30|30"?"selected":""}>Emergency — Relay ON</option>`
+          : `<option value="" ${!strat?"selected":""}>Restore / No action</option>
+             <option value="5|7.5|30" ${strat==="5|7.5|30"?"selected":""}>25% Duty Cycle</option>
+             <option value="9|15|30" ${strat==="9|15|30"?"selected":""}>50% Duty Cycle</option>
+             <option value="13|21|30" ${strat==="13|21|30"?"selected":""}>75% Duty Cycle</option>
+             <option value="19|30|30" ${strat==="19|30|30"?"selected":""}>100% Full Shed</option>`
+        }
+      </select>
+    </div>`;
+  }).join("");
+}
+
+function oadr3ToggleWebhook() {
+  const on = document.getElementById("oadr3-prog-webhook")?.checked;
+  document.getElementById("oadr3-webhook-info").style.display = on ? "block" : "none";
+}
+
+async function saveOadr3Program() {
+  const editId  = document.getElementById("oadr3-prog-edit-id").value;
+  const mode    = document.getElementById("oadr3-prog-mode").value;
+  const defMap  = mode === "bas" ? OADR3_BAS_MAP : OADR3_DLC_MAP;
+  const mapping = {};
+  defMap.forEach(e => {
+    const strat = document.getElementById(`oadr3-map-${e.level}`)?.value || "";
+    mapping[e.level] = { strategy: strat, relay:"all_on", mode: mode === "bas" ? "di" : "dlc" };
+  });
+
+  const targetType = document.getElementById("oadr3-prog-target-type").value;
+  const targetId   = document.getElementById("oadr3-prog-target").value;
+  const targetName = targetType === "group"
+    ? (groupNames[parseInt(targetId.replace("group_",""))] || targetId)
+    : (unitName(targetId) || targetId);
+
+  const record = {
+    vtn_id:          document.getElementById("oadr3-prog-vtn-id").value,
+    program_id:      document.getElementById("oadr3-prog-name").value.trim(),
+    program_name:    document.getElementById("oadr3-prog-name").value.trim(),
+    ven_name:        document.getElementById("oadr3-prog-ven-name").value.trim() || null,
+    target_type:     targetType,
+    target_id:       targetId,
+    target_name:     targetName,
+    control_mode:    mode,
+    signal_mapping:  JSON.stringify(mapping),
+    webhook_enabled: document.getElementById("oadr3-prog-webhook").checked,
+    enabled:         true
+  };
+
+  const statusEl = document.getElementById("oadr3-prog-form-status");
+  if (!record.vtn_id || !record.program_id) { if(statusEl) statusEl.textContent = "VTN and Program Name required."; return; }
+
+  try {
+    if (editId) {
+      await fetch(`${SUPABASE_URL}/rest/v1/oadr3_programs?id=eq.${editId}`, {
+        method:"PATCH", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+          "Content-Type":"application/json","Prefer":"return=minimal"},
+        body: JSON.stringify(record)
+      });
+    } else {
+      await supabasePost("oadr3_programs", record);
+    }
+    document.getElementById("oadr3-program-form").style.display = "none";
+    await loadOadr3Programs();
+  } catch(e) {
+    if(statusEl) statusEl.textContent = `Error: ${e.message}`;
+  }
+}
+
+async function deleteOadr3Program(id) {
+  if (!confirm("Remove this program enrollment?")) return;
+  await fetch(`${SUPABASE_URL}/rest/v1/oadr3_programs?id=eq.${id}`, {
+    method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+  });
+  await loadOadr3Programs();
+}
+
+async function toggleOadr3Program(id, enabled) {
+  await fetch(`${SUPABASE_URL}/rest/v1/oadr3_programs?id=eq.${id}`, {
+    method:"PATCH", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+      "Content-Type":"application/json","Prefer":"return=minimal"},
+    body: JSON.stringify({ enabled })
+  });
+  oadr3Programs = oadr3Programs.map(p => p.id===id ? {...p,enabled} : p);
+}
+
+// ── Events & Reports display ──────────────────────────────────────────────────
+async function loadOadr3Events() {
+  const list   = document.getElementById("oadr3-events-list");
+  if (!list) return;
+  const filter = document.getElementById("oadr3-events-filter")?.value;
+  let   query  = "oadr3_events?order=created_at.desc&limit=50";
+  if (filter) query += `&vtn_id=eq.${filter}`;
+  const rows = await supabaseGet(query).catch(() => []);
+  if (!Array.isArray(rows) || !rows.length) {
+    list.innerHTML = '<div class="sched-empty">No events received yet.</div>'; return;
+  }
+  list.innerHTML = rows.map(e => {
+    const vtn    = oadr3VTNs.find(v => v.id === e.vtn_id);
+    const start  = e.start_time ? new Date(e.start_time).toLocaleString() : "—";
+    const end    = e.end_time   ? new Date(e.end_time).toLocaleString()   : "—";
+    const sc     = e.executed ? "var(--green-dark)" : "var(--amber)";
+    return `<div style="padding:10px 12px;border-bottom:0.5px solid var(--border);">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-size:13px;font-weight:600;">${e.event_name || e.event_id}</div>
+        <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;
+          background:${e.executed?"var(--green-bg)":"var(--amber-bg, #fffbe6)"};color:${sc};">
+          ${e.executed ? "✅ Executed" : "⏳ Pending"}
+        </span>
+      </div>
+      <div style="font-size:11px;color:var(--text-hint);margin-top:3px;">
+        VTN: ${vtn?.name||e.vtn_id} &bull; Program: ${e.program_id} &bull;
+        Level: ${e.signal_level ?? "—"} &bull; ${start} → ${end}
+        ${e.executed_at ? `&bull; Executed: ${new Date(e.executed_at).toLocaleTimeString()}` : ""}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function loadOadr3Reports() {
+  const list = document.getElementById("oadr3-reports-list");
+  if (!list) return;
+  const rows = await supabaseGet("oadr3_reports?order=sent_at.desc&limit=30").catch(() => []);
+  if (!Array.isArray(rows) || !rows.length) {
+    list.innerHTML = '<div class="sched-empty">No reports sent yet.</div>'; return;
+  }
+  list.innerHTML = rows.map(r => {
+    const vtn  = oadr3VTNs.find(v => v.id === r.vtn_id);
+    const sent = r.sent_at ? new Date(r.sent_at).toLocaleString() : "—";
+    const ok   = r.response_code >= 200 && r.response_code < 300;
+    return `<div style="padding:8px 12px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+      <div style="font-size:12px;">
+        <span style="font-weight:600;">${vtn?.name||r.vtn_id}</span>
+        <span style="color:var(--text-hint);margin-left:8px;">${r.program_id} / ${r.event_id||"—"}</span>
+        <span style="color:var(--text-hint);margin-left:8px;">📅 ${sent}</span>
+      </div>
+      <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;
+        background:${ok?"var(--green-bg)":"var(--red-bg,#fef2f2)"};
+        color:${ok?"var(--green-dark)":"var(--red)"};">
+        ${r.response_code || "—"}
+      </span>
+    </div>`;
+  }).join("");
+}
+
+// Wire tab init
+async function _oadr3TabInit() {
+  if (document.getElementById("tab-admin-oadr3")?.classList.contains("active")) {
+    await initOadr3Tab();
+  }
+}
+// ═══════════════════════════════════════════════════════════════════════════════
+// End OpenADR 3.0
+// ═══════════════════════════════════════════════════════════════════════════════
 
 // ── Chart tab selector ────────────────────────────────────────────────────────
 function selectChart(which, btn) {
