@@ -9614,6 +9614,52 @@ let fleetThresholds  = {
 };
 
 
+
+// ── Register Asset as Device ──────────────────────────────────────────────────
+// Gives EV chargers, batteries, and generators a dev: UID so they participate
+// in group assignments and event dispatch exactly like relay devices.
+async function registerAssetAsDevice(assetId, name, type, location) {
+  // Use same UID prefix as injectXxxIntoDevices functions
+  const prefix = type === "battery" ? "batt" : type === "generator" ? "gen" : "ev";
+  const uid = `${prefix}_${assetId}`;
+
+  // 1. Write to Supabase devices table
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/devices?uid=eq.${encodeURIComponent(uid)}`, {
+      method: "DELETE",
+      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}` }
+    });
+    await fetch(`${SUPABASE_URL}/rest/v1/devices`, {
+      method: "POST",
+      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`,
+        "Content-Type":"application/json", "Prefer":"return=minimal" },
+      body: JSON.stringify({ uid, name, type, location: location||null, enabled:true })
+    });
+  } catch(e) { console.warn("registerAssetAsDevice Supabase:", e.message); }
+
+  // 2. Write to in-memory DEVICES array
+  const existing = DEVICES.findIndex(d => d.uid === uid);
+  const entry = { id: uid, uid, name, type, location: location||"", enabled:true };
+  if (existing >= 0) DEVICES[existing] = entry;
+  else DEVICES.push(entry);
+
+  return uid;
+}
+
+async function unregisterAssetDevice(assetId, type) {
+  const prefix = type === "battery" ? "batt" : type === "generator" ? "gen" : "ev";
+  const uid = `${prefix}_${assetId}`;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/devices?uid=eq.${encodeURIComponent(uid)}`, {
+      method: "DELETE",
+      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}` }
+    });
+  } catch(e) {}
+  const idx = DEVICES.findIndex(d => d.uid === uid);
+  if (idx >= 0) DEVICES.splice(idx, 1);
+}
+// ── End Register Asset ────────────────────────────────────────────────────────
+
 // ── Master Assets Inventory ───────────────────────────────────────────────────
 async function renderMasterAssets() {
   const tbody     = document.getElementById("asset-master-tbody");
@@ -9722,20 +9768,27 @@ async function renderMasterAssets() {
   // ── Summary counts ─────────────────────────────────────────────────────────
   const counts = { relay:0, ev:0, battery:0, generator:0 };
   rows.forEach(r => counts[r.type] = (counts[r.type]||0) + 1);
-  const ungroupedRelays = relayDevs.filter(d => !(groupMap[d.uid]||[]).length);
+  // Ungrouped = any asset whose UID isn't in groupMap
+  const allAssetUids = [
+    ...relayDevs.map(d => ({ uid:d.uid, name:d.name, icon:"⚡" })),
+    ...evRows.map(c => ({ uid:`ev_${c.station_id||c.asset_id||c.id}`, name:c.name, icon:"🔌" })),
+    ...battRows.map(a => ({ uid:`batt_${a.asset_id}`, name:a.name, icon:"🔋" })),
+    ...genRows.map(a => ({ uid:`gen_${a.asset_id}`, name:a.name, icon:"⚙️" })),
+  ];
+  const ungroupedAssets = allAssetUids.filter(a => !(groupMap[a.uid]||[]).length);
 
   document.getElementById("asset-count-relay").textContent     = counts.relay;
   document.getElementById("asset-count-ev").textContent        = counts.ev;
   document.getElementById("asset-count-battery").textContent   = counts.battery;
   document.getElementById("asset-count-generator").textContent = counts.generator;
   document.getElementById("asset-count-total").textContent     = rows.length;
-  document.getElementById("asset-count-ungrouped").textContent = ungroupedRelays.length;
+  document.getElementById("asset-count-ungrouped").textContent = ungroupedAssets.length;
 
   // ── Ungrouped callout ──────────────────────────────────────────────────────
   if (ungrouped && ugList) {
-    ungrouped.style.display = ungroupedRelays.length ? "block" : "none";
-    ugList.innerHTML = ungroupedRelays.map(d =>
-      `<span style="padding:4px 10px;background:var(--surface2);border:0.5px solid var(--amber);border-radius:20px;font-size:11px;font-weight:600;color:var(--amber);">⚡ ${d.name||d.uid}</span>`
+    ungrouped.style.display = ungroupedAssets.length ? "block" : "none";
+    ugList.innerHTML = ungroupedAssets.map(a =>
+      `<span style="padding:4px 10px;background:var(--surface2);border:0.5px solid var(--amber);border-radius:20px;font-size:11px;font-weight:600;color:var(--amber);">${a.icon} ${a.name||a.uid}</span>`
     ).join("");
   }
 
@@ -14406,14 +14459,24 @@ async function fireAutopilotEvent(rule, fv) {
   const schedUnix = Math.floor(Date.now() / 1000);
   const duration  = rule.duration_mins || 60;
 
-  // Helper: send LC to device or group
+  // Helper: dispatch to a single device by type
+  async function dispatchToDevice(d, hex) {
+    const dtype = d.type || "relay";
+    if (dtype === "battery")   { if (typeof dispatchBatteryDR   === "function") await dispatchBatteryDR(rule);   return; }
+    if (dtype === "generator") { if (typeof dispatchGeneratorDR  === "function") await dispatchGeneratorDR(rule);  return; }
+    if (dtype === "ev")        { if (typeof dispatchEVChargersDR === "function") await dispatchEVChargersDR(parseFloat(rule?.signal_level||"0.75")); return; }
+    await sendLCToDevice(d.uid, hex);
+  }
+
+  // Helper: send to device or all group members routed by type
   async function sendToTarget(hex) {
     if (rule.target_type === "group") {
       const gNum    = parseInt((rule.target_id || "group_1").replace("group_",""));
       const members = DEVICES.filter(d => (groupAssignments[d.uid]||[]).includes(gNum));
-      for (const d of members) await sendLCToDevice(d.uid, hex);
+      for (const d of members) await dispatchToDevice(d, hex);
     } else {
-      await sendLCToDevice(rule.target_id, hex);
+      const d = DEVICES.find(x => x.uid === rule.target_id) || { uid: rule.target_id, type:"relay" };
+      await dispatchToDevice(d, hex);
     }
   }
 
@@ -20479,6 +20542,9 @@ async function enrollCharger() {
     localStorage.setItem(EV_STORAGE_KEY, JSON.stringify(existing));
   }
 
+  // Register as a device so it can join groups and receive dispatches
+  await registerAssetAsDevice(stationId, name, "ev", null);
+
   setStatus("ready", `${name} enrolled.`);
   const form = document.getElementById("ev-enroll-form");
   if (form) form.style.display = "none";
@@ -20617,6 +20683,7 @@ async function removeEVCharger(stationId) {
   // Also remove from localStorage
   const local = JSON.parse(localStorage.getItem(EV_STORAGE_KEY) || "[]");
   localStorage.setItem(EV_STORAGE_KEY, JSON.stringify(local.filter(c => c.station_id !== stationId)));
+  await unregisterAssetDevice(stationId, "ev");
   await loadEVChargers();
   renderEVChargerList();
 }
@@ -21679,6 +21746,10 @@ async function saveBatteryAsset() {
     localStorage.setItem(BATT_STORAGE_KEY, JSON.stringify(filtered));
   }
 
+  // Register as a device so it can join groups and receive dispatches
+  await registerAssetAsDevice(assetId, name, "battery",
+    document.getElementById("batt-location")?.value?.trim() || null);
+
   setStatus("ready", `${name} ${battEditingId ? "updated" : "saved"}.`);
   battEditingId = null;
   const tEl = document.getElementById("batt-form-title");
@@ -21904,6 +21975,7 @@ async function removeBatteryAsset(assetId) {
   } catch(e) {}
   const local = JSON.parse(localStorage.getItem(BATT_STORAGE_KEY) || "[]");
   localStorage.setItem(BATT_STORAGE_KEY, JSON.stringify(local.filter(a => a.asset_id !== assetId)));
+  await unregisterAssetDevice(assetId, "battery");
   await refreshBatteryAssets();
 }
 
@@ -22298,6 +22370,10 @@ async function saveGeneratorAsset() {
     localStorage.setItem(GEN_STORAGE_KEY, JSON.stringify(filtered));
   }
 
+  // Register as a device so it can join groups and receive dispatches
+  await registerAssetAsDevice(assetId, name, "generator",
+    document.getElementById("gen-location")?.value?.trim() || null);
+
   setStatus("ready", `${name} ${genEditingId ? "updated" : "saved"}.`);
   genEditingId = null;
   const tEl = document.getElementById("gen-form-title");
@@ -22505,10 +22581,9 @@ async function removeGeneratorAsset(assetId) {
   } catch(e) {}
   const local = JSON.parse(localStorage.getItem(GEN_STORAGE_KEY) || "[]");
   localStorage.setItem(GEN_STORAGE_KEY, JSON.stringify(local.filter(a => a.asset_id !== assetId)));
+  await unregisterAssetDevice(assetId, "generator");
   await refreshGenerators();
 }
-
-// ── Inject generators into DEVICES ───────────────────────────────────────────
 function injectGeneratorsIntoDevices() {
   DEVICES = DEVICES.filter(d => d.type !== "generator");
   generatorAssets.forEach(a => {
