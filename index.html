@@ -6785,11 +6785,11 @@ async function loadSchedules() {
     const typeIcon  = typeIcons[evType] || "📋";
 
     const cancelBtn = isCancellable
-      ? `<button class="sched-delete-btn" style="color:var(--red);"
-           onclick="event.stopPropagation();cancelSpecificEvent(${s.id},'${s.target_id}','${s.target_type || "device"}','${s.relay_action || "all_on"}','${displayName.replace(/'/g,"\'")}',${s.lc_strategy||1})">
-           Cancel
+      ? `<button class="sched-delete-btn" style="color:var(--red);white-space:nowrap;"
+           onclick="event.stopPropagation();cancelScheduledEvent(${s.id})">
+           ✕ Cancel &amp; Restore
          </button>`
-      : "";
+      : `<span style="font-size:10px;color:var(--text-hint);">${s.status}</span>`;
 
     const rowData = encodeURIComponent(JSON.stringify({ type:"queue", item:s }));
 
@@ -7687,28 +7687,87 @@ async function endEvent(targetId, targetType, relayAction, queueId) {
 }
 
 // ── Cancel All Events ─────────────────────────────────────────────────────────
-async function cancelSpecificEvent(queueId, targetId, targetType, relayAction, eventName, lcEventId) {
-  // lcEventId is the device-level LC Event ID (1-254) stored in the hex
-  // queueId is the Supabase row ID
-  if (!confirm(`Cancel "${eventName}" on the device? This will cancel only this specific event (ID ${lcEventId}).`)) return;
+async function cancelScheduledEvent(queueId) {
+  // Load the full row so we have all fields
+  const rows = await supabaseGet(`schedule_queue?id=eq.${queueId}`);
+  if (!Array.isArray(rows) || !rows.length) { setStatus("error", "Event not found."); return; }
+  const s = rows[0];
+  const evType     = s.event_type || "switch";
+  const displayName = s.name || s.target_name || `Event #${queueId}`;
+  const targetId   = s.target_id;
+  const targetType = s.target_type || "device";
 
-  // Build cancel hex with specific event ID
-  const cancelHex = buildCancelEventHex(relayAction, lcEventId);
-  setStatus("sending", `Cancelling ${eventName} (Event ID ${lcEventId})...`);
+  if (!confirm(`Cancel "${displayName}" and send a restore command to all assets in this event?`)) return;
 
-  if (targetType === "group") {
-    const gNum = parseInt(targetId.replace("group_",""));
-    const members = DEVICES.filter(d => (groupAssignments[d.uid]||[]).includes(gNum));
-    for (const device of members) await sendLCToDevice(device.uid, cancelHex);
-  } else {
-    await sendLCToDevice(targetId, cancelHex);
+  setStatus("sending", `Cancelling "${displayName}"…`);
+
+  // Helper: get relay devices for a target
+  const getRelayTargets = () => {
+    if (targetType === "group") {
+      const gNum = parseInt(targetId.replace("group_",""));
+      return DEVICES.filter(d => (groupAssignments[d.uid]||[]).includes(gNum) && (!d.type || d.type === "relay"));
+    }
+    const d = DEVICES.find(x => x.uid === targetId);
+    return d ? [d] : [{ uid: targetId }];
+  };
+
+  const getAssetTargets = (assetType) => {
+    if (targetType === "group") {
+      const gNum = parseInt(targetId.replace("group_",""));
+      return DEVICES.filter(d => d.type === assetType && (groupAssignments[d.uid]||[]).includes(gNum));
+    }
+    const d = DEVICES.find(x => x.uid === targetId);
+    return d ? [d] : [];
+  };
+
+  try {
+    // ── Relay / Switch / BAS / Hybrid — send restore hex ───────────────────
+    if (["switch","bas_di","hybrid"].includes(evType)) {
+      const restoreHex = buildRestoreHex(s.relay_action || "all_on");
+      for (const d of getRelayTargets()) await sendLCToDevice(d.uid, restoreHex);
+    }
+
+    // ── EV Charger — restore full charge rate ───────────────────────────────
+    if (evType === "ev") {
+      for (const d of getAssetTargets("ev")) {
+        const sid = d.uid.replace("ev_","");
+        if (typeof restoreEVSingle === "function") await restoreEVSingle(sid);
+      }
+    }
+
+    // ── Battery — restore to autonomous mode ────────────────────────────────
+    if (evType === "battery") {
+      for (const d of getAssetTargets("battery")) {
+        const aid = d.uid.replace("batt_","");
+        if (typeof restoreBatterySingle === "function") await restoreBatterySingle(aid);
+      }
+    }
+
+    // ── Generator — stop ────────────────────────────────────────────────────
+    if (evType === "generator") {
+      for (const d of getAssetTargets("generator")) {
+        const aid = d.uid.replace("gen_","");
+        if (typeof stopGeneratorSingle === "function") await stopGeneratorSingle(aid);
+      }
+    }
+
+    // ── OpenADR — mark cancelled (VTN handles restore) ─────────────────────
+    // No action needed — cancellation is handled at the VTN level
+
+    // Mark cancelled in Supabase
+    await supabasePatch(`schedule_queue?id=eq.${queueId}`, { status:"cancelled" });
+    setStatus("ready", `"${displayName}" cancelled — restore sent.`);
+    await loadSchedules();
+    loadEventsBar();
+
+  } catch(e) {
+    setStatus("error", `Cancel failed: ${e.message}`);
   }
+}
 
-  // Mark as cancelled in Supabase
-  await supabasePatch(`schedule_queue?id=eq.${queueId}`, { status: "cancelled" });
-  setStatus("ready", `${eventName} cancelled on device.`);
-  await loadDeviceEvents();
-  loadEventsBar();
+async function cancelSpecificEvent(queueId, targetId, targetType, relayAction, eventName, lcEventId) {
+  // Legacy wrapper — delegates to cancelScheduledEvent
+  await cancelScheduledEvent(queueId);
 }
 
 async function cancelAllEvents() {
@@ -15901,46 +15960,102 @@ let activeCancellationTimers = {}; // { ruleId: { timer, countdownEl, graceMs } 
 function showCancellationBanner(rule, fv, tier, token) {
   const graceMins = rule.grace_mins || 5;
   const graceMs   = graceMins * 60 * 1000;
-  let   remaining = graceMins * 60; // seconds
+  let   remaining = graceMins * 60;
 
-  // Remove existing banner for this rule if any
   hideCancellationBanner(rule.id);
 
-  const bannerId = `cancel-banner-${rule.id}`;
+  const bannerId  = `cancel-banner-${rule.id}`;
+  const isAuto    = tier === "autopilot";
+  const accentClr = isAuto ? "#DC2626" : "#D97706";
+  const accentBg  = isAuto ? "#FEF2F2" : "#FFFBEB";
+
   const banner = document.createElement("div");
   banner.id = bannerId;
-  banner.style.cssText = `position:fixed;bottom:20px;right:20px;z-index:800;background:var(--ink);color:#fff;
-    border-radius:var(--radius);padding:16px 20px;box-shadow:0 8px 32px rgba(0,0,0,.3);
-    max-width:340px;border-left:4px solid ${tier === "autopilot" ? "var(--red)" : "var(--amber)"};`;
+  banner.style.cssText = `
+    position:fixed;
+    top:72px;
+    left:50%;
+    transform:translateX(-50%);
+    z-index:9999;
+    width:min(520px, 94vw);
+    background:#fff;
+    color:#111;
+    border-radius:14px;
+    padding:20px 24px 18px;
+    box-shadow:0 12px 48px rgba(0,0,0,.28), 0 0 0 3px ${accentClr};
+    border-top:5px solid ${accentClr};
+    animation:oadr3Pulse 1.4s ease-in-out infinite;
+  `;
+
   banner.innerHTML = `
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
-      <div style="flex:1;">
-        <div style="font-size:13px;font-weight:700;margin-bottom:4px;">
-          ${tier === "autopilot" ? "⚡ Autopilot Pending" : "💡 Suggested Event Pending"}
+    <div style="display:flex;align-items:flex-start;gap:16px;">
+      <div style="font-size:36px;flex-shrink:0;line-height:1;">${isAuto ? "⚡" : "💡"}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:15px;font-weight:800;color:#111;margin-bottom:4px;letter-spacing:-.01em;">
+          ${isAuto ? "Autopilot Event Pending" : "Suggested Event Pending"}
         </div>
-        <div style="font-size:12px;color:rgba(255,255,255,.7);margin-bottom:8px;">${rule.name || "Monitor trigger"}</div>
-        <div style="font-size:11px;color:rgba(255,255,255,.5);margin-bottom:10px;">
-          ${tier === "autopilot" ? "Event fires in" : "Awaiting confirmation —"} <strong id="cancel-countdown-${rule.id}" style="color:${tier==="autopilot"?"var(--red)":"var(--amber)"};">${graceMins}:00</strong>
+        <div style="font-size:13px;font-weight:600;color:#444;margin-bottom:8px;">
+          ${rule.name || "Monitor trigger"}
         </div>
-        <div style="display:flex;gap:8px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+          <div style="font-size:12px;color:#666;">
+            ${isAuto ? "Fires automatically in" : "Confirm or cancel within"}
+          </div>
+          <div style="
+            font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;
+            color:${accentClr};
+            background:${accentBg};
+            padding:4px 14px;border-radius:8px;
+            min-width:80px;text-align:center;
+            border:1.5px solid ${accentClr}33;
+            letter-spacing:.02em;
+          " id="cancel-countdown-${rule.id}">${graceMins}:00</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button onclick="cancelPendingEvent(${rule.id},'${token || ""}')"
-            style="padding:6px 14px;border-radius:4px;border:none;background:var(--red);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">
-            ✕ Cancel
+            style="padding:8px 20px;border-radius:8px;border:none;background:${accentClr};color:#fff;
+                   font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">
+            ✕ Cancel Event
           </button>
-          ${tier !== "autopilot" ? `<button onclick="confirmSuggestedEvent(${rule.id})"
-            style="padding:6px 14px;border-radius:4px;border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">
+          ${!isAuto ? `<button onclick="confirmSuggestedEvent(${rule.id})"
+            style="padding:8px 20px;border-radius:8px;border:none;background:#16A34A;color:#fff;
+                   font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">
             ✓ Confirm Now
           </button>` : ""}
+          <button onclick="hideCancellationBanner(${rule.id})"
+            style="padding:8px 14px;border-radius:8px;border:1.5px solid #ddd;background:#f9f9f9;
+                   color:#666;font-size:13px;cursor:pointer;flex-shrink:0;">
+            Dismiss
+          </button>
         </div>
       </div>
-      <button onclick="hideCancellationBanner(${rule.id})"
-        style="background:none;border:none;color:rgba(255,255,255,.4);font-size:16px;cursor:pointer;padding:0;flex-shrink:0;">✕</button>
-    </div>`;
+    </div>
+    <!-- Progress bar -->
+    <div style="margin-top:16px;height:4px;background:#eee;border-radius:2px;overflow:hidden;">
+      <div id="cancel-progress-${rule.id}" style="height:100%;background:${accentClr};width:100%;
+           border-radius:2px;transition:width 1s linear;"></div>
+    </div>
+  `;
+
+  // Add pulse keyframes if not already added
+  if (!document.getElementById("cancel-banner-styles")) {
+    const style = document.createElement("style");
+    style.id = "cancel-banner-styles";
+    style.textContent = `
+      @keyframes oadr3Pulse {
+        0%,100% { box-shadow:0 12px 48px rgba(0,0,0,.28), 0 0 0 3px ${accentClr}; }
+        50%      { box-shadow:0 12px 48px rgba(0,0,0,.28), 0 0 0 6px ${accentClr}66, 0 0 24px ${accentClr}44; }
+      }
+    `;
+    document.head.appendChild(style);
+  }
 
   document.body.appendChild(banner);
 
-  // Countdown ticker
   const countdownEl = document.getElementById(`cancel-countdown-${rule.id}`);
+  const progressEl  = document.getElementById(`cancel-progress-${rule.id}`);
+  const totalSecs   = graceMins * 60;
+
   const ticker = setInterval(() => {
     remaining--;
     if (remaining <= 0) {
@@ -15951,6 +16066,7 @@ function showCancellationBanner(rule, fv, tier, token) {
     const m = Math.floor(remaining / 60);
     const s = remaining % 60;
     if (countdownEl) countdownEl.textContent = `${m}:${String(s).padStart(2,"0")}`;
+    if (progressEl)  progressEl.style.width  = `${(remaining / totalSecs) * 100}%`;
   }, 1000);
 
   activeCancellationTimers[rule.id] = { ticker, token, rule, fv, tier };
