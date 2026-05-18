@@ -6612,21 +6612,28 @@ async function loadSchedules() {
     const sc      = statusColors[s.status] || "var(--text-secondary)";
     const isCancellable = ["sent","received","started","pending"].includes(s.status);
     const displayName = s.name || s.target_name || `Queue #${s.id}`;
+    const evType  = s.event_type || "switch";
 
-    // Extract the LC event ID from the hex if we have it, otherwise use lc_strategy as proxy
-    // The actual device event ID is tracked in device_events table
+    // Event type badge
+    const typeIcons = { switch:"⚡", bas_di:"🏢", ev:"🔌", battery:"🔋", generator:"⚙️", openadr:"📡", hybrid:"🔀" };
+    const typeIcon  = typeIcons[evType] || "📋";
+
     const cancelBtn = isCancellable
       ? `<button class="sched-delete-btn" style="color:var(--red);"
-           onclick="cancelSpecificEvent(${s.id},'${s.target_id}','${s.target_type || "device"}','${s.relay_action || "all_on"}','${displayName.replace(/'/g,"\'")}',${s.lc_strategy||1})">
-           Cancel Event
+           onclick="event.stopPropagation();cancelSpecificEvent(${s.id},'${s.target_id}','${s.target_type || "device"}','${s.relay_action || "all_on"}','${displayName.replace(/'/g,"\'")}',${s.lc_strategy||1})">
+           Cancel
          </button>`
       : "";
 
-    return `<div class="sched-item">
+    const rowData = encodeURIComponent(JSON.stringify({ type:"queue", item:s }));
+
+    return `<div class="sched-item" style="cursor:pointer;" onclick="showEventDetail(JSON.parse(decodeURIComponent('${rowData}')))">
       <div class="sched-info">
         <div class="sched-name">
-          ${displayName}
-          <span style="font-size:10px;font-weight:600;padding:2px 6px;border-radius:8px;background:${s.status==='sent'?'var(--blue-bg)':s.status==='received'?'var(--green-bg)':s.status==='ended'?'var(--surface2)':'var(--surface2)'};color:${sc};margin-left:6px;">${s.status}</span>
+          <span style="margin-right:5px;">${typeIcon}</span>${displayName}
+          <span style="font-size:10px;font-weight:600;padding:2px 6px;border-radius:8px;
+            background:${s.status==='sent'?'var(--blue-bg)':s.status==='received'?'var(--green-bg)':s.status==='ended'?'var(--surface2)':'var(--surface2)'};
+            color:${sc};margin-left:6px;">${s.status}</span>
         </div>
         <div class="sched-detail">
           ${s.target_name || "—"} &bull; ${RELAY_ACTION_LABELS[s.relay_action] || s.relay_action || "—"}
@@ -7805,26 +7812,17 @@ function closeEventModal(e) {
 }
 
 function showEventDetail(data) {
-  // data = { type: 'queue'|'schedule', item: {...} }
   const modal = document.getElementById("event-modal");
   const title = document.getElementById("modal-title");
   const body  = document.getElementById("modal-body");
   const item  = data.item;
 
+  const evType = item.event_type || "switch";
+  const typeLabels = { switch:"⚡ Switch / Relay", bas_di:"🏢 BAS Mode", ev:"🔌 EV Charger",
+    battery:"🔋 Battery Backup", generator:"⚙️ Generator", openadr:"📡 OpenADR", hybrid:"🔀 Hybrid" };
+
   title.textContent = item.name || "Event Details";
 
-  // Rebuild hex from stored parameters
-  const mode     = item.lc_mode     || "dlc";
-  const strategy = item.lc_strategy || 1;
-  const reps     = item.lc_reps     || 1;
-  const startUnix = item.fire_at ? Math.floor(new Date(item.fire_at).getTime()/1000) : 0;
-  const lcHex    = buildLCHex(item.relay_action || "all_on", mode, strategy, reps, startUnix);
-
-  // Strategy lookup
-  const strat = STRATEGY_TABLE[strategy];
-  const stratDesc = strat ? `${strategy} — On ${strat.to} min / Off ${strat.ct - strat.to} min (${strat.pct}%)` : `${strategy}`;
-
-  // Status badge color
   const statusColors = {
     sent:"background:var(--blue-bg);color:var(--blue-dark);",
     received:"background:var(--green-bg);color:var(--green-dark);",
@@ -7834,30 +7832,54 @@ function showEventDetail(data) {
     cancelled:"background:var(--surface2);color:var(--text-hint);"
   };
   const statusStyle = statusColors[item.status] || "";
-
-  const fireTime = item.fire_at ? new Date(item.fire_at).toLocaleString() : "—";
+  const fireTime = item.fire_at  ? new Date(item.fire_at).toLocaleString()  : "—";
   const sentTime = item.fired_at ? new Date(item.fired_at).toLocaleString() : "—";
   const endTime  = item.action_time && item.duration_minutes ? calcEndTime(item.action_time, item.duration_minutes) : "—";
   const tzShort  = item.timezone ? item.timezone.split("/").pop().replace("_"," ") : "";
 
-  body.innerHTML = `
-    <div class="modal-section">
-      <div class="modal-section-title">Event Parameters</div>
-      <div class="modal-row"><span class="modal-row-label">Target</span><span class="modal-row-value">${item.target_name || "—"}</span></div>
-      <div class="modal-row"><span class="modal-row-label">Relay Action</span><span class="modal-row-value">${RELAY_ACTION_LABELS[item.relay_action] || item.relay_action || "—"}</span></div>
-      <div class="modal-row"><span class="modal-row-label">Control Mode</span><span class="modal-row-value">${mode.toUpperCase()}</span></div>
-      <div class="modal-row"><span class="modal-row-label">Strategy</span><span class="modal-row-value">${stratDesc}</span></div>
-      <div class="modal-row"><span class="modal-row-label">Repetitions</span><span class="modal-row-value">${reps}</span></div>
-      <div class="modal-row"><span class="modal-row-label">Duration</span><span class="modal-row-value">${item.duration_minutes ? formatDuration(item.duration_minutes) : "—"}</span></div>
-      <div class="modal-row"><span class="modal-row-label">Scheduled Time</span><span class="modal-row-value">${fireTime}</span></div>
-      ${item.action_time ? `<div class="modal-row"><span class="modal-row-label">End Time</span><span class="modal-row-value">${endTime} ${tzShort}</span></div>` : ""}
-      ${item.status ? `<div class="modal-row"><span class="modal-row-label">Status</span><span class="modal-row-value"><span class="modal-status" style="${statusStyle}">${item.status}</span></span></div>` : ""}
-      ${sentTime !== "—" ? `<div class="modal-row"><span class="modal-row-label">Payload Sent</span><span class="modal-row-value">${sentTime}</span></div>` : ""}
-    </div>
+  // Build LC hex section only for relay-type events
+  let lcSection = "";
+  const isLCEvent = ["switch","bas_di","hybrid"].includes(evType);
+  if (isLCEvent && item.relay_action && item.relay_action !== "hybrid") {
+    const mode     = item.lc_mode     || "dlc";
+    const strategy = item.lc_strategy || 1;
+    const reps     = item.lc_reps     || 1;
+    const startUnix = item.fire_at ? Math.floor(new Date(item.fire_at).getTime()/1000) : 0;
+    const lcHex    = buildLCHex(item.relay_action, mode, strategy, reps, startUnix);
+    const strat    = STRATEGY_TABLE[strategy];
+    const stratDesc = strat ? `${strategy} — On ${strat.to} min / Off ${strat.ct - strat.to} min (${strat.pct}%)` : `${strategy}`;
+    lcSection = `
     <div class="modal-section">
       <div class="modal-section-title">LC Hex Command</div>
       <div class="modal-hex">${lcHex}</div>
+      <div class="modal-row" style="margin-top:8px;"><span class="modal-row-label">Strategy</span><span class="modal-row-value">${stratDesc}</span></div>
+      <div class="modal-row"><span class="modal-row-label">Repetitions</span><span class="modal-row-value">${reps}</span></div>
+      <div class="modal-row"><span class="modal-row-label">Control Mode</span><span class="modal-row-value">${mode.toUpperCase()}</span></div>
     </div>`;
+  }
+
+  // Type-specific detail rows
+  let typeRows = "";
+  if (evType === "ev")        typeRows = `<div class="modal-row"><span class="modal-row-label">Charge Limit</span><span class="modal-row-value">${item.ev_shed_pct !== undefined ? item.ev_shed_pct+"%" : "—"}</span></div>`;
+  if (evType === "battery")   typeRows = `<div class="modal-row"><span class="modal-row-label">Battery Action</span><span class="modal-row-value">${item.battery_action || item.relay_action || "—"}</span></div>`;
+  if (evType === "generator") typeRows = `<div class="modal-row"><span class="modal-row-label">Generator Action</span><span class="modal-row-value">${item.generator_action || item.relay_action || "—"}</span></div>`;
+  if (evType === "hybrid")    typeRows = `<div class="modal-row"><span class="modal-row-label">Relay Config</span><span class="modal-row-value">Hybrid — see hybrid_config</span></div>`;
+
+  body.innerHTML = `
+    <div class="modal-section">
+      <div class="modal-section-title">Event Parameters</div>
+      <div class="modal-row"><span class="modal-row-label">Event Type</span><span class="modal-row-value">${typeLabels[evType] || evType}</span></div>
+      <div class="modal-row"><span class="modal-row-label">Target</span><span class="modal-row-value">${item.target_name || "—"}</span></div>
+      <div class="modal-row"><span class="modal-row-label">Target Type</span><span class="modal-row-value">${item.target_type || "—"}</span></div>
+      ${isLCEvent ? `<div class="modal-row"><span class="modal-row-label">Relay Action</span><span class="modal-row-value">${RELAY_ACTION_LABELS[item.relay_action] || item.relay_action || "—"}</span></div>` : ""}
+      ${typeRows}
+      <div class="modal-row"><span class="modal-row-label">Duration</span><span class="modal-row-value">${item.duration_minutes ? formatDuration(item.duration_minutes) : "—"}</span></div>
+      <div class="modal-row"><span class="modal-row-label">Scheduled</span><span class="modal-row-value">${fireTime}</span></div>
+      ${endTime !== "—" ? `<div class="modal-row"><span class="modal-row-label">End Time</span><span class="modal-row-value">${endTime} ${tzShort}</span></div>` : ""}
+      ${sentTime !== "—" ? `<div class="modal-row"><span class="modal-row-label">Dispatched</span><span class="modal-row-value">${sentTime}</span></div>` : ""}
+      ${item.status ? `<div class="modal-row"><span class="modal-row-label">Status</span><span class="modal-row-value"><span class="modal-status" style="${statusStyle}">${item.status}</span></span></div>` : ""}
+    </div>
+    ${lcSection}`;
 
   modal.classList.add("active");
 }
