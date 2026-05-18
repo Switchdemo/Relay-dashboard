@@ -9632,23 +9632,27 @@ async function renderMasterAssets() {
   let groupNameMap  = {}; // { group_number: name }
 
   try {
-    const [devices, assignments, groups, ev, batt, gen] = await Promise.all([
+    const [devices, assignments, ev, batt, gen] = await Promise.all([
       supabaseGet("devices?order=name.asc"),
-      supabaseGet("group_assignments?select=device_uid,group_number"),
-      supabaseGet("groups?select=group_number,name&order=group_number.asc"),
+      supabaseGet("device_groups?order=group_number").catch(()=>[]),
       supabaseGet("ev_chargers?enabled=eq.true&order=enrolled_at.asc").catch(()=>[]),
       supabaseGet("battery_assets?order=created_at.asc").catch(()=>[]),
       supabaseGet("generator_assets?order=created_at.asc").catch(()=>[]),
     ]);
 
-    relayDevs = (devices||[]).filter(d => !d.uid?.includes("PLACEHOLDER"));
+    relayDevs = (Array.isArray(devices) ? devices : []).filter(d => !d.uid?.includes("PLACEHOLDER"));
 
-    (assignments||[]).forEach(a => {
+    const assignArr = Array.isArray(assignments) ? assignments : [];
+
+    assignArr.forEach(a => {
       if (!groupMap[a.device_uid]) groupMap[a.device_uid] = [];
       groupMap[a.device_uid].push(a.group_number);
+      if (a.group_name) groupNameMap[a.group_number] = a.group_name;
     });
-
-    (groups||[]).forEach(g => { groupNameMap[g.group_number] = g.name || `Group ${g.group_number}`; });
+    // Fill any missing names
+    Object.keys(groupMap).forEach(uid => groupMap[uid].forEach(n => {
+      if (!groupNameMap[n]) groupNameMap[n] = `Group ${n}`;
+    }));
 
     evRows   = ev   || [];
     battRows = batt || [];
