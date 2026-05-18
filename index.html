@@ -449,6 +449,9 @@
   .rule-tier-opt.selected { border-color:var(--text-primary);background:var(--surface2); }
   .rule-tier-opt-name { font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:3px; }
   .rule-tier-opt-desc { font-size:10px;color:var(--text-hint);line-height:1.4; }
+  .rule-event-tile { padding:7px 10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;text-align:center;font-size:11px;font-weight:600;color:var(--text-secondary);transition:all .15s; }
+  .rule-event-tile:hover { border-color:var(--text-primary);color:var(--text-primary); }
+  .rule-event-tile.selected { border-color:var(--blue-dark);background:var(--blue-lt);color:var(--blue-dark); }
   .autopilot-warning { background:var(--red-lt);border:0.5px solid var(--red);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--red);margin-top:10px;line-height:1.6; }
   .grace-period-row { display:none; }
 
@@ -491,23 +494,6 @@
   .scada-hier-node { padding:4px 8px;border-radius:4px;font-size:11px;background:var(--surface2);border:0.5px solid var(--border);display:inline-block;margin:2px; }
 
   .outage-util-card.no-map-card { cursor:default; opacity:0.85; }
-
-  /* ── Asset Cards (EV / Battery / Generator) on Device Controls tab ── */
-  .asset-status-row { display:flex; justify-content:space-between; align-items:center; font-size:12px; padding:6px 0; border-bottom:0.5px solid var(--border); }
-  .asset-status-row:last-of-type { border-bottom:none; }
-  .asset-status-label { color:var(--text-secondary); }
-  .asset-status-value { font-weight:500; color:var(--text-primary); font-family:monospace; }
-  .asset-actions { display:flex; gap:8px; margin-top:10px; }
-  .asset-btn { flex:1; padding:8px; border-radius:var(--radius-sm); border:0.5px solid var(--border-md); font-size:12px; font-weight:600; cursor:pointer; transition:all 0.2s; background:var(--surface2); color:var(--text-secondary); }
-  .asset-btn.shed { background:var(--amber-bg); border-color:var(--amber); color:var(--amber); }
-  .asset-btn.shed:hover { background:var(--amber); color:#fff; }
-  .asset-btn.restore { background:var(--green-bg); border-color:var(--green); color:var(--green-dark); }
-  .asset-btn.restore:hover { background:var(--green); color:#fff; }
-  .asset-type-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:600; font-family:monospace; margin-top:3px; }
-  .asset-type-badge.ev       { background:var(--blue-bg); color:var(--blue-dark); }
-  .asset-type-badge.battery  { background:var(--green-bg); color:var(--green-dark); }
-  .asset-type-badge.generator{ background:var(--amber-bg); color:var(--amber); }
-
   /* ── EV Charging CSMS ── */
   .ev-charger-card { border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:14px;background:var(--surface);margin-bottom:8px; }
   .ev-charger-header { display:flex;align-items:center;gap:10px;margin-bottom:8px; }
@@ -1971,7 +1957,9 @@
       <!-- Action -->
       <div class="rule-form-section" id="rule-action-section">
         <label class="rule-form-label">Action</label>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+
+        <!-- Target -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
           <div>
             <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Target Type</label>
             <select id="rule-target-type" onchange="onRuleTargetChange()" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
@@ -1986,35 +1974,95 @@
               <option value="" disabled selected>-- Choose One --</option>
             </select>
           </div>
-          <div>
-            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Relay Action</label>
-            <select id="rule-relay-action" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
-              <option value="all_on">All Relays ON</option>
-              <option value="relay1_on">Relay 1 ON</option>
-              <option value="relay2_on">Relay 2 ON</option>
-              <option value="relay3_on">Relay 3 ON</option>
-              <option value="relay4_on">Relay 4 ON</option>
-            </select>
+        </div>
+
+        <!-- Event Type -->
+        <div style="margin-bottom:10px;">
+          <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:6px;">Event Type</label>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;" id="rule-event-type-tiles">
+            <div class="rule-event-tile selected" data-type="switch"    onclick="selectRuleEventType('switch')">⚡ Switch / Relay</div>
+            <div class="rule-event-tile"          data-type="bas_di"    onclick="selectRuleEventType('bas_di')">🏢 BAS Mode</div>
+            <div class="rule-event-tile"          data-type="ev"        onclick="selectRuleEventType('ev')">🔌 EV Charger</div>
+            <div class="rule-event-tile"          data-type="battery"   onclick="selectRuleEventType('battery')">🔋 Battery Backup</div>
+            <div class="rule-event-tile"          data-type="generator" onclick="selectRuleEventType('generator')">⚙️ Generator</div>
+            <div class="rule-event-tile"          data-type="openADR"   onclick="selectRuleEventType('openADR')">📡 OpenADR</div>
           </div>
-          <div>
-            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Control Mode</label>
-            <select id="rule-mode" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
-              <option value="dlc">DLC</option><option value="di">BAS</option>
-            </select>
+        </div>
+
+        <!-- Switch / Relay options -->
+        <div id="rule-panel-switch" style="display:block;">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
+            <div>
+              <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Mode</label>
+              <select id="rule-switch-mode" onchange="onRuleSwitchModeChange()" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                <option value="uniform">Uniform</option>
+                <option value="hybrid">Hybrid</option>
+              </select>
+            </div>
+            <div id="rule-relay-action-col">
+              <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Relay</label>
+              <select id="rule-relay-action" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                <option value="all_on">All Relays</option>
+                <option value="relay1_on">Relay 1</option>
+                <option value="relay2_on">Relay 2</option>
+                <option value="relay3_on">Relay 3</option>
+                <option value="relay4_on">Relay 4</option>
+              </select>
+            </div>
+            <div id="rule-mode-col">
+              <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Control Mode</label>
+              <select id="rule-mode" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                <option value="dlc">DLC</option>
+                <option value="di">BAS</option>
+              </select>
+            </div>
+            <div id="rule-strategy-col">
+              <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Duty Cycle</label>
+              <select id="rule-strategy" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                <option value="19|30|30">100% — Full Shed</option>
+                <option value="17|27|30">90% — High</option>
+                <option value="13|21|30">75% — High-Med</option>
+                <option value="9|15|30" selected>50% — Medium</option>
+                <option value="6|10|30">33% — Low-Med</option>
+                <option value="5|7.5|30">25% — Low</option>
+              </select>
+            </div>
           </div>
-          <div>
-            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Strategy</label>
-            <select id="rule-strategy" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
-              <option value="5|30|30">5 — 25% shed (30 min)</option>
-              <option value="9|15|30">9 — 50% shed (30 min)</option>
-              <option value="15|6|30">15 — 80% shed (30 min)</option>
-              <option value="19|0|30">19 — 100% shed (30 min)</option>
-            </select>
+          <!-- Hybrid per-relay grid (hidden by default) -->
+          <div id="rule-hybrid-section" style="display:none;margin-top:10px;">
+            <div style="border:0.5px solid var(--border-md);border-radius:var(--radius-sm);overflow:hidden;">
+              <div style="display:grid;grid-template-columns:32px 80px 120px 1fr;gap:0;background:var(--surface2);padding:7px 12px;border-bottom:0.5px solid var(--border-md);">
+                <span style="font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;">On</span>
+                <span style="font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;">Relay</span>
+                <span style="font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;">Mode</span>
+                <span style="font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;">Setting</span>
+              </div>
+              <div id="rule-hybrid-rows"></div>
+            </div>
           </div>
-          <div>
-            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Duration (min)</label>
-            <input type="number" id="rule-duration" value="60" min="15" max="480" step="15" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
-          </div>
+        </div>
+
+        <!-- BAS Mode options -->
+        <div id="rule-panel-bas_di" style="display:none;">
+          <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">BAS Setpoint</label>
+          <select id="rule-bas-strategy" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+            <option value="19|30|30">Emergency — Relay ON (highest priority)</option>
+            <option value="17|27|30">High — Relay ON</option>
+            <option value="5|7.5|30">Low — Relay ON</option>
+            <option value="61|30|30">Restore — Relay ON (normal)</option>
+          </select>
+        </div>
+
+        <!-- EV / Battery / Generator / OpenADR — just need target, no extra config -->
+        <div id="rule-panel-ev"        style="display:none;"><p style="font-size:11px;color:var(--text-hint);margin:0;">All enrolled EV chargers will receive a DR dispatch when this rule fires.</p></div>
+        <div id="rule-panel-battery"   style="display:none;"><p style="font-size:11px;color:var(--text-hint);margin:0;">Connected battery backup systems will receive a dispatch when this rule fires.</p></div>
+        <div id="rule-panel-generator" style="display:none;"><p style="font-size:11px;color:var(--text-hint);margin:0;">Connected generators will receive a start command when this rule fires.</p></div>
+        <div id="rule-panel-openADR"   style="display:none;"><p style="font-size:11px;color:var(--text-hint);margin:0;">An OpenADR event will be sent to all enrolled VENs when this rule fires.</p></div>
+
+        <!-- Duration (all types) -->
+        <div style="margin-top:10px;">
+          <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Duration (min)</label>
+          <input type="number" id="rule-duration" value="60" min="15" max="480" step="15" style="width:160px;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
         </div>
       </div>
 
@@ -5447,46 +5495,6 @@ async function loadDevicesFromDB() {
   });
   // Inject EV charger assets as device entries so they appear in groups and target selectors
   injectEVIntoDevices();
-  // Load batteries and generators so they appear on the device controls list at login
-  await loadAllAssetsForDeviceList();
-}
-
-async function loadAllAssetsForDeviceList() {
-  try {
-    const [battRows, genRows, evRows] = await Promise.all([
-      supabaseGet("battery_assets?enabled=eq.true&order=enrolled_at.asc").catch(() => []),
-      supabaseGet("generator_assets?enabled=eq.true&order=enrolled_at.asc").catch(() => []),
-      supabaseGet("ev_chargers?enabled=eq.true&order=enrolled_at.asc").catch(() => [])
-    ]);
-    if (Array.isArray(battRows) && battRows.length) {
-      batteryAssets = battRows.map(a => ({
-        ...a,
-        integ_config: typeof a.integ_config === "string"
-          ? (() => { try { return JSON.parse(a.integ_config); } catch(e) { return {}; } })()
-          : (a.integ_config || {})
-      }));
-      injectBatteriesIntoDevices();
-    }
-    if (Array.isArray(genRows) && genRows.length) {
-      generatorAssets = genRows.map(a => ({
-        ...a,
-        integ_config: typeof a.integ_config === "string"
-          ? (() => { try { return JSON.parse(a.integ_config); } catch(e) { return {}; } })()
-          : (a.integ_config || {})
-      }));
-      injectGeneratorsIntoDevices();
-    }
-    if (Array.isArray(evRows) && evRows.length) {
-      evDevAssets = evRows.map(a => ({
-        ...a,
-        shed_limits:  typeof a.shed_limits  === "string" ? JSON.parse(a.shed_limits  || "{}") : (a.shed_limits  || {}),
-        integ_config: typeof a.integ_config === "string" ? JSON.parse(a.integ_config || "{}") : (a.integ_config || {})
-      }));
-      injectEVIntoDevices();
-    }
-  } catch(e) {
-    console.warn("loadAllAssetsForDeviceList:", e);
-  }
 }
 
 function injectEVIntoDevices() {
@@ -11917,106 +11925,30 @@ function buildControls() {
   DEVICES.forEach(device => {
     const card = document.createElement("div");
     card.className = "device-card";
-
-    if (device.type === "ev") {
-      const a    = device.evAsset || {};
-      const sess = (typeof evSessions !== "undefined" && evSessions[a.station_id]) || {};
-      const statusLabel = sess.status || a.status || "unknown";
-      const isOnline    = statusLabel === "available" || statusLabel === "charging";
-      const INTEG_LABELS = { ocpp201:"OCPP 2.0.1", ocpp16:"OCPP 1.6J", chargepoint:"ChargePoint", enelx:"Enel X", blink:"Blink", tesla:"Tesla Fleet", relay:"Relay" };
-      const integ = INTEG_LABELS[a.protocol] || a.protocol || "EV";
-      card.innerHTML = `
-        <div class="device-header">
-          <div>
-            <div class="device-name">${device.name}</div>
-            <div class="device-uid">${a.station_id || ""}</div>
-            <span class="asset-type-badge ev">${integ}</span>
-          </div>
-          <div class="device-badge ${isOnline ? "online" : ""}"></div>
+    card.innerHTML = `
+      <div class="device-header">
+        <div><div class="device-name">${device.name}</div><div class="device-uid">${device.uid}</div></div>
+        <div class="device-badge" id="badge-${device.id}"></div>
+      </div>
+      ${buildTzSelector(device.id, deviceTimezones[device.id] || "America/Chicago")}
+      <div class="relay-rows">
+        ${[1,2,3,4].map(n => `
+          <div class="relay-row" id="row-${device.id}-${n}" onclick="toggleRelay('${device.id}',${n})">
+            <span class="relay-row-label">Relay ${n}</span>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span class="relay-row-state" id="rlbl-${device.id}-${n}">Off</span>
+              <div class="toggle" id="rtgl-${device.id}-${n}"><div class="track"></div><div class="thumb"></div></div>
+            </div>
+          </div>`).join("")}
+      </div>
+      <div class="all-row" id="allrow-${device.id}" onclick="toggleAll('${device.id}')">
+        <span class="all-row-label">All Relays</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="all-row-state" id="alllbl-${device.id}">All off</span>
+          <div class="toggle blue" id="atgl-${device.id}"><div class="track"></div><div class="thumb"></div></div>
         </div>
-        <div class="asset-status-row"><span class="asset-status-label">Status</span><span class="asset-status-value">${statusLabel}</span></div>
-        ${sess.power_kw != null ? `<div class="asset-status-row"><span class="asset-status-label">Power</span><span class="asset-status-value">${Number(sess.power_kw).toFixed(1)} kW</span></div>` : ""}
-        <div class="asset-status-row"><span class="asset-status-label">Max</span><span class="asset-status-value">${a.max_kw != null ? a.max_kw + " kW" : "—"}</span></div>
-        <div class="asset-actions">
-          <button class="asset-btn shed" onclick="dispatchEVDRSingle('${a.station_id}', 0.75)">Shed</button>
-          <button class="asset-btn restore" onclick="restoreEVSingle('${a.station_id}')">Restore</button>
-        </div>`;
-
-    } else if (device.type === "battery") {
-      const a    = device.battAsset || {};
-      const live = (typeof batteryLiveData !== "undefined" && batteryLiveData[a.asset_id]) || {};
-      const isOnline = live.status === "online" || (!live.status && a.status !== "offline");
-      const INTEG_LABELS = { tesla_powerwall:"Tesla Powerwall", enphase:"Enphase IQ", solaredge:"SolarEdge", sonnen:"Sonnen", victron:"Victron", local:"Local REST" };
-      const integ = INTEG_LABELS[a.integration] || a.integration || "Battery";
-      card.innerHTML = `
-        <div class="device-header">
-          <div>
-            <div class="device-name">${device.name}</div>
-            <div class="device-uid">${a.asset_id || ""}</div>
-            <span class="asset-type-badge battery">${integ}</span>
-          </div>
-          <div class="device-badge ${isOnline ? "online" : ""}"></div>
-        </div>
-        ${live.soc != null ? `<div class="asset-status-row"><span class="asset-status-label">SOC</span><span class="asset-status-value">${live.soc}%</span></div>` : ""}
-        ${live.power_kw != null ? `<div class="asset-status-row"><span class="asset-status-label">Power</span><span class="asset-status-value">${Number(live.power_kw).toFixed(1)} kW</span></div>` : ""}
-        ${live.mode ? `<div class="asset-status-row"><span class="asset-status-label">Mode</span><span class="asset-status-value">${live.mode}</span></div>` : ""}
-        <div class="asset-status-row"><span class="asset-status-label">Capacity</span><span class="asset-status-value">${a.capacity_kwh != null ? a.capacity_kwh + " kWh" : "—"}</span></div>
-        <div class="asset-actions">
-          <button class="asset-btn shed" onclick="dispatchBatteryDRSingle('${a.asset_id}', 'hold')">Hold (Shed)</button>
-          <button class="asset-btn restore" onclick="restoreBatterySingle('${a.asset_id}')">Restore</button>
-        </div>`;
-
-    } else if (device.type === "generator") {
-      const a    = device.genAsset || {};
-      const live = (typeof generatorLiveData !== "undefined" && generatorLiveData[a.asset_id]) || {};
-      const status    = live.status || a.status || "standby";
-      const isRunning = status === "running";
-      const INTEG_LABELS = { generac_ml:"Generac MobileLink", modbus:"Modbus", manual:"Manual" };
-      const integ = INTEG_LABELS[a.integration] || a.integration || "Generator";
-      card.innerHTML = `
-        <div class="device-header">
-          <div>
-            <div class="device-name">${device.name}</div>
-            <div class="device-uid">${a.asset_id || ""}</div>
-            <span class="asset-type-badge generator">${integ}</span>
-          </div>
-          <div class="device-badge ${isRunning ? "online" : ""}"></div>
-        </div>
-        <div class="asset-status-row"><span class="asset-status-label">Status</span><span class="asset-status-value">${status}</span></div>
-        ${live.kw != null ? `<div class="asset-status-row"><span class="asset-status-label">Output</span><span class="asset-status-value">${live.kw} kW</span></div>` : ""}
-        <div class="asset-status-row"><span class="asset-status-label">Rated</span><span class="asset-status-value">${a.rated_kw != null ? a.rated_kw + " kW" : "—"}${a.fuel ? " · " + a.fuel : ""}</span></div>
-        <div class="asset-actions">
-          <button class="asset-btn shed" onclick="startGeneratorSingle('${a.asset_id}')">Start</button>
-          <button class="asset-btn restore" onclick="stopGeneratorSingle('${a.asset_id}')">Stop</button>
-        </div>`;
-
-    } else {
-      // LC switch — relay card
-      card.innerHTML = `
-        <div class="device-header">
-          <div><div class="device-name">${device.name}</div><div class="device-uid">${device.uid}</div></div>
-          <div class="device-badge" id="badge-${device.id}"></div>
-        </div>
-        ${buildTzSelector(device.id, deviceTimezones[device.id] || "America/Chicago")}
-        <div class="relay-rows">
-          ${[1,2,3,4].map(n => `
-            <div class="relay-row" id="row-${device.id}-${n}" onclick="toggleRelay('${device.id}',${n})">
-              <span class="relay-row-label">Relay ${n}</span>
-              <div style="display:flex;align-items:center;gap:10px;">
-                <span class="relay-row-state" id="rlbl-${device.id}-${n}">Off</span>
-                <div class="toggle" id="rtgl-${device.id}-${n}"><div class="track"></div><div class="thumb"></div></div>
-              </div>
-            </div>`).join("")}
-        </div>
-        <div class="all-row" id="allrow-${device.id}" onclick="toggleAll('${device.id}')">
-          <span class="all-row-label">All Relays</span>
-          <div style="display:flex;align-items:center;gap:10px;">
-            <span class="all-row-state" id="alllbl-${device.id}">All off</span>
-            <div class="toggle blue" id="atgl-${device.id}"><div class="track"></div><div class="thumb"></div></div>
-          </div>
-        </div>`;
-    }
-
+      </div>
+`;
     grid.appendChild(card);
   });
 }
@@ -13736,6 +13668,13 @@ async function saveRule() {
     ? (groupNames[parseInt(targetId.replace("group_",""))] || targetId)
     : (DEVICES.find(d => d.uid === targetId)?.name || targetId);
 
+  const ruleEventType  = document.querySelector("#rule-event-type-tiles .rule-event-tile.selected")?.dataset?.type || "switch";
+  const ruleSwitchMode = document.getElementById("rule-switch-mode")?.value || "uniform";
+  const ruleHybridCfg  = ruleSwitchMode === "hybrid" ? JSON.stringify(getRuleHybridConfig()) : null;
+  const ruleStratVal   = ruleEventType === "bas_di"
+    ? (document.getElementById("rule-bas-strategy")?.value || "19|30|30")
+    : (document.getElementById("rule-strategy")?.value || "9|15|30");
+
   const record = {
     tier:           selectedTier,
     name:           document.getElementById("rule-name")?.value?.trim() || null,
@@ -13748,9 +13687,11 @@ async function saveRule() {
     target_type:    targetType || null,
     target_id:      targetId   || null,
     target_name:    targetName || null,
-    relay_action:   document.getElementById("rule-relay-action")?.value || "all_on",
+    event_type:     ruleEventType,
+    relay_action:   ruleSwitchMode === "hybrid" ? "hybrid" : (document.getElementById("rule-relay-action")?.value || "all_on"),
     mode:           document.getElementById("rule-mode")?.value || "dlc",
-    strategy_val:   document.getElementById("rule-strategy")?.value || "9|15|30",
+    strategy_val:   ruleStratVal,
+    hybrid_config:  ruleHybridCfg,
     duration_mins:  parseInt(document.getElementById("rule-duration")?.value) || 60,
     max_per_day:    parseInt(document.getElementById("rule-max-per-day")?.value) || 3,
     min_rest_mins:  parseInt(document.getElementById("rule-min-rest")?.value) || 120,
@@ -13791,6 +13732,17 @@ async function editRule(id) {
     document.getElementById("rule-feed").value      = rule.feed_key;
     document.getElementById("rule-operator").value  = rule.operator;
     document.getElementById("rule-threshold").value = rule.threshold;
+    if (rule.event_type) selectRuleEventType(rule.event_type);
+    if (rule.event_type === "switch" && rule.relay_action === "hybrid") {
+      document.getElementById("rule-switch-mode").value = "hybrid";
+      onRuleSwitchModeChange();
+      if (rule.hybrid_config) {
+        try { applyRuleHybridConfig(JSON.parse(rule.hybrid_config)); } catch(e) {}
+      }
+    }
+    if (rule.event_type === "bas_di" && rule.strategy_val) {
+      setTimeout(() => { const el = document.getElementById("rule-bas-strategy"); if(el) el.value = rule.strategy_val; }, 50);
+    }
     document.getElementById("rule-duration").value  = rule.duration_mins;
     document.getElementById("rule-max-per-day").value = rule.max_per_day;
     document.getElementById("rule-min-rest").value  = rule.min_rest_mins;
@@ -14218,39 +14170,83 @@ async function cancelAutopilot(ruleId) {
 }
 
 async function fireAutopilotEvent(rule, fv) {
-  const [stratNum, stratTimeout, stratCycle] = (rule.strategy_val || "9|15|30").split("|").map(Number);
-  const reps = Math.max(1, Math.round((rule.duration_mins || 60) / (stratCycle || 30)));
+  const evType    = rule.event_type || "switch";
   const schedUnix = Math.floor(Date.now() / 1000);
-  const hex = buildLCHex(rule.relay_action || "all_on", rule.mode || "dlc", stratNum, reps, schedUnix);
+  const duration  = rule.duration_mins || 60;
 
-  if (rule.target_type === "group") {
-    const gNum = parseInt((rule.target_id || "group_1").replace("group_",""));
-    const members = DEVICES.filter(d => (groupAssignments[d.uid]||[]).includes(gNum));
-    for (const d of members) await sendLCToDevice(d.uid, hex);
-  } else {
-    await sendLCToDevice(rule.target_id, hex);
+  // Helper: send LC to device or group
+  async function sendToTarget(hex) {
+    if (rule.target_type === "group") {
+      const gNum    = parseInt((rule.target_id || "group_1").replace("group_",""));
+      const members = DEVICES.filter(d => (groupAssignments[d.uid]||[]).includes(gNum));
+      for (const d of members) await sendLCToDevice(d.uid, hex);
+    } else {
+      await sendLCToDevice(rule.target_id, hex);
+    }
   }
 
-  // Dispatch to EV chargers if any are enrolled
-  if (typeof dispatchEVChargersDR === "function") await dispatchEVChargersDR(parseFloat(rule?.signal_level || "0.75"));
+  // ── Route by event type ───────────────────────────────────────────────────
+  if (evType === "switch" && rule.relay_action === "hybrid" && rule.hybrid_config) {
+    // Hybrid: send DLC and BAS commands per relay config
+    try {
+      const cfg = JSON.parse(rule.hybrid_config);
+      for (const rel of (cfg.dlcRelays || [])) {
+        const [sn,,sc] = (rel.stratVal||"9|15|30").split("|").map(Number);
+        const reps = Math.max(1, Math.round(duration / (sc||30)));
+        await sendToTarget(buildLCHex(rel.action, "dlc", sn, reps, schedUnix));
+      }
+      for (const rel of (cfg.basRelays || [])) {
+        const [sn,,sc] = (rel.stratVal||"19|30|30").split("|").map(Number);
+        const reps = Math.max(1, Math.round(duration / (sc||30)));
+        await sendToTarget(buildLCHex(rel.action, "di", sn, reps, schedUnix));
+      }
+    } catch(e) { console.error("Hybrid fire error:", e); }
 
-  // Log to schedule_queue for audit trail
+  } else if (evType === "switch") {
+    const [stratNum,,stratCycle] = (rule.strategy_val || "9|15|30").split("|").map(Number);
+    const reps = Math.max(1, Math.round(duration / (stratCycle||30)));
+    await sendToTarget(buildLCHex(rule.relay_action || "all_on", rule.mode || "dlc", stratNum, reps, schedUnix));
+
+  } else if (evType === "bas_di") {
+    const [stratNum,,stratCycle] = (rule.strategy_val || "19|30|30").split("|").map(Number);
+    const reps = Math.max(1, Math.round(duration / (stratCycle||30)));
+    await sendToTarget(buildLCHex("all_on", "di", stratNum, reps, schedUnix));
+
+  } else if (evType === "ev") {
+    if (typeof dispatchEVChargersDR === "function") await dispatchEVChargersDR(parseFloat(rule?.signal_level || "0.75"));
+
+  } else if (evType === "battery") {
+    if (typeof dispatchBatteryDR === "function") await dispatchBatteryDR(rule);
+
+  } else if (evType === "generator") {
+    if (typeof dispatchGeneratorDR === "function") await dispatchGeneratorDR(rule);
+
+  } else if (evType === "openADR") {
+    if (typeof dispatchOpenADREvent === "function") await dispatchOpenADREvent(rule);
+  }
+
+  // ── Audit log to schedule_queue ───────────────────────────────────────────
   try {
     await supabasePost("schedule_queue", {
-      name: `AUTO: ${rule.name || rule.feed_key}`,
-      fire_at: new Date().toISOString(),
-      fired_at: new Date().toISOString(),
-      target_type: rule.target_type, target_id: rule.target_id, target_name: rule.target_name,
-      relay_action: rule.relay_action, duration_minutes: rule.duration_mins,
-      lc_mode: rule.mode, lc_strategy: stratNum, lc_reps: reps,
-      status: "fired"
+      name:             `AUTO: ${rule.name || rule.feed_key}`,
+      fire_at:          new Date().toISOString(),
+      fired_at:         new Date().toISOString(),
+      target_type:      rule.target_type,
+      target_id:        rule.target_id,
+      target_name:      rule.target_name,
+      relay_action:     rule.relay_action || "all_on",
+      duration_minutes: duration,
+      lc_mode:          rule.mode || "dlc",
+      event_type:       evType,
+      status:           "fired"
     });
-  } catch(e) {}
+  } catch(e) { console.warn("schedule_queue log:", e); }
 
-  // Update trigger log
+  // ── Update trigger log outcome ────────────────────────────────────────────
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/monitor_trigger_log?rule_id=eq.${rule.id}&outcome=eq.pending`, {
-      method:"PATCH", headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json" },
+      method:"PATCH",
+      headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json" },
       body: JSON.stringify({ outcome:"fired" })
     });
   } catch(e) {}
@@ -22997,9 +22993,9 @@ async function searchOutageMap() {
             Open the site, navigate to their <strong>Outage Map</strong> or <strong>Outage Center</strong>, 
             then copy that page's URL and paste it into the field above.
           </div>
-          <button type="button" onclick="window.open('${homepageUrl}','_blank')"
+          <button type="button" onclick="window.open('${homepageUrl}','_blank'); showOutageFloat('${name}','${homepageUrl}','new-util-map-url')"
             style="padding:5px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--blue-dark);background:var(--blue-dark);color:#fff;font-size:11px;font-weight:600;cursor:pointer;margin-right:6px;">
-            &#128279; Open Website
+            &#128279; Open Website + Helper
           </button>
           ${poUrl ? `<a href="${poUrl}" target="_blank" style="font-size:11px;color:var(--text-hint);">PowerOutage.us page</a>` : ""}
         </div>`;
@@ -23152,7 +23148,239 @@ function onTargetTypeChange(context) {
 
 
 
-// ── Hybrid / Switch Mode ──────────────────────────────────────────────────────
+
+// ── Outage URL Float Helper ───────────────────────────────────────────────────
+let _outageFloatTargetField = "new-util-map-url";
+
+function showOutageFloat(utilName, homepageUrl, targetFieldId) {
+  _outageFloatTargetField = targetFieldId || "new-util-map-url";
+  const panel   = document.getElementById("outage-url-float");
+  const nameEl  = document.getElementById("outage-float-util-name");
+  const reopenEl= document.getElementById("outage-float-reopen");
+  const input   = document.getElementById("outage-float-input");
+  const hint    = document.getElementById("outage-float-hint");
+  if (!panel) return;
+  if (nameEl)   nameEl.textContent = utilName || "the utility";
+  if (reopenEl) { reopenEl.href = homepageUrl || "#"; reopenEl.textContent = `↗ Re-open ${utilName || "utility website"}`; }
+  if (input)    input.value = "";
+  if (hint)     hint.textContent = "";
+  panel.style.display = "block";
+  // Animate in
+  panel.style.transform = "translateY(20px)";
+  panel.style.opacity   = "0";
+  panel.style.transition = "transform 0.2s ease, opacity 0.2s ease";
+  requestAnimationFrame(() => {
+    panel.style.transform = "translateY(0)";
+    panel.style.opacity   = "1";
+  });
+  if (input) setTimeout(() => input.focus(), 250);
+}
+
+function closeOutageFloat() {
+  const panel = document.getElementById("outage-url-float");
+  if (!panel) return;
+  panel.style.transform = "translateY(20px)";
+  panel.style.opacity   = "0";
+  setTimeout(() => { panel.style.display = "none"; }, 200);
+}
+
+function outageFloatValidate() {
+  const input  = document.getElementById("outage-float-input");
+  const btn    = document.getElementById("outage-float-set-btn");
+  const hint   = document.getElementById("outage-float-hint");
+  const val    = input?.value?.trim() || "";
+  const isUrl  = val.startsWith("http://") || val.startsWith("https://");
+  if (btn)  btn.disabled = !isUrl;
+  if (btn)  btn.style.opacity = isUrl ? "1" : "0.5";
+  if (hint) hint.textContent = val && !isUrl ? "Must be a full URL starting with https://" : "";
+}
+
+function outageFloatSet() {
+  const input  = document.getElementById("outage-float-input");
+  const val    = input?.value?.trim() || "";
+  if (!val.startsWith("http")) return;
+  // Set the target field
+  const targetEl = document.getElementById(_outageFloatTargetField);
+  if (targetEl) {
+    targetEl.value = val;
+    targetEl.style.background = "var(--green-lt)";
+    setTimeout(() => { targetEl.style.background = ""; }, 1500);
+  }
+  // Update result area
+  const resultEl = document.getElementById("outage-search-result");
+  if (resultEl) {
+    resultEl.innerHTML = `<span style="color:var(--green-dark);">✓ Outage map URL set: <a href="${val}" target="_blank" style="color:var(--blue-dark);">${val}</a></span>`;
+  }
+  closeOutageFloat();
+}
+
+// Make float draggable
+(function() {
+  let dragging = false, ox = 0, oy = 0;
+  document.addEventListener("DOMContentLoaded", () => {
+    const panel  = document.getElementById("outage-url-float");
+    const header = panel?.querySelector("div[style*='background:var(--blue-dark)']");
+    if (!header || !panel) return;
+    header.style.cursor = "move";
+    header.addEventListener("mousedown", e => {
+      dragging = true;
+      const rect = panel.getBoundingClientRect();
+      ox = e.clientX - rect.left;
+      oy = e.clientY - rect.top;
+      e.preventDefault();
+    });
+    document.addEventListener("mousemove", e => {
+      if (!dragging) return;
+      const x = e.clientX - ox;
+      const y = e.clientY - oy;
+      panel.style.left   = `${Math.max(0, Math.min(window.innerWidth  - panel.offsetWidth,  x))}px`;
+      panel.style.top    = `${Math.max(0, Math.min(window.innerHeight - panel.offsetHeight, y))}px`;
+      panel.style.right  = "auto";
+      panel.style.bottom = "auto";
+    });
+    document.addEventListener("mouseup", () => { dragging = false; });
+  });
+})();
+// ── End Outage Float ──────────────────────────────────────────────────────────
+
+// ── Rule Form — Event Type & Hybrid ──────────────────────────────────────────
+let selectedRuleEventType = "switch";
+
+function selectRuleEventType(type) {
+  selectedRuleEventType = type;
+  document.querySelectorAll("#rule-event-type-tiles .rule-event-tile").forEach(el => {
+    el.classList.toggle("selected", el.dataset.type === type);
+  });
+  // Show/hide panels
+  ["switch","bas_di","ev","battery","generator","openADR"].forEach(t => {
+    const el = document.getElementById(`rule-panel-${t}`);
+    if (el) el.style.display = t === type ? "block" : "none";
+  });
+  // Reset switch mode to uniform when switching away
+  if (type !== "switch") {
+    const modeEl = document.getElementById("rule-switch-mode");
+    if (modeEl) modeEl.value = "uniform";
+    onRuleSwitchModeChange();
+  }
+}
+
+function onRuleSwitchModeChange() {
+  const mode       = document.getElementById("rule-switch-mode")?.value;
+  const hybridEl   = document.getElementById("rule-hybrid-section");
+  const relayCol   = document.getElementById("rule-relay-action-col");
+  const modeCol    = document.getElementById("rule-mode-col");
+  const stratCol   = document.getElementById("rule-strategy-col");
+  const isHybrid   = mode === "hybrid";
+  if (hybridEl) hybridEl.style.display = isHybrid ? "block" : "none";
+  if (relayCol) { relayCol.style.display = isHybrid ? "none" : "block"; }
+  if (modeCol)  { modeCol.style.display  = isHybrid ? "none" : "block"; }
+  if (stratCol) { stratCol.style.display = isHybrid ? "none" : "block"; }
+  if (isHybrid) renderRuleHybridRows();
+}
+
+function renderRuleHybridRows() {
+  const container = document.getElementById("rule-hybrid-rows");
+  if (!container) return;
+  container.innerHTML = [1,2,3,4].map(r => `
+    <div style="display:grid;grid-template-columns:32px 80px 120px 1fr;gap:0;padding:8px 12px;border-bottom:0.5px solid var(--border);align-items:center;" id="rule-relay-row-${r}">
+      <input type="checkbox" id="rule-relay-${r}-active" checked onchange="onRuleRelayActiveChange(${r})"
+        style="width:15px;height:15px;accent-color:var(--blue-dark);cursor:pointer;" />
+      <span style="font-size:13px;font-weight:700;color:var(--text-primary);">Relay ${r}</span>
+      <div id="rule-relay-${r}-mode-col">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;margin-bottom:3px;">
+          <input type="radio" name="rule-relay-${r}-mode" value="dlc" checked onchange="onRuleRelayModeChange(${r})" style="accent-color:var(--blue-dark);" />
+          <span style="font-size:11px;font-weight:600;color:var(--blue-dark);">DLC</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+          <input type="radio" name="rule-relay-${r}-mode" value="bas" onchange="onRuleRelayModeChange(${r})" style="accent-color:var(--green-dark);" />
+          <span style="font-size:11px;font-weight:600;color:var(--green-dark);">BAS</span>
+        </label>
+      </div>
+      <div id="rule-relay-${r}-setting">
+        <select class="sched-select" id="rule-relay-${r}-dlc" style="font-size:11px;">
+          <option value="19|30|30">100% — Full Shed</option>
+          <option value="17|27|30">90% — High</option>
+          <option value="13|21|30">75% — High-Med</option>
+          <option value="9|15|30" selected>50% — Medium</option>
+          <option value="6|10|30">33% — Low-Med</option>
+          <option value="5|7.5|30">25% — Low</option>
+        </select>
+      </div>
+    </div>
+  `).join("");
+}
+
+function onRuleRelayActiveChange(r) {
+  const active  = document.getElementById(`rule-relay-${r}-active`)?.checked;
+  const modeCol = document.getElementById(`rule-relay-${r}-mode-col`);
+  const setting = document.getElementById(`rule-relay-${r}-setting`);
+  const label   = document.querySelector(`#rule-relay-row-${r} span`);
+  const opacity = active ? "1" : "0.35";
+  const pointer = active ? "auto" : "none";
+  if (modeCol) { modeCol.style.opacity = opacity; modeCol.style.pointerEvents = pointer; }
+  if (setting) { setting.style.opacity = opacity; setting.style.pointerEvents = pointer; }
+  if (label)   label.style.color = active ? "var(--text-primary)" : "var(--text-hint)";
+}
+
+function onRuleRelayModeChange(r) {
+  const mode    = document.querySelector(`input[name="rule-relay-${r}-mode"]:checked`)?.value;
+  const setting = document.getElementById(`rule-relay-${r}-setting`);
+  if (!setting) return;
+  if (mode === "bas") {
+    setting.innerHTML = `<select class="sched-select" id="rule-relay-${r}-bas" style="font-size:11px;">
+      <option value="19|30|30">Emergency — Relay ON</option>
+      <option value="17|27|30">High — Relay ON</option>
+      <option value="5|7.5|30">Low — Relay ON</option>
+      <option value="61|30|30">Restore — Relay ON</option>
+    </select>`;
+  } else {
+    setting.innerHTML = `<select class="sched-select" id="rule-relay-${r}-dlc" style="font-size:11px;">
+      <option value="19|30|30">100% — Full Shed</option>
+      <option value="17|27|30">90% — High</option>
+      <option value="13|21|30">75% — High-Med</option>
+      <option value="9|15|30" selected>50% — Medium</option>
+      <option value="6|10|30">33% — Low-Med</option>
+      <option value="5|7.5|30">25% — Low</option>
+    </select>`;
+  }
+}
+
+function getRuleHybridConfig() {
+  const dlcRelays = [], basRelays = [];
+  [1,2,3,4].forEach(r => {
+    if (!document.getElementById(`rule-relay-${r}-active`)?.checked) return;
+    const mode     = document.querySelector(`input[name="rule-relay-${r}-mode"]:checked`)?.value || "dlc";
+    const stratVal = mode === "bas"
+      ? document.getElementById(`rule-relay-${r}-bas`)?.value
+      : document.getElementById(`rule-relay-${r}-dlc`)?.value;
+    const action = `relay${r}_on`;
+    if (mode === "bas") basRelays.push({ num:r, action, stratVal });
+    else               dlcRelays.push({ num:r, action, stratVal });
+  });
+  return { dlcRelays, basRelays };
+}
+
+function applyRuleHybridConfig(cfg) {
+  // Restore saved hybrid config into the relay grid
+  const allRelays = [...(cfg.dlcRelays||[]), ...(cfg.basRelays||[])];
+  const activeNums = new Set(allRelays.map(r => r.num));
+  [1,2,3,4].forEach(r => {
+    const activeEl = document.getElementById(`rule-relay-${r}-active`);
+    if (activeEl) { activeEl.checked = activeNums.has(r); onRuleRelayActiveChange(r); }
+    const relCfg = allRelays.find(x => x.num === r);
+    if (!relCfg) return;
+    const mode = cfg.basRelays?.some(x=>x.num===r) ? "bas" : "dlc";
+    const radio = document.querySelector(`input[name="rule-relay-${r}-mode"][value="${mode}"]`);
+    if (radio) { radio.checked = true; onRuleRelayModeChange(r); }
+    setTimeout(() => {
+      const sel = document.getElementById(`rule-relay-${r}-${mode}`);
+      if (sel && relCfg.stratVal) sel.value = relCfg.stratVal;
+    }, 50);
+  });
+}
+
+// ── End Rule Form Helpers ─────────────────────────────────────────────────────
+
 const BAS_LEVELS = [
   { value: "19|30|30", label: "Emergency", sub: "Relay ON — highest priority" },
   { value: "17|27|30", label: "High",      sub: "Relay ON — high priority"    },
@@ -23708,5 +23936,78 @@ function showHelpTab(key) {
 // Init help tab with scheduling content when navigated to
 
 </script>
+
+  <!-- ── Outage URL Helper Float ─────────────────────────────────────────── -->
+  <div id="outage-url-float" style="
+    display:none;
+    position:fixed;
+    bottom:24px;
+    right:24px;
+    width:320px;
+    background:var(--surface);
+    border:1.5px solid var(--blue-dark);
+    border-radius:var(--radius-md);
+    box-shadow:0 8px 32px rgba(0,0,0,0.28);
+    z-index:99999;
+    overflow:hidden;
+    font-family:var(--font);
+  ">
+    <!-- Header -->
+    <div style="background:var(--blue-dark);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:14px;">🗺️</span>
+        <span style="font-size:12px;font-weight:700;color:#fff;">Outage Map Finder</span>
+      </div>
+      <button onclick="closeOutageFloat()"
+        style="background:none;border:none;color:rgba(255,255,255,0.7);font-size:16px;cursor:pointer;padding:0;line-height:1;"
+        title="Close">✕</button>
+    </div>
+
+    <!-- Body -->
+    <div style="padding:14px;">
+      <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;line-height:1.6;">
+        <strong style="color:var(--text-primary);" id="outage-float-util-name">Utility</strong>
+        — navigate to their outage map in the other tab, then copy the URL and paste it below.
+      </div>
+
+      <!-- Steps -->
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;">
+        <div style="display:flex;align-items:flex-start;gap:8px;font-size:11px;color:var(--text-secondary);">
+          <span style="background:var(--blue-dark);color:#fff;border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;margin-top:1px;">1</span>
+          Look for <strong style="margin:0 3px;">"Outage Map"</strong> or <strong style="margin:0 3px;">"Outage Center"</strong> in their nav
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:8px;font-size:11px;color:var(--text-secondary);">
+          <span style="background:var(--blue-dark);color:#fff;border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;margin-top:1px;">2</span>
+          Copy the URL from the browser address bar
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:8px;font-size:11px;color:var(--text-secondary);">
+          <span style="background:var(--blue-dark);color:#fff;border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;margin-top:1px;">3</span>
+          Paste it below and click <strong style="margin-left:3px;">Set URL</strong>
+        </div>
+      </div>
+
+      <!-- Paste field -->
+      <div style="display:flex;gap:6px;align-items:stretch;">
+        <input type="url" id="outage-float-input"
+          placeholder="Paste outage map URL here…"
+          style="flex:1;padding:7px 10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);background:var(--surface2);font-size:11px;font-family:monospace;min-width:0;"
+          oninput="outageFloatValidate()"
+          onkeydown="if(event.key==='Enter') outageFloatSet()" />
+        <button onclick="outageFloatSet()" id="outage-float-set-btn"
+          style="padding:7px 12px;border-radius:var(--radius-sm);border:none;background:var(--blue-dark);color:#fff;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;opacity:0.5;"
+          disabled>Set URL</button>
+      </div>
+      <div id="outage-float-hint" style="font-size:10px;color:var(--text-hint);margin-top:5px;min-height:14px;"></div>
+
+      <!-- Quick re-open link -->
+      <div style="margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border);text-align:center;">
+        <a id="outage-float-reopen" href="#" target="_blank"
+          style="font-size:10px;color:var(--blue-dark);text-decoration:none;">
+          ↗ Re-open utility website
+        </a>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>
