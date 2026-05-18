@@ -12446,7 +12446,7 @@ function renderGroups() {
         </div>
         <div class="group-devices">
           ${(() => {
-            const relayDevs = DEVICES.filter(d => d.type !== "ev" && !d.uid.includes("PLACEHOLDER"));
+            const relayDevs = DEVICES.filter(d => (!d.type || d.type === "relay") && !d.uid.includes("PLACEHOLDER"));
             const evDevs    = DEVICES.filter(d => d.type === "ev");
             let html = "";
             if (relayDevs.length) {
