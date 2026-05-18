@@ -5537,27 +5537,82 @@ async function loadDevicesFromDB() {
   try {
     const rows = await supabaseGet("devices?enabled=eq.true&order=id.asc");
     if (Array.isArray(rows) && rows.length > 0) {
-      DEVICES = rows.map(r => ({ id: r.device_id, uid: r.uid, name: r.name }));
+      DEVICES = rows.map(r => ({ id: r.device_id, uid: r.uid, name: r.name, type: r.type||"relay", location: r.location||"" }));
     } else {
-      // Fallback to hardcoded if table is empty
       DEVICES = [
-        { id: "device1", uid: "dev:868032061596023", name: "Unit 6023" },
-        { id: "device2", uid: "dev:868050045717135", name: "Unit 7135" },
+        { id: "device1", uid: "dev:868032061596023", name: "Unit 6023", type:"relay" },
+        { id: "device2", uid: "dev:868050045717135", name: "Unit 7135", type:"relay" },
       ];
     }
   } catch(e) {
     console.warn("Could not load devices from Supabase, using defaults:", e);
     DEVICES = [
-      { id: "device1", uid: "dev:868032061596023", name: "Unit 6023" },
-      { id: "device2", uid: "dev:868050045717135", name: "Unit 7135" },
+      { id: "device1", uid: "dev:868032061596023", name: "Unit 6023", type:"relay" },
+      { id: "device2", uid: "dev:868050045717135", name: "Unit 7135", type:"relay" },
     ];
   }
-  // Re-initialize relay state for loaded devices
+
+  // Re-initialize relay state
   DEVICES.forEach(d => {
     if (!relayState[d.id]) relayState[d.id] = { 1:false, 2:false, 3:false, 4:false, all:false };
   });
-  // Inject EV charger assets as device entries so they appear in groups and target selectors
-  injectEVIntoDevices();
+
+  // Load all asset types and inject into DEVICES so they appear in groups at startup
+  await loadAllAssetsIntoDevices();
+}
+
+async function loadAllAssetsIntoDevices() {
+  // Load EV, battery, generator from localStorage + Supabase and inject into DEVICES
+  // so they appear in group selectors and target dropdowns without opening their tabs first
+
+  const safeGet = async (q, key) => {
+    let db = [], local = [];
+    try { const r = await supabaseGet(q); if (Array.isArray(r)) db = r; } catch(e) {}
+    try { const s = localStorage.getItem(key); if (s) local = JSON.parse(s); } catch(e) {}
+    const ids = new Set(db.map(r => r.station_id || r.asset_id));
+    return [...db, ...local.filter(r => !(ids.has(r.station_id) || ids.has(r.asset_id)))];
+  };
+
+  const [evRows, battRows, genRows] = await Promise.all([
+    safeGet("ev_chargers?enabled=eq.true&order=enrolled_at.asc",       "lcp_ev_chargers_v1"),
+    safeGet("battery_assets?enabled=eq.true&order=enrolled_at.asc",    "lcp_battery_assets_v1"),
+    safeGet("generator_assets?enabled=eq.true&order=enrolled_at.asc",  "lcp_generator_assets_v1"),
+  ]);
+
+  // Populate global arrays used by existing inject functions
+  if (!evChargers.length && evRows.length) {
+    evChargers = evRows;
+    if (typeof evDevAssets === "undefined") window.evDevAssets = evRows;
+    else evDevAssets = evRows;
+  }
+  if (!batteryAssets.length && battRows.length) batteryAssets = battRows;
+  if (!generatorAssets.length && genRows.length) generatorAssets = genRows;
+
+  // Inject into DEVICES directly using same pattern as inject functions
+  DEVICES = DEVICES.filter(d => d.type === "relay" || !d.type);
+
+  evRows.forEach(a => {
+    const uid = `ev_${a.station_id||a.asset_id}`;
+    DEVICES.push({ id:uid, uid, name:a.name, type:"ev", evAsset:a });
+    if (!relayState[uid]) relayState[uid] = {1:false,2:false,3:false,4:false,all:false};
+  });
+
+  battRows.forEach(a => {
+    const uid = `batt_${a.asset_id}`;
+    const cfg = typeof a.integ_config === "string" ? (() => { try { return JSON.parse(a.integ_config); } catch(e) { return {}; } })() : (a.integ_config||{});
+    DEVICES.push({ id:uid, uid, name:a.name, type:"battery", battAsset:{...a, integ_config:cfg} });
+    if (!relayState[uid]) relayState[uid] = {1:false,2:false,3:false,4:false,all:false};
+  });
+
+  genRows.forEach(a => {
+    const uid = `gen_${a.asset_id}`;
+    const cfg = typeof a.integ_config === "string" ? (() => { try { return JSON.parse(a.integ_config); } catch(e) { return {}; } })() : (a.integ_config||{});
+    DEVICES.push({ id:uid, uid, name:a.name, type:"generator", genAsset:{...a, integ_config:cfg} });
+    if (!relayState[uid]) relayState[uid] = {1:false,2:false,3:false,4:false,all:false};
+  });
+
+  if (typeof refreshGroupSelectors === "function") refreshGroupSelectors();
+  if (typeof populateTargetSelector === "function") populateTargetSelector();
 }
 
 function injectEVIntoDevices() {
@@ -9751,17 +9806,26 @@ async function renderMasterAssets() {
   });
 
   evRows.forEach(c => {
-    rows.push({ type:"ev", name:c.name||c.charger_id, uid:c.charger_id||c.asset_id||c.id, groups:[], gnums:[], status:c.status||null, qty:1,
+    const uid    = `ev_${c.station_id||c.asset_id||c.id}`;
+    const gnums  = groupMap[uid] || [];
+    const gNames = gnums.map(n => groupNameMap[n] || `G${n}`);
+    rows.push({ type:"ev", name:c.name||c.station_id, uid, groups:gNames, gnums, status:c.status||null, qty:1,
       notes:[c.brand, c.location].filter(Boolean).join(" — ") });
   });
 
   battRows.forEach(a => {
-    rows.push({ type:"battery", name:a.name||a.asset_id, uid:a.asset_id, groups:[], gnums:[], status:a.status||null, qty:1,
+    const uid    = `batt_${a.asset_id}`;
+    const gnums  = groupMap[uid] || [];
+    const gNames = gnums.map(n => groupNameMap[n] || `G${n}`);
+    rows.push({ type:"battery", name:a.name||a.asset_id, uid, groups:gNames, gnums, status:a.status||null, qty:1,
       notes:`${a.capacity_kwh||"?"}kWh / ${a.max_kw||"?"}kW${a.integration?` (${a.integration})`:""}`  });
   });
 
   genRows.forEach(a => {
-    rows.push({ type:"generator", name:a.name||a.asset_id, uid:a.asset_id, groups:[], gnums:[], status:a.status||null, qty:1,
+    const uid    = `gen_${a.asset_id}`;
+    const gnums  = groupMap[uid] || [];
+    const gNames = gnums.map(n => groupNameMap[n] || `G${n}`);
+    rows.push({ type:"generator", name:a.name||a.asset_id, uid, groups:gNames, gnums, status:a.status||null, qty:1,
       notes:`${a.capacity_kw||"?"}kW${a.integration?` (${a.integration})`:""}`  });
   });
 
