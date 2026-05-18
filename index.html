@@ -1145,11 +1145,19 @@
 
           <!-- EV CHARGER controls -->
           <div id="sf-panel-ev" class="sched-field full sf-event-panel" style="display:none;">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+              <div>
+                <label class="sched-label">Target Type</label>
+                <select class="sched-select" id="sf-ev-target-type" onchange="onEvTargetTypeChange()">
+                  <option value="" disabled selected>— Select —</option>
+                  <option value="group">Group</option>
+                  <option value="device">Individual Asset</option>
+                </select>
+              </div>
               <div>
                 <label class="sched-label">Target</label>
                 <select class="sched-select" id="sf-ev-target">
-                  <option value="" disabled selected>— Select EV Charger —</option>
+                  <option value="" disabled selected>— Choose One —</option>
                 </select>
               </div>
               <div>
@@ -1164,16 +1172,24 @@
                 </select>
               </div>
             </div>
-            <div style="font-size:11px;color:var(--text-hint);">Sends a charge rate limit command to the selected EV charger via its configured integration (OCPP, ChargePoint, Tesla Fleet API, etc.).</div>
+            <div style="font-size:11px;color:var(--text-hint);">Sends a charge rate limit command to the selected EV charger or all EV chargers in a group via their configured integration.</div>
           </div>
 
           <!-- BATTERY BACKUP controls -->
           <div id="sf-panel-battery" class="sched-field full sf-event-panel" style="display:none;">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
               <div>
-                <label class="sched-label">Target Battery</label>
+                <label class="sched-label">Target Type</label>
+                <select class="sched-select" id="sf-batt-target-type" onchange="onBattTargetTypeChange()">
+                  <option value="" disabled selected>— Select —</option>
+                  <option value="group">Group</option>
+                  <option value="device">Individual Asset</option>
+                </select>
+              </div>
+              <div>
+                <label class="sched-label">Target</label>
                 <select class="sched-select" id="sf-batt-target">
-                  <option value="" disabled selected>— Select Battery System —</option>
+                  <option value="" disabled selected>— Choose One —</option>
                 </select>
               </div>
               <div>
@@ -1192,11 +1208,19 @@
 
           <!-- GENERATOR controls -->
           <div id="sf-panel-generator" class="sched-field full sf-event-panel" style="display:none;">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
               <div>
-                <label class="sched-label">Target Generator</label>
+                <label class="sched-label">Target Type</label>
+                <select class="sched-select" id="sf-gen-target-type" onchange="onGenTargetTypeChange()">
+                  <option value="" disabled selected>— Select —</option>
+                  <option value="group">Group</option>
+                  <option value="device">Individual Asset</option>
+                </select>
+              </div>
+              <div>
+                <label class="sched-label">Target</label>
                 <select class="sched-select" id="sf-gen-target">
-                  <option value="" disabled selected>— Select Generator —</option>
+                  <option value="" disabled selected>— Choose One —</option>
                 </select>
               </div>
               <div>
@@ -6220,31 +6244,37 @@ function showSchedConfirm() {
     actionSummary = `BAS Mode — Strategy ${stratVal.split("|")[0]}`;
 
   } else if (eventType === "ev") {
+    type          = getVal("sf-ev-target-type");
     targetVal     = getVal("sf-ev-target");
     const evPct   = getVal("sf-ev-shed-pct");
-    if (!targetVal) { setStatus("error", "Please select an EV charger."); return; }
+    if (!type)      { setStatus("error", "Please select a target type."); return; }
+    if (!targetVal) { setStatus("error", "Please select an EV target."); return; }
     if (evPct === "") { setStatus("error", "Please select a charge rate limit."); return; }
-    targetName    = unitName(targetVal) || targetVal;
+    targetName    = type === "group" ? (groupNames[parseInt(targetVal.replace("group_",""))] || targetVal) : (unitName(targetVal) || targetVal);
     actionSummary = document.querySelector(`#sf-ev-shed-pct option[value="${evPct}"]`)?.text || `${evPct}%`;
-    stratVal      = "ev_shed"; // sentinel so validation passes
+    stratVal      = "ev_shed";
 
   } else if (eventType === "battery") {
+    type          = getVal("sf-batt-target-type");
     targetVal     = getVal("sf-batt-target");
     const battAct = getVal("sf-batt-action");
-    if (!targetVal) { setStatus("error", "Please select a battery system."); return; }
+    if (!type)      { setStatus("error", "Please select a target type."); return; }
+    if (!targetVal) { setStatus("error", "Please select a battery target."); return; }
     if (!battAct)   { setStatus("error", "Please select a battery action."); return; }
-    targetName    = unitName(targetVal) || targetVal;
+    targetName    = type === "group" ? (groupNames[parseInt(targetVal.replace("group_",""))] || targetVal) : (unitName(targetVal) || targetVal);
     actionSummary = document.querySelector(`#sf-batt-action option[value="${battAct}"]`)?.text || battAct;
-    stratVal      = "batt_action"; // sentinel
+    stratVal      = "batt_action";
 
   } else if (eventType === "generator") {
+    type          = getVal("sf-gen-target-type");
     targetVal     = getVal("sf-gen-target");
     const genAct  = getVal("sf-gen-action");
-    if (!targetVal) { setStatus("error", "Please select a generator."); return; }
+    if (!type)      { setStatus("error", "Please select a target type."); return; }
+    if (!targetVal) { setStatus("error", "Please select a generator target."); return; }
     if (!genAct)    { setStatus("error", "Please select a generator action."); return; }
-    targetName    = unitName(targetVal) || targetVal;
+    targetName    = type === "group" ? (groupNames[parseInt(targetVal.replace("group_",""))] || targetVal) : (unitName(targetVal) || targetVal);
     actionSummary = document.querySelector(`#sf-gen-action option[value="${genAct}"]`)?.text || genAct;
-    stratVal      = "gen_action"; // sentinel
+    stratVal      = "gen_action";
 
   } else if (eventType === "openadr") {
     const oadrLevel = getVal("sf-oadr-level");
@@ -6352,19 +6382,24 @@ async function _executeCreateSchedule() {
 
   // ── EV Charger ─────────────────────────────────────────────────────────────
   if (evType === "ev") {
-    const evTarget  = getVal("sf-ev-target");
-    const evPct     = parseFloat(getVal("sf-ev-shed-pct"));
-    if (!evTarget)  { setStatus("error", "Please select an EV charger."); return; }
-    if (isNaN(evPct)) { setStatus("error", "Please select a charge rate limit."); return; }
-    const stationId = evTarget.replace("ev_","");
-    if (evPct === 100) await restoreEVSingle(stationId);
-    else               await dispatchEVDRSingle(stationId, evPct/100);
+    const evTargetType = getVal("sf-ev-target-type");
+    const evTarget     = getVal("sf-ev-target");
+    const evPct        = parseFloat(getVal("sf-ev-shed-pct"));
+    if (!evTarget)     { setStatus("error", "Please select an EV target."); return; }
+    if (isNaN(evPct))  { setStatus("error", "Please select a charge rate limit."); return; }
+    const targets = evTargetType === "group"
+      ? DEVICES.filter(d => d.type==="ev" && (groupAssignments[d.uid]||[]).includes(parseInt(evTarget.replace("group_",""))))
+      : [DEVICES.find(d => d.uid === evTarget)].filter(Boolean);
+    for (const d of targets) {
+      const sid = d.uid.replace("ev_","");
+      if (evPct === 100) await restoreEVSingle(sid);
+      else               await dispatchEVDRSingle(sid, evPct/100);
+    }
     await supabasePost("schedule_queue", {
-      name, fire_at: new Date(schedUnix*1000).toISOString(),
-      target_type:"ev", target_id:evTarget, target_name:unitName(evTarget)||evTarget,
-      duration_minutes, timezone:tz, action_time:time, one_time:true,
-      status:"sent", fired_at:new Date().toISOString(), event_type:"ev",
-      ev_shed_pct:evPct
+      name, fire_at:new Date(schedUnix*1000).toISOString(),
+      target_type:evTargetType, target_id:evTarget, target_name:unitName(evTarget)||evTarget,
+      relay_action:"ev_shed", duration_minutes, timezone:tz, action_time:time, one_time:true,
+      status:"sent", fired_at:new Date().toISOString(), event_type:"ev"
     });
     setStatus("ready", `"${name}" EV event dispatched.`);
     await loadSchedules(); return;
@@ -6372,19 +6407,24 @@ async function _executeCreateSchedule() {
 
   // ── Battery Backup ──────────────────────────────────────────────────────────
   if (evType === "battery") {
-    const battTarget = getVal("sf-batt-target");
-    const battAct    = getVal("sf-batt-action");
-    if (!battTarget) { setStatus("error", "Please select a battery system."); return; }
+    const battTargetType = getVal("sf-batt-target-type");
+    const battTarget     = getVal("sf-batt-target");
+    const battAct        = getVal("sf-batt-action");
+    if (!battTarget) { setStatus("error", "Please select a battery target."); return; }
     if (!battAct)    { setStatus("error", "Please select a battery action."); return; }
-    const assetId    = battTarget.replace("batt_","");
-    if (battAct === "restore") await restoreBatterySingle(assetId);
-    else                       await dispatchBatteryDRSingle(assetId, battAct);
+    const targets = battTargetType === "group"
+      ? DEVICES.filter(d => d.type==="battery" && (groupAssignments[d.uid]||[]).includes(parseInt(battTarget.replace("group_",""))))
+      : [DEVICES.find(d => d.uid === battTarget)].filter(Boolean);
+    for (const d of targets) {
+      const aid = d.uid.replace("batt_","");
+      if (battAct === "restore") await restoreBatterySingle(aid);
+      else                       await dispatchBatteryDRSingle(aid, battAct);
+    }
     await supabasePost("schedule_queue", {
-      name, fire_at: new Date(schedUnix*1000).toISOString(),
-      target_type:"battery", target_id:battTarget, target_name:unitName(battTarget)||battTarget,
-      duration_minutes, timezone:tz, action_time:time, one_time:true,
-      status:"sent", fired_at:new Date().toISOString(), event_type:"battery",
-      battery_action:battAct
+      name, fire_at:new Date(schedUnix*1000).toISOString(),
+      target_type:battTargetType, target_id:battTarget, target_name:unitName(battTarget)||battTarget,
+      relay_action:battAct, duration_minutes, timezone:tz, action_time:time, one_time:true,
+      status:"sent", fired_at:new Date().toISOString(), event_type:"battery"
     });
     setStatus("ready", `"${name}" battery event dispatched.`);
     await loadSchedules(); return;
@@ -6392,19 +6432,24 @@ async function _executeCreateSchedule() {
 
   // ── Generator ───────────────────────────────────────────────────────────────
   if (evType === "generator") {
-    const genTarget = getVal("sf-gen-target");
-    const genAct    = getVal("sf-gen-action");
-    if (!genTarget) { setStatus("error", "Please select a generator."); return; }
+    const genTargetType = getVal("sf-gen-target-type");
+    const genTarget     = getVal("sf-gen-target");
+    const genAct        = getVal("sf-gen-action");
+    if (!genTarget) { setStatus("error", "Please select a generator target."); return; }
     if (!genAct)    { setStatus("error", "Please select a generator action."); return; }
-    const assetId   = genTarget.replace("gen_","");
-    if (genAct === "stop") await stopGeneratorSingle(assetId);
-    else                   await startGeneratorSingle(assetId, genAct === "test");
+    const targets = genTargetType === "group"
+      ? DEVICES.filter(d => d.type==="generator" && (groupAssignments[d.uid]||[]).includes(parseInt(genTarget.replace("group_",""))))
+      : [DEVICES.find(d => d.uid === genTarget)].filter(Boolean);
+    for (const d of targets) {
+      const aid = d.uid.replace("gen_","");
+      if (genAct === "stop") await stopGeneratorSingle(aid);
+      else                   await startGeneratorSingle(aid, genAct === "test");
+    }
     await supabasePost("schedule_queue", {
-      name, fire_at: new Date(schedUnix*1000).toISOString(),
-      target_type:"generator", target_id:genTarget, target_name:unitName(genTarget)||genTarget,
-      duration_minutes, timezone:tz, action_time:time, one_time:true,
-      status:"sent", fired_at:new Date().toISOString(), event_type:"generator",
-      generator_action:genAct
+      name, fire_at:new Date(schedUnix*1000).toISOString(),
+      target_type:genTargetType, target_id:genTarget, target_name:unitName(genTarget)||genTarget,
+      relay_action:genAct, duration_minutes, timezone:tz, action_time:time, one_time:true,
+      status:"sent", fired_at:new Date().toISOString(), event_type:"generator"
     });
     setStatus("ready", `"${name}" generator event dispatched.`);
     await loadSchedules(); return;
@@ -23441,33 +23486,25 @@ function populateEventTypeTargets(type) {
   }
 
   if (type === "ev") {
-    const sel = document.getElementById("sf-ev-target");
-    if (!sel) return;
-    const evDevs = DEVICES.filter(d => d.type === "ev");
-    sel.innerHTML = evDevs.length
-      ? `<option value="" disabled selected>— Select EV Charger —</option>` +
-        evDevs.map(d => `<option value="${d.uid}">⚡ ${d.name}</option>`).join("")
-      : `<option value="">No EV chargers enrolled</option>`;
+    // Reset target type, clear target
+    const typeEl = document.getElementById("sf-ev-target-type");
+    const sel    = document.getElementById("sf-ev-target");
+    if (typeEl) typeEl.value = "";
+    if (sel)    sel.innerHTML = `<option value="" disabled selected>— Choose One —</option>`;
   }
 
   if (type === "battery") {
-    const sel = document.getElementById("sf-batt-target");
-    if (!sel) return;
-    const battDevs = DEVICES.filter(d => d.type === "battery");
-    sel.innerHTML = battDevs.length
-      ? `<option value="" disabled selected>— Select Battery System —</option>` +
-        battDevs.map(d => `<option value="${d.uid}">🔋 ${d.name}</option>`).join("")
-      : `<option value="">No battery systems enrolled</option>`;
+    const typeEl = document.getElementById("sf-batt-target-type");
+    const sel    = document.getElementById("sf-batt-target");
+    if (typeEl) typeEl.value = "";
+    if (sel)    sel.innerHTML = `<option value="" disabled selected>— Choose One —</option>`;
   }
 
   if (type === "generator") {
-    const sel = document.getElementById("sf-gen-target");
-    if (!sel) return;
-    const genDevs = DEVICES.filter(d => d.type === "generator");
-    sel.innerHTML = genDevs.length
-      ? `<option value="" disabled selected>— Select Generator —</option>` +
-        genDevs.map(d => `<option value="${d.uid}">⚡ ${d.name}</option>`).join("")
-      : `<option value="">No generators enrolled</option>`;
+    const typeEl = document.getElementById("sf-gen-target-type");
+    const sel    = document.getElementById("sf-gen-target");
+    if (typeEl) typeEl.value = "";
+    if (sel)    sel.innerHTML = `<option value="" disabled selected>— Choose One —</option>`;
   }
 
   if (type === "bas_di") {
@@ -23751,6 +23788,46 @@ function applyRuleHybridConfig(cfg) {
 }
 
 // ── End Rule Form Helpers ─────────────────────────────────────────────────────
+// ── EV / Battery / Generator Target Type selectors ───────────────────────────
+function populateAssetTarget(typeId, targetId, assetType) {
+  const type   = document.getElementById(typeId)?.value;
+  const target = document.getElementById(targetId);
+  if (!target) return;
+  target.innerHTML = '<option value="" disabled selected>— Choose One —</option>';
+
+  if (type === "group") {
+    // Show groups that contain at least one asset of this type
+    const groupNums = new Set();
+    DEVICES.filter(d => d.type === assetType).forEach(d => {
+      (groupAssignments[d.uid] || []).forEach(g => groupNums.add(g));
+    });
+    // Also show all groups if none specifically tagged (fallback)
+    if (!groupNums.size) {
+      Object.values(groupAssignments).flat().forEach(g => groupNums.add(g));
+    }
+    [...groupNums].sort((a,b)=>a-b).forEach(g => {
+      const name = groupNames[g] || `Group ${g}`;
+      const opt = document.createElement("option");
+      opt.value = `group_${g}`;
+      opt.textContent = name;
+      target.appendChild(opt);
+    });
+  } else if (type === "device") {
+    DEVICES.filter(d => d.type === assetType).forEach(d => {
+      const opt = document.createElement("option");
+      opt.value = d.uid;
+      opt.textContent = d.name;
+      target.appendChild(opt);
+    });
+  }
+}
+
+function onEvTargetTypeChange()   { populateAssetTarget("sf-ev-target-type",   "sf-ev-target",   "ev");        }
+function onBattTargetTypeChange() { populateAssetTarget("sf-batt-target-type", "sf-batt-target", "battery");   }
+function onGenTargetTypeChange()  { populateAssetTarget("sf-gen-target-type",  "sf-gen-target",  "generator"); }
+// ── End Asset Target Selectors ────────────────────────────────────────────────
+
+
 
 const BAS_LEVELS = [
   { value: "19|30|30", label: "Emergency", sub: "Relay ON — highest priority" },
