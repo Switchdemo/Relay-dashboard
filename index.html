@@ -449,6 +449,10 @@
   .rule-tier-opt.selected { border-color:var(--text-primary);background:var(--surface2); }
   .rule-tier-opt-name { font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:3px; }
   .rule-tier-opt-desc { font-size:10px;color:var(--text-hint);line-height:1.4; }
+
+  .chart-tab-btn { padding:6px 14px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);background:var(--surface2);font-size:11px;font-weight:600;color:var(--text-secondary);cursor:pointer;transition:all .15s; }
+  .chart-tab-btn:hover { border-color:var(--text-primary);color:var(--text-primary); }
+  .chart-tab-btn.active { border-color:var(--blue-dark);background:var(--blue-lt);color:var(--blue-dark); }
   .rule-event-tile { padding:7px 10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;text-align:center;font-size:11px;font-weight:600;color:var(--text-secondary);transition:all .15s; }
   .rule-event-tile:hover { border-color:var(--text-primary);color:var(--text-primary); }
   .rule-event-tile.selected { border-color:var(--blue-dark);background:var(--blue-lt);color:var(--blue-dark); }
@@ -796,10 +800,10 @@
           <button class="history-load-btn" style="color:var(--green-dark);border-color:var(--green);" onclick="exportHistory()">Export CSV</button>
         </div>
       </div>
-      <div class="history-table-wrap">
-        <table>
-          <thead>
-            <tr><th>Time</th><th>Device</th><th>R1</th><th>R2</th><th>R3</th><th>R4</th><th>Voltage</th><th>Current</th><th>Watts</th><th>PF</th><th>Comfort</th></tr>
+      <div class="history-table-wrap" style="max-height:400px;overflow-y:auto;border:0.5px solid var(--border-md);border-radius:var(--radius-sm);">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead style="position:sticky;top:0;z-index:2;background:var(--surface2);">
+            <tr><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);white-space:nowrap;">Time</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">Device</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">R1</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">R2</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">R3</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">R4</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">Voltage</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">Current</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">Watts</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">PF</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">Comfort</th></tr>
           </thead>
           <tbody id="history-body">
             <tr><td colspan="11" class="no-data">Select a device and click "Load"</td></tr>
@@ -825,12 +829,33 @@
             <button class="history-load-btn" onclick="loadCharts()">Load Charts</button>
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:1rem;">
-          <div><div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Voltage (V)</div><div style="position:relative;height:120px;width:100%;"><canvas id="chart-voltage"></canvas></div></div>
-          <div><div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Current (A)</div><div style="position:relative;height:120px;width:100%;"><canvas id="chart-current"></canvas></div></div>
-          <div><div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Watts (W)</div><div style="position:relative;height:120px;width:100%;"><canvas id="chart-watts"></canvas></div></div>
-          <div><div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Power Factor</div><div style="position:relative;height:120px;width:100%;"><canvas id="chart-pf"></canvas></div></div>
+
+        <!-- Chart selector tabs -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 16px;">
+          <button class="chart-tab-btn active" data-chart="voltage" onclick="selectChart('voltage',this)">⚡ Voltage</button>
+          <button class="chart-tab-btn" data-chart="current" onclick="selectChart('current',this)">〜 Current</button>
+          <button class="chart-tab-btn" data-chart="watts"   onclick="selectChart('watts',this)">💡 Watts</button>
+          <button class="chart-tab-btn" data-chart="pf"      onclick="selectChart('pf',this)">📐 Power Factor</button>
         </div>
+
+        <!-- Individual chart panels -->
+        <div id="chart-panel-voltage" class="chart-panel" style="display:block;">
+          <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Voltage (V)</div>
+          <div style="position:relative;height:260px;width:100%;"><canvas id="chart-voltage"></canvas></div>
+        </div>
+        <div id="chart-panel-current" class="chart-panel" style="display:none;">
+          <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Current (A)</div>
+          <div style="position:relative;height:260px;width:100%;"><canvas id="chart-current"></canvas></div>
+        </div>
+        <div id="chart-panel-watts" class="chart-panel" style="display:none;">
+          <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Power (W)</div>
+          <div style="position:relative;height:260px;width:100%;"><canvas id="chart-watts"></canvas></div>
+        </div>
+        <div id="chart-panel-pf" class="chart-panel" style="display:none;">
+          <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Power Factor</div>
+          <div style="position:relative;height:260px;width:100%;"><canvas id="chart-pf"></canvas></div>
+        </div>
+
         <div id="charts-empty" style="text-align:center;padding:1rem;color:var(--text-hint);font-size:13px;display:none;">No data available for selected range.</div>
       </div>
   </div>
@@ -3532,85 +3557,6 @@
   <div class="scroll-content">
     <div style="max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
 
-      <!-- Feed Discovery -->
-      <div class="sched-card">
-        <div class="sched-card-header">
-          <div class="sched-card-title">&#128225; Feed Discovery</div>
-        </div>
-        <div style="font-size:12px;color:var(--text-hint);margin-bottom:12px;line-height:1.6;">
-          Enter your state and utility to discover available grid and weather data feeds. Each feed is tested live before being shown.
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end;margin-bottom:1rem;">
-          <div>
-            <label style="font-size:10px;font-weight:600;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;font-family:monospace;">State</label>
-            <select id="fd-state-m" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
-              <option value="">-- Select State --</option>
-              <option value="AL">Alabama</option>
-              <option value="AK">Alaska</option>
-              <option value="AZ">Arizona</option>
-              <option value="AR">Arkansas</option>
-              <option value="CA">California</option>
-              <option value="CO">Colorado</option>
-              <option value="CT">Connecticut</option>
-              <option value="DC">Washington DC</option>
-              <option value="DE">Delaware</option>
-              <option value="FL">Florida</option>
-              <option value="GA">Georgia</option>
-              <option value="HI">Hawaii</option>
-              <option value="ID">Idaho</option>
-              <option value="IL">Illinois</option>
-              <option value="IN">Indiana</option>
-              <option value="IA">Iowa</option>
-              <option value="KS">Kansas</option>
-              <option value="KY">Kentucky</option>
-              <option value="LA">Louisiana</option>
-              <option value="ME">Maine</option>
-              <option value="MD">Maryland</option>
-              <option value="MA">Massachusetts</option>
-              <option value="MI">Michigan</option>
-              <option value="MN">Minnesota</option>
-              <option value="MS">Mississippi</option>
-              <option value="MO">Missouri</option>
-              <option value="MT">Montana</option>
-              <option value="NE">Nebraska</option>
-              <option value="NV">Nevada</option>
-              <option value="NH">New Hampshire</option>
-              <option value="NJ">New Jersey</option>
-              <option value="NM">New Mexico</option>
-              <option value="NY">New York</option>
-              <option value="NC">North Carolina</option>
-              <option value="ND">North Dakota</option>
-              <option value="OH">Ohio</option>
-              <option value="OK">Oklahoma</option>
-              <option value="OR">Oregon</option>
-              <option value="PA">Pennsylvania</option>
-              <option value="RI">Rhode Island</option>
-              <option value="SC">South Carolina</option>
-              <option value="SD">South Dakota</option>
-              <option value="TN">Tennessee</option>
-              <option value="TX">Texas</option>
-              <option value="UT">Utah</option>
-              <option value="VT">Vermont</option>
-              <option value="VA">Virginia</option>
-              <option value="WA">Washington</option>
-              <option value="WV">West Virginia</option>
-              <option value="WI">Wisconsin</option>
-              <option value="WY">Wyoming</option>
-            </select>
-          </div>
-          <div>
-            <label style="font-size:10px;font-weight:600;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;font-family:monospace;">Utility (optional)</label>
-            <input type="text" id="fd-utility-m" placeholder="e.g. OG&E, PSO, Entergy..." style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
-          </div>
-          <div>
-            <label style="font-size:10px;font-weight:600;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;font-family:monospace;">Coordinates</label>
-            <input type="text" id="fd-coords-m" placeholder="lat,lon" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;" />
-          </div>
-          <button onclick="runFeedDiscoveryM()" style="padding:7px 18px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;height:34px;">Discover</button>
-        </div>
-        <div id="fd-results-m"></div>
-      </div>
-
       <!-- Active Feeds -->
       <div class="sched-card">
         <div class="sched-card-header">
@@ -3642,8 +3588,6 @@
     </div>
   </div>
 </div>
-
-<!-- ── MONITOR DEVICE TAB (alias) ── -->
 <div class="tab-pane" id="tab-monitor-device">
   <div id="monitor-device-proxy"></div>
 </div>
@@ -7730,27 +7674,42 @@ async function loadCharts() {
   const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
   const empty = document.getElementById("charts-empty");
 
-  let query = `device_readings?order=recorded_at.asc&recorded_at=gte.${since}&limit=500`;
+  let query = `device_readings?order=recorded_at.asc&recorded_at=gte.${since}&limit=1000`;
   if (deviceFilter) query += `&device_uid=eq.${encodeURIComponent(deviceFilter)}`;
 
   const rows = await supabaseGet(query);
-  if (!rows || rows.length === 0) {
+  if (!Array.isArray(rows) || rows.length === 0) {
     ["chart-voltage","chart-current","chart-watts","chart-pf"].forEach(id => destroyChart(id));
     if (empty) empty.style.display = "block";
+    document.querySelectorAll(".chart-panel").forEach(p => p.style.display = "none");
     return;
   }
   if (empty) empty.style.display = "none";
 
   const labels = rows.map(r => {
     const d = new Date(r.recorded_at);
-    return d.toLocaleDateString("en-US", { month:"short", day:"numeric" }) + " " +
-           d.toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" });
+    return hours <= 48
+      ? d.toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" })
+      : d.toLocaleDateString("en-US", { month:"short", day:"numeric" }) + " " +
+        d.toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" });
   });
 
-  buildChart("chart-voltage", "Voltage",      labels, rows.map(r => r.voltage ?? null),        "#378ADD");
-  buildChart("chart-current", "Current",      labels, rows.map(r => r.current ?? null),        "#1D9E75");
-  buildChart("chart-watts",   "Watts",        labels, rows.map(r => r.watts_consumed ?? null), "#BA7517");
-  buildChart("chart-pf",      "Power Factor", labels, rows.map(r => r.power_factor ?? null),   "#7C3AED");
+  buildChart("chart-voltage", "Voltage (V)",    labels, rows.map(r => r.voltage ?? null),        "#378ADD");
+  buildChart("chart-current", "Current (A)",    labels, rows.map(r => r.current ?? null),        "#1D9E75");
+  buildChart("chart-watts",   "Power (W)",      labels, rows.map(r => r.watts_consumed ?? null), "#BA7517");
+  buildChart("chart-pf",      "Power Factor",   labels, rows.map(r => r.power_factor ?? null),   "#7C3AED");
+
+  // Show the currently active chart panel
+  const activeBtn = document.querySelector(".chart-tab-btn.active");
+  const activeChart = activeBtn?.dataset?.chart || "voltage";
+  document.querySelectorAll(".chart-panel").forEach(p => p.style.display = "none");
+  const activePanel = document.getElementById(`chart-panel-${activeChart}`);
+  if (activePanel) activePanel.style.display = "block";
+  // Resize to fill container
+  setTimeout(() => {
+    const inst = chartInstances[`chart-${activeChart}`];
+    if (inst) inst.resize();
+  }, 50);
 }
 
 async function loadEventsBar() {
@@ -23591,6 +23550,22 @@ function onTargetTypeChange(context) {
 
 
 
+
+
+// ── Chart tab selector ────────────────────────────────────────────────────────
+function selectChart(which, btn) {
+  document.querySelectorAll(".chart-tab-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".chart-panel").forEach(p => p.style.display = "none");
+  if (btn) btn.classList.add("active");
+  const panel = document.getElementById(`chart-panel-${which}`);
+  if (panel) {
+    panel.style.display = "block";
+    // Trigger chart resize so canvas fills correctly
+    const instance = chartInstances[`chart-${which}`];
+    if (instance) { instance.resize(); }
+  }
+}
+// ── End Chart Tab ─────────────────────────────────────────────────────────────
 
 // ── Outage URL Float Helper ───────────────────────────────────────────────────
 let _outageFloatTargetField = "new-util-map-url";
