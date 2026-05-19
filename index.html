@@ -679,6 +679,7 @@
   <!-- Main tabs -->
   <div class="tabs" id="main-tabs">
     <button class="tab-btn active" id="main-summary" onclick="switchMain('summary', this)">Program Summary</button>
+    <button class="tab-btn" id="main-programs" onclick="switchMain('programs', this)">Programs</button>
     <button class="tab-btn" id="main-events" onclick="switchMain('events', this)">Events</button>
     <button class="tab-btn" id="main-devices" onclick="switchMain('devices', this)">Devices</button>
     <button class="tab-btn" id="main-weather" onclick="switchMain('weather', this)">Weather</button>
@@ -950,6 +951,65 @@
           </div>
         </div>
         <div id="summary-feeds-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── SUMMARY PROGRAMS TAB ── -->
+<div class="tab-pane" id="tab-summary-programs">
+  <div class="scroll-content">
+    <div style="max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <!-- Program stats -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;" id="prog-summary-tiles">
+        <div class="fh-stat-card"><div style="font-size:10px;color:var(--text-hint);margin-bottom:2px;">DR Programs</div><div style="font-size:24px;font-weight:700;" id="prog-count-dr">—</div></div>
+        <div class="fh-stat-card"><div style="font-size:10px;color:var(--text-hint);margin-bottom:2px;">OpenADR 2.0b VTNs</div><div style="font-size:24px;font-weight:700;color:var(--blue-dark);" id="prog-count-oadr2">—</div></div>
+        <div class="fh-stat-card"><div style="font-size:10px;color:var(--text-hint);margin-bottom:2px;">OpenADR 3.0 VTNs</div><div style="font-size:24px;font-weight:700;color:var(--green-dark);" id="prog-count-oadr3">—</div></div>
+        <div class="fh-stat-card"><div style="font-size:10px;color:var(--text-hint);margin-bottom:2px;">Active Enrollments</div><div style="font-size:24px;font-weight:700;color:var(--amber);" id="prog-count-active">—</div></div>
+        <div class="fh-stat-card"><div style="font-size:10px;color:var(--text-hint);margin-bottom:2px;">Total Enrolled Assets</div><div style="font-size:24px;font-weight:700;" id="prog-count-assets">—</div></div>
+      </div>
+
+      <!-- DR Programs -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">📋 DR Programs</div>
+          <div style="display:flex;gap:6px;">
+            <button class="queue-refresh" onclick="exportProgramsCSV()" style="color:var(--green-dark);border-color:var(--green);">⬇ Export CSV</button>
+            <button class="queue-refresh" onclick="loadSummaryPrograms()">🔄 Refresh</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;" id="prog-dr-table">
+            <thead><tr style="background:var(--surface2);">
+              <th style="text-align:left;padding:8px 10px;border-bottom:1.5px solid var(--border-md);color:var(--text-hint);font-size:10px;text-transform:uppercase;">Program Name</th>
+              <th style="text-align:left;padding:8px 10px;border-bottom:1.5px solid var(--border-md);color:var(--text-hint);font-size:10px;text-transform:uppercase;">Utility</th>
+              <th style="text-align:left;padding:8px 10px;border-bottom:1.5px solid var(--border-md);color:var(--text-hint);font-size:10px;text-transform:uppercase;">Type</th>
+              <th style="text-align:left;padding:8px 10px;border-bottom:1.5px solid var(--border-md);color:var(--text-hint);font-size:10px;text-transform:uppercase;">Signal Source</th>
+              <th style="text-align:left;padding:8px 10px;border-bottom:1.5px solid var(--border-md);color:var(--text-hint);font-size:10px;text-transform:uppercase;">Mode</th>
+              <th style="text-align:left;padding:8px 10px;border-bottom:1.5px solid var(--border-md);color:var(--text-hint);font-size:10px;text-transform:uppercase;">Devices</th>
+              <th style="text-align:left;padding:8px 10px;border-bottom:1.5px solid var(--border-md);color:var(--text-hint);font-size:10px;text-transform:uppercase;">Status</th>
+            </tr></thead>
+            <tbody id="prog-dr-tbody"><tr><td colspan="7" style="padding:20px;text-align:center;color:var(--text-hint);">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- OpenADR 2.0b -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">📡 OpenADR 2.0b VTN Connections</div>
+        </div>
+        <div id="prog-oadr2-list"><div class="sched-empty">Loading…</div></div>
+      </div>
+
+      <!-- OpenADR 3.0 -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">📡 OpenADR 3.0 VTN Connections & Programs</div>
+        </div>
+        <div id="prog-oadr3-list"><div class="sched-empty">Loading…</div></div>
       </div>
 
     </div>
@@ -6071,7 +6131,8 @@ function switchMain(main, btn) {
   document.getElementById("sub-tabs-devices").style.display = main === "devices" ? "flex" : "none";
   document.getElementById("sub-tabs-admin").style.display   = main === "admin"   ? "flex" : "none";
   document.getElementById("sub-tabs-monitor").style.display = main === "monitor" ? "flex" : "none";
-  if (main === "summary") { activatePane("summary"); initSummaryTab(); }
+  if (main === "summary")  { activatePane("summary");          initSummaryTab();    }
+  if (main === "programs") { activatePane("summary-programs"); loadSummaryPrograms(); }
   else if (main === "weather") { activatePane("weather"); initWeatherTab(); }
   else if (main === "admin")   { const s = currentSub.admin||"admin-users"; activatePane(s); activateSubBtn("admin",s); }
   else if (main === "events")  { const s = currentSub.events||"scheduler";  activatePane(s); activateSubBtn("events",s); }
@@ -6102,7 +6163,8 @@ function activateSubBtn(main, sub) {
 }
 
 function runTabInit(name) {
-  if (name === "summary")    initSummaryTab();
+  if (name === "summary")          initSummaryTab();
+  if (name === "summary-programs") loadSummaryPrograms();
   if (name === "scheduler")  initScheduler().catch(e => console.error(e));
   if (name === "event-history") { loadSchedules(); loadDeviceEvents(); }
   if (name === "eventstats") initEventStats();
@@ -14326,7 +14388,10 @@ async function loadActiveFeeds() {
         </div>
         <div style="text-align:right;">
           <div class="feed-value">${val}</div>
-          <button onclick="removeFeed(${f.id})" style="margin-top:4px;padding:3px 8px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">Remove</button>
+          <div style="display:flex;gap:4px;margin-top:4px;justify-content:flex-end;">
+            <button onclick="exportFeedCSV('${f.feed_key}','${f.label}')" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--green);background:none;color:var(--green-dark);font-size:10px;cursor:pointer;">⬇ CSV</button>
+            <button onclick="removeFeed(${f.id})" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">Remove</button>
+          </div>
         </div>
       </div>`;
     }).join("");
@@ -24861,6 +24926,217 @@ async function _oadr3TabInit() {
   }
 }
 
+
+
+// ── Programs Summary Tab ───────────────────────────────────────────────────────
+async function loadSummaryPrograms() {
+  // Load DR Programs
+  let drProgs = [];
+  try {
+    const rows = await supabaseGet("dr_programs?order=created_at.asc").catch(() => []);
+    if (Array.isArray(rows) && rows.length) drProgs = rows;
+    else {
+      const saved = localStorage.getItem("lcp_dr_programs_v1");
+      if (saved) drProgs = JSON.parse(saved);
+    }
+  } catch(e) {}
+
+  // Load OpenADR 3.0
+  const oadr3vtns = await supabaseGet("oadr3_vtns?order=created_at.asc").catch(() => []);
+  const oadr3progs= await supabaseGet("oadr3_programs?order=created_at.asc").catch(() => []);
+  const vtns3     = Array.isArray(oadr3vtns)  ? oadr3vtns  : [];
+  const progs3    = Array.isArray(oadr3progs) ? oadr3progs : [];
+
+  // Load OpenADR 2.0b VTN config from program_settings
+  let oadr2 = [];
+  try {
+    const rows = await supabaseGet("program_settings?setting_key=like.vtn_%").catch(() => []);
+    if (Array.isArray(rows) && rows.length) {
+      // Group settings into VTN objects
+      const vtnMap = {};
+      rows.forEach(r => {
+        const key = r.setting_key;
+        const vtId = key.split("_")[1] || "default";
+        if (!vtnMap[vtId]) vtnMap[vtId] = { id: vtId };
+        vtnMap[vtId][key.replace(`vtn_${vtId}_`,"")] = r.setting_value;
+      });
+      oadr2 = Object.values(vtnMap);
+    }
+    // Also check program_settings for vtn_url
+    const vtnUrlRow = await supabaseGet("program_settings?setting_key=eq.vtn_url").catch(() => []);
+    if (Array.isArray(vtnUrlRow) && vtnUrlRow.length) {
+      oadr2 = [{ id:"default", url: vtnUrlRow[0].setting_value }];
+    }
+  } catch(e) {}
+
+  // Update stat tiles
+  const activeCount = drProgs.filter(p => p.enabled !== false).length +
+                      progs3.filter(p => p.enabled !== false).length;
+  const assetCount  = new Set([
+    ...drProgs.flatMap(p => {
+      try { return Array.isArray(p.devices) ? p.devices : JSON.parse(p.devices||"[]"); } catch(e) { return []; }
+    }),
+    ...progs3.map(p => p.target_id).filter(Boolean)
+  ]).size;
+
+  document.getElementById("prog-count-dr").textContent     = drProgs.length;
+  document.getElementById("prog-count-oadr2").textContent  = oadr2.length || (document.getElementById("oadr-vtn-url")?.value ? 1 : 0);
+  document.getElementById("prog-count-oadr3").textContent  = vtns3.length;
+  document.getElementById("prog-count-active").textContent = activeCount;
+  document.getElementById("prog-count-assets").textContent = assetCount;
+
+  // ── DR Programs table ───────────────────────────────────────────────────────
+  const tbody = document.getElementById("prog-dr-tbody");
+  if (tbody) {
+    if (!drProgs.length) {
+      tbody.innerHTML = `<tr><td colspan="7" style="padding:20px;text-align:center;color:var(--text-hint);">No DR programs configured. Go to Admin → DR Programs to add one.</td></tr>`;
+    } else {
+      tbody.innerHTML = drProgs.map((p, i) => {
+        const devices   = (() => { try { return Array.isArray(p.devices) ? p.devices : JSON.parse(p.devices||"[]"); } catch(e) { return []; } })();
+        const mode      = p.mode || (p.bas_mode ? "BAS" : "DLC");
+        const typeColors = { interruptible:"var(--blue-dark)", curtailment:"var(--amber)", emergency:"var(--red)", peak:"var(--green-dark)" };
+        const statusOn  = p.enabled !== false;
+        return `<tr style="${i%2?"background:var(--surface2)20;":""}border-bottom:0.5px solid var(--border);">
+          <td style="padding:8px 10px;font-weight:600;">${p.name || "—"}</td>
+          <td style="padding:8px 10px;color:var(--text-secondary);">${p.utility || "—"}</td>
+          <td style="padding:8px 10px;">
+            <span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:${typeColors[p.type]||"var(--surface2)"}22;color:${typeColors[p.type]||"var(--text-hint)"};">
+              ${(p.type||"—").charAt(0).toUpperCase()+(p.type||"").slice(1)}
+            </span>
+          </td>
+          <td style="padding:8px 10px;color:var(--text-secondary);">${p.signal_source || "Manual"}</td>
+          <td style="padding:8px 10px;font-weight:600;color:${mode==="BAS"?"var(--green-dark)":"var(--blue-dark)"};">${mode}</td>
+          <td style="padding:8px 10px;color:var(--text-secondary);">${devices.length} device${devices.length!==1?"s":""}</td>
+          <td style="padding:8px 10px;">
+            <span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:${statusOn?"var(--green-bg)":"var(--surface2)"};color:${statusOn?"var(--green-dark)":"var(--text-hint)"};">
+              ${statusOn ? "Active" : "Inactive"}
+            </span>
+          </td>
+        </tr>`;
+      }).join("");
+    }
+  }
+
+  // ── OpenADR 2.0b ─────────────────────────────────────────────────────────
+  const list2 = document.getElementById("prog-oadr2-list");
+  if (list2) {
+    // Read from existing OpenADR config fields
+    const vtnUrl    = document.getElementById("oadr-vtn-url")?.value || document.getElementById("vtn-url")?.value || "";
+    const venId     = document.getElementById("oadr-ven-id")?.value  || "";
+    const venName   = document.getElementById("oadr-ven-name")?.value || "";
+    if (vtnUrl) {
+      list2.innerHTML = `<div style="padding:10px 12px;">
+        <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:4px;">Configured VTN</div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:2px;">URL: <code style="font-family:monospace;color:var(--blue-dark);">${vtnUrl}</code></div>
+        ${venId   ? `<div style="font-size:11px;color:var(--text-secondary);">VEN ID: ${venId}</div>` : ""}
+        ${venName ? `<div style="font-size:11px;color:var(--text-secondary);">VEN Name: ${venName}</div>` : ""}
+      </div>`;
+    } else {
+      list2.innerHTML = `<div class="sched-empty">No OpenADR 2.0b VTN configured. Go to Admin → OpenADR 2.0b to configure.</div>`;
+    }
+  }
+
+  // ── OpenADR 3.0 ─────────────────────────────────────────────────────────
+  const list3 = document.getElementById("prog-oadr3-list");
+  if (list3) {
+    if (!vtns3.length) {
+      list3.innerHTML = `<div class="sched-empty">No OpenADR 3.0 VTN connections. Go to Admin → OpenADR 3.0 to add one.</div>`;
+    } else {
+      list3.innerHTML = vtns3.map(vtn => {
+        const vtnProgs = progs3.filter(p => p.vtn_id === vtn.id);
+        return `<div style="padding:12px 14px;border-bottom:0.5px solid var(--border);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <div>
+              <span style="font-size:13px;font-weight:600;color:var(--text-primary);">${vtn.name}</span>
+              <span style="font-size:10px;color:var(--text-hint);margin-left:8px;font-family:monospace;">${vtn.vtn_url}</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:${vtn.auth_type==="oauth2"?"var(--blue-lt)":"var(--surface2)"};color:${vtn.auth_type==="oauth2"?"var(--blue-dark)":"var(--text-hint)"};">${vtn.auth_type==="oauth2"?"OAuth2":"Bearer"}</span>
+              <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:${vtn.status==="ok"?"var(--green-bg)":"var(--surface2)"};color:${vtn.status==="ok"?"var(--green-dark)":"var(--text-hint)"};">${vtn.status||"unknown"}</span>
+            </div>
+          </div>
+          ${vtnProgs.length ? `
+            <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Enrolled Programs (${vtnProgs.length}):</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              ${vtnProgs.map(p => `
+                <div style="padding:4px 10px;background:var(--surface2);border:0.5px solid var(--border-md);border-radius:6px;font-size:11px;">
+                  <span style="font-weight:600;">${p.program_name||p.program_id}</span>
+                  <span style="color:var(--text-hint);margin-left:6px;">→ ${p.target_name||p.target_id||"—"}</span>
+                  <span style="margin-left:6px;font-weight:600;color:${p.control_mode==="bas"?"var(--green-dark)":"var(--blue-dark)"};">${(p.control_mode||"dlc").toUpperCase()}</span>
+                  ${p.enabled ? "" : '<span style="color:var(--text-hint);margin-left:4px;">(disabled)</span>'}
+                </div>`).join("")}
+            </div>` : `<div style="font-size:11px;color:var(--text-hint);">No program enrollments yet.</div>`}
+        </div>`;
+      }).join("");
+    }
+  }
+}
+
+async function exportProgramsCSV() {
+  const tbody = document.getElementById("prog-dr-tbody");
+  if (!tbody) return;
+  let drProgs = [];
+  try {
+    const rows = await supabaseGet("dr_programs?order=created_at.asc").catch(() => []);
+    if (Array.isArray(rows) && rows.length) drProgs = rows;
+    else {
+      const saved = localStorage.getItem("lcp_dr_programs_v1");
+      if (saved) drProgs = JSON.parse(saved);
+    }
+  } catch(e) {}
+  if (!drProgs.length) { alert("No programs to export."); return; }
+  const headers = ["Name","Utility","Type","Signal Source","Mode","Devices","Status","Program ID","Notes"];
+  const lines = drProgs.map(p => {
+    const devices = (() => { try { return Array.isArray(p.devices) ? p.devices : JSON.parse(p.devices||"[]"); } catch(e) { return []; } })();
+    return [
+      `"${(p.name||"").replace(/"/g,'""')}"`,
+      `"${(p.utility||"").replace(/"/g,'""')}"`,
+      p.type||"",
+      p.signal_source||"manual",
+      p.mode||(p.bas_mode?"BAS":"DLC"),
+      devices.length,
+      p.enabled!==false?"Active":"Inactive",
+      p.program_id||"",
+      `"${(p.notes||"").replace(/"/g,'""')}"`
+    ].join(",");
+  });
+  const csv  = [headers.join(","), ...lines].join("\n");
+  const blob = new Blob([csv], { type:"text/csv" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url; a.download = `dr-programs-${new Date().toISOString().slice(0,10)}.csv`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function exportFeedCSV(feedKey, feedLabel) {
+  // Fetch last 30 days of feed readings from weather_readings or SCADA
+  let rows = [];
+  const since = new Date(Date.now() - 30 * 86400000).toISOString();
+  try {
+    // Try weather_readings first
+    const wr = await supabaseGet(`weather_readings?recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=10000`).catch(() => []);
+    if (Array.isArray(wr) && wr.length && wr[0][feedKey] !== undefined) {
+      rows = wr.filter(r => r[feedKey] != null).map(r => ({ time: r.recorded_at, value: r[feedKey] }));
+    }
+  } catch(e) {}
+  if (!rows.length) {
+    // Try SCADA readings
+    try {
+      const sr = await supabaseGet(`scada_readings?feed_key=eq.${encodeURIComponent(feedKey)}&recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=10000`).catch(() => []);
+      if (Array.isArray(sr)) rows = sr.map(r => ({ time: r.recorded_at, value: r.value }));
+    } catch(e) {}
+  }
+  if (!rows.length) { alert(`No historical data found for "${feedLabel}".`); return; }
+  const headers = ["Timestamp", feedLabel];
+  const lines   = rows.map(r => [new Date(r.time).toISOString(), r.value].join(","));
+  const csv  = [headers.join(","), ...lines].join("\n");
+  const blob = new Blob([csv], { type:"text/csv" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url; a.download = `${feedKey}-${new Date().toISOString().slice(0,10)}.csv`; a.click();
+  URL.revokeObjectURL(url);
+}
+// ── End Programs Summary ───────────────────────────────────────────────────────
 
 // ── Trigger Log CSV Export ─────────────────────────────────────────────────────
 let _triggerLogRows = [];
