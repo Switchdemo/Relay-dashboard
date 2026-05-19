@@ -25199,6 +25199,14 @@ function renderRelayTimeline() {
     manual:"#7C3AED"
   };
 
+  // Color resolution: tier > AUTO: name prefix > fired status > event_type > status
+  const getEvColor = (ev) => {
+    if (ev.tier === "autopilot")                    return EVENT_COLORS.autopilot;
+    if (ev.status === "fired")                      return EVENT_COLORS.fired;
+    if ((ev.name || "").startsWith("AUTO:"))        return EVENT_COLORS.autopilot;
+    return EVENT_COLORS[ev.event_type] || EVENT_COLORS[ev.status] || "#378ADD";
+  };
+
   _timelineData.markers = [];
 
   console.log(`Timeline: ${events.length} events to draw`);
@@ -25211,7 +25219,7 @@ function renderRelayTimeline() {
       return;
     }
 
-    const color  = EVENT_COLORS[ev.tier] || EVENT_COLORS[ev.event_type] || EVENT_COLORS[ev.status] || "#378ADD";
+    const color  = getEvColor(ev);
     const x      = tx(fireAt);
     const durMs  = (ev.duration_minutes || 0) * 60000;
     const endX   = durMs ? tx(Math.min(fireAt + durMs, tEnd)) : null;
