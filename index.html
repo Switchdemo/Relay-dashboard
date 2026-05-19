@@ -3865,7 +3865,16 @@
       <div class="sched-card">
         <div class="sched-card-header">
           <div class="sched-card-title">&#128203; Trigger Log</div>
-          <button class="queue-refresh" onclick="loadTriggerLog()">Refresh</button>
+          <div style="display:flex;gap:6px;">
+            <select id="trigger-log-range" onchange="loadTriggerLog()" style="padding:4px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
+              <option value="50">Last 50</option>
+              <option value="200">Last 200</option>
+              <option value="500">Last 500</option>
+              <option value="0">All</option>
+            </select>
+            <button class="queue-refresh" onclick="exportTriggerLogCSV()" style="color:var(--green-dark);border-color:var(--green);">&#11015; Export CSV</button>
+            <button class="queue-refresh" onclick="loadTriggerLog()">Refresh</button>
+          </div>
         </div>
         <div id="trigger-log-list"><div class="sched-empty">No trigger events yet.</div></div>
       </div>
@@ -4638,6 +4647,23 @@
           <span style="font-size:18px;">⚡</span>
           <div style="flex:1;"><strong>DR Shed Active</strong> — All enrolled chargers are operating at reduced capacity.</div>
           <button onclick="restoreEVShed()" style="padding:5px 14px;border-radius:var(--radius-sm);border:0.5px solid var(--red);background:none;color:var(--red);font-size:12px;font-weight:600;cursor:pointer;">Restore</button>
+        </div>
+      </div>
+
+      <!-- EV Live Data Monitoring -->
+      <div class="sched-card" id="ev-live-monitor-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">📡 Live Device Monitoring</div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <span id="ev-monitor-last-update" style="font-size:10px;color:var(--text-hint);"></span>
+            <button class="queue-refresh" onclick="refreshEVLiveMonitor()">Refresh</button>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">
+          Real-time data pulled from each charger's API feed. Updates every 30 seconds.
+        </div>
+        <div id="ev-live-monitor-table">
+          <div class="sched-empty">Loading live data…</div>
         </div>
       </div>
 
@@ -14595,7 +14621,13 @@ async function loadTriggerLog() {
   const list = document.getElementById("trigger-log-list");
   if (!list) return;
   try {
-    const rows = await supabaseGet("monitor_trigger_log?order=triggered_at.desc&limit=50");
+    const limit = parseInt(document.getElementById("trigger-log-range")?.value || "50");
+    const query = limit > 0
+      ? `monitor_trigger_log?order=triggered_at.desc&limit=${limit}`
+      : `monitor_trigger_log?order=triggered_at.desc`;
+    _triggerLogRows = [];
+    const rows = await supabaseGet(query);
+    if (Array.isArray(rows)) _triggerLogRows = rows;
     if (!Array.isArray(rows) || !rows.length) { list.innerHTML = '<div class="sched-empty">No trigger events yet.</div>'; return; }
     list.innerHTML = `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;">
       <thead><tr>
@@ -21119,10 +21151,12 @@ async function initEVCharging() {
   await loadEVChargers();
   await refreshEVStatus();
   await loadEVSessionLog();
+  await refreshEVLiveMonitor();
 
   if (!evRefreshTimer) {
     evRefreshTimer = setInterval(() => {
       refreshEVStatus();
+      refreshEVLiveMonitor();
     }, 30000);
   }
 }
@@ -24826,6 +24860,138 @@ async function _oadr3TabInit() {
     await initOadr3Tab();
   }
 }
+
+
+// ── Trigger Log CSV Export ─────────────────────────────────────────────────────
+let _triggerLogRows = [];
+
+async function exportTriggerLogCSV() {
+  // Fetch all rows (no limit) for export
+  const rows = await supabaseGet(
+    "monitor_trigger_log?order=triggered_at.desc&limit=5000"
+  ).catch(() => []);
+  if (!Array.isArray(rows) || !rows.length) {
+    alert("No trigger log data to export."); return;
+  }
+  const headers = ["Time","Rule","Tier","Feed","Feed Value","Feed Unit","Action","Outcome","Rule ID"];
+  const lines   = rows.map(r => [
+    new Date(r.triggered_at).toISOString(),
+    `"${(r.rule_name||"").replace(/"/g,'""')}"`,
+    r.tier || "",
+    r.feed_key || "",
+    r.feed_value != null ? r.feed_value : "",
+    r.feed_unit || "",
+    `"${(r.action_description||"").replace(/"/g,'""')}"`,
+    r.outcome || "",
+    r.rule_id || ""
+  ].join(","));
+  const csv  = [headers.join(","), ...lines].join("\n");
+  const blob = new Blob([csv], { type:"text/csv" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = `trigger-log-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── EV Live Device Monitor ─────────────────────────────────────────────────────
+async function refreshEVLiveMonitor() {
+  const table  = document.getElementById("ev-live-monitor-table");
+  const lastEl = document.getElementById("ev-monitor-last-update");
+  if (!table) return;
+
+  if (!evChargers.length) {
+    table.innerHTML = '<div class="sched-empty">No chargers enrolled.</div>';
+    return;
+  }
+
+  // Pull fresh session data
+  try {
+    const since = new Date(Date.now() - 24 * 3600000).toISOString();
+    const rows  = await supabaseGet(`ev_sessions?updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=500`);
+    if (Array.isArray(rows)) {
+      rows.forEach(r => {
+        if (!evSessions[r.station_id] || new Date(r.updated_at) > new Date(evSessions[r.station_id]?.updated_at || 0))
+          evSessions[r.station_id] = r;
+      });
+    }
+  } catch(e) {}
+
+  const STATUS_COLORS = {
+    charging:    { bg:"#dbeafe", color:"#1d4ed8" },
+    available:   { bg:"#dcfce7", color:"#166534" },
+    faulted:     { bg:"#fee2e2", color:"#991b1b" },
+    offline:     { bg:"#f1f5f9", color:"#64748b" },
+    preparing:   { bg:"#fef9c3", color:"#854d0e" },
+    unavailable: { bg:"#fee2e2", color:"#991b1b" },
+  };
+
+  table.innerHTML = `
+    <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead>
+        <tr style="background:var(--surface2);">
+          <th style="text-align:left;padding:8px 10px;border-bottom:1.5px solid var(--border-md);color:var(--text-hint);font-size:10px;text-transform:uppercase;white-space:nowrap;">Charger</th>
+          <th style="text-align:center;padding:8px 10px;border-bottom:1.5px solid var(--border-md);color:var(--text-hint);font-size:10px;text-transform:uppercase;">Status</th>
+          <th style="text-align:right;padding:8px 10px;border-bottom:1.5px solid var(--border-md);color:var(--text-hint);font-size:10px;text-transform:uppercase;">Power (kW)</th>
+          <th style="text-align:right;padding:8px 10px;border-bottom:1.5px solid var(--border-md);color:var(--text-hint);font-size:10px;text-transform:uppercase;">Session (kWh)</th>
+          <th style="text-align:right;padding:8px 10px;border-bottom:1.5px solid var(--border-md);color:var(--text-hint);font-size:10px;text-transform:uppercase;">SOC</th>
+          <th style="text-align:right;padding:8px 10px;border-bottom:1.5px solid var(--border-md);color:var(--text-hint);font-size:10px;text-transform:uppercase;">Voltage (V)</th>
+          <th style="text-align:right;padding:8px 10px;border-bottom:1.5px solid var(--border-md);color:var(--text-hint);font-size:10px;text-transform:uppercase;">Current (A)</th>
+          <th style="text-align:center;padding:8px 10px;border-bottom:1.5px solid var(--border-md);color:var(--text-hint);font-size:10px;text-transform:uppercase;">DR Shed</th>
+          <th style="text-align:right;padding:8px 10px;border-bottom:1.5px solid var(--border-md);color:var(--text-hint);font-size:10px;text-transform:uppercase;">Last Seen</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${evChargers.map((c, i) => {
+          const sess     = evSessions[c.station_id];
+          const status   = (sess?.status || c.status || "offline").toLowerCase();
+          const sc       = STATUS_COLORS[status] || STATUS_COLORS.offline;
+          const powerKw  = sess?.power_kw  != null ? parseFloat(sess.power_kw).toFixed(2)  : "—";
+          const energyKwh= sess?.energy_kwh!= null ? parseFloat(sess.energy_kwh).toFixed(3) : "—";
+          const soc      = sess?.soc_pct   != null ? sess.soc_pct + "%" : "—";
+          const voltage  = sess?.voltage   != null ? parseFloat(sess.voltage).toFixed(1)   : "—";
+          const current  = sess?.current_a != null ? parseFloat(sess.current_a).toFixed(2) : "—";
+          const shed     = sess?.shed_active ? `<span style="color:var(--red);font-weight:700;">YES</span>` : `<span style="color:var(--text-hint);">—</span>`;
+          const lastSeen = sess?.updated_at
+            ? (() => { const ago = Math.round((Date.now() - new Date(sess.updated_at).getTime())/1000); return ago < 60 ? `${ago}s ago` : ago < 3600 ? `${Math.round(ago/60)}m ago` : `${Math.round(ago/3600)}h ago`; })()
+            : "—";
+
+          // SOC bar
+          const socPct   = sess?.soc_pct;
+          const socBar   = socPct != null
+            ? `<div style="width:100%;height:3px;background:var(--border-md);border-radius:2px;margin-top:3px;"><div style="height:3px;width:${socPct}%;background:${socPct>50?"#16a34a":socPct>20?"#d97706":"#dc2626"};border-radius:2px;"></div></div>` : "";
+
+          return `<tr style="${i%2?"background:var(--surface2)20;":""}border-bottom:0.5px solid var(--border);">
+            <td style="padding:8px 10px;">
+              <div style="font-weight:600;color:var(--text-primary);">${c.name}</div>
+              <div style="font-size:10px;color:var(--text-hint);font-family:monospace;">${c.station_id}</div>
+            </td>
+            <td style="padding:8px 10px;text-align:center;">
+              <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:${sc.bg};color:${sc.color};">
+                ${status.charAt(0).toUpperCase()+status.slice(1)}
+              </span>
+            </td>
+            <td style="padding:8px 10px;text-align:right;font-family:monospace;font-weight:700;color:${status==="charging"?"var(--blue-dark)":"var(--text-hint)"};">${powerKw}</td>
+            <td style="padding:8px 10px;text-align:right;font-family:monospace;">${energyKwh}</td>
+            <td style="padding:8px 10px;text-align:right;">
+              <div style="font-family:monospace;">${soc}</div>
+              ${socBar}
+            </td>
+            <td style="padding:8px 10px;text-align:right;font-family:monospace;">${voltage}</td>
+            <td style="padding:8px 10px;text-align:right;font-family:monospace;">${current}</td>
+            <td style="padding:8px 10px;text-align:center;">${shed}</td>
+            <td style="padding:8px 10px;text-align:right;font-size:10px;color:var(--text-hint);white-space:nowrap;">${lastSeen}</td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>
+    </div>`;
+
+  if (lastEl) lastEl.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+}
+// ── End EV Live Monitor ────────────────────────────────────────────────────────
 
 // ── OpenADR 3.0 Signal Mapping & DR Config ────────────────────────────────────
 function renderOadr3Mappings() {
