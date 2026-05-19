@@ -3598,6 +3598,94 @@
         </div>
       </div>
 
+      <!-- Signal → Strategy Mapping (default for all programs) -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">📶 Signal → Strategy Mapping</div>
+          <button class="queue-refresh" onclick="saveOadr3Mappings()" style="color:var(--green-dark);border-color:var(--green);">Save Mappings</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">
+          Default mapping of OpenADR 3.0 SIMPLE signal levels (0–3) to LC strategies. These defaults are used when a program enrollment doesn't override them.
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead><tr>
+              <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Signal Level</th>
+              <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Description</th>
+              <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Duty Cycle Strategy #</th>
+              <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Mode</th>
+              <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Control %</th>
+            </tr></thead>
+            <tbody id="oadr-mapping-table-3">
+              <!-- Populated by initOadr3Tab → renderOadr3Mappings() -->
+            </tbody>
+          </table>
+        </div>
+        <div id="oadr3-mapping-status" style="font-size:11px;margin-top:8px;display:none;"></div>
+      </div>
+
+      <!-- DR Device Configuration (shared with 2.0b) -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">⚙️ DR Device Configuration</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="queue-refresh" onclick="loadDRConfig()">Refresh</button>
+            <button class="queue-refresh" style="color:var(--green-dark);border-color:var(--green);" onclick="saveAllDRConfig()">Save All</button>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:12px;">
+          Designate which devices participate in OpenADR 3.0 demand response and configure DLC or BAS mode per device. Shared with OpenADR 2.0b configuration.
+        </div>
+        <div style="background:var(--surface2);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <span style="font-size:11px;font-weight:600;color:var(--text-secondary);">Set All Devices:</span>
+          <button class="queue-refresh" onclick="drSetAllMode('bas_di')" style="font-size:11px;">🏢 All → BAS Mode</button>
+          <button class="queue-refresh" onclick="drSetAllMode('direct_load')" style="font-size:11px;">🔌 All → Direct Load Mode</button>
+          <div style="width:1px;height:18px;background:var(--border-md);"></div>
+          <button class="queue-refresh" onclick="drSetAllVEN(true)" style="font-size:11px;color:var(--green-dark);border-color:var(--green);">Enable All as VEN Resource</button>
+          <button class="queue-refresh" onclick="drSetAllVEN(false)" style="font-size:11px;color:var(--red);border-color:var(--red);">Disable All</button>
+        </div>
+        <div id="dr-device-config-list-3">
+          <div class="sched-empty">Loading device DR configuration…</div>
+        </div>
+      </div>
+
+      <!-- Test Event -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">🧪 Test OpenADR 3.0 Event</div>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">
+          Simulate an incoming OpenADR 3.0 SIMPLE event to test the full VEN execution flow.
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Signal Level (0–3)</label>
+            <select id="oadr3-test-signal" class="sched-select" style="width:100%;font-size:12px;">
+              <option value="0">0 — Normal / Restore</option>
+              <option value="1">1 — Low Shed</option>
+              <option value="2" selected>2 — Medium Shed</option>
+              <option value="3">3 — High / Emergency</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Program</label>
+            <select id="oadr3-test-program" class="sched-select" style="width:100%;font-size:12px;">
+              <option value="">— Select Program —</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Duration (minutes)</label>
+            <input type="number" id="oadr3-test-duration" value="30" min="5"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+        </div>
+        <button onclick="simulateOadr3Event()"
+          style="padding:8px 20px;border-radius:var(--radius-sm);border:none;background:var(--text-primary);color:white;font-size:13px;font-weight:600;cursor:pointer;">
+          🧪 Simulate Incoming Event
+        </button>
+        <div id="oadr3-test-status" style="font-size:11px;margin-top:8px;display:none;"></div>
+      </div>
+
       <!-- Active Events -->
       <div class="sched-card">
         <div class="sched-card-header">
@@ -23994,6 +24082,9 @@ async function initOadr3Tab() {
   await loadOadr3Events();
   await loadOadr3Reports();
   startOadr3Poller();
+  renderOadr3Mappings();
+  if (typeof loadDRConfig === "function") loadDRConfig().then(renderOadr3DrConfig);
+  populateOadr3TestDropdown();
 }
 
 // ── Auth helper ───────────────────────────────────────────────────────────────
@@ -24695,6 +24786,141 @@ async function _oadr3TabInit() {
     await initOadr3Tab();
   }
 }
+
+// ── OpenADR 3.0 Signal Mapping & DR Config ────────────────────────────────────
+function renderOadr3Mappings() {
+  // Mirror the 2.0b mapping table but use SIMPLE signal levels 0-3
+  const tbody = document.getElementById("oadr-mapping-table-3");
+  if (!tbody) return;
+
+  // Load saved mappings from same store as 2.0b (shared config)
+  const saved = (() => {
+    try { return JSON.parse(localStorage.getItem("lcp_oadr_mappings") || "{}"); } catch(e) { return {}; }
+  })();
+
+  const LEVELS = [
+    { level:0, label:"0 — Normal",          desc:"Restore all load"              },
+    { level:1, label:"1 — Low",             desc:"Low shed / 25% duty cycle"     },
+    { level:2, label:"2 — Medium",          desc:"Medium shed / 50% duty cycle"  },
+    { level:3, label:"3 — High/Emergency",  desc:"Full shed / 100% duty cycle"   },
+  ];
+
+  const STRATEGIES = [
+    { val:"",        label:"— Restore —" },
+    { val:"5",       label:"5 — 25% shed" },
+    { val:"9",       label:"9 — 50% shed" },
+    { val:"13",      label:"13 — 75% shed" },
+    { val:"19",      label:"19 — 100% shed" },
+  ];
+
+  tbody.innerHTML = LEVELS.map(lv => {
+    const m = saved[`oadr3_${lv.level}`] || saved[lv.level] || {};
+    const strat = m.strategy || (lv.level === 0 ? "" : lv.level === 1 ? "5" : lv.level === 2 ? "9" : "19");
+    const mode  = m.mode || "dlc";
+    const pct   = strat === "5" ? "25%" : strat === "9" ? "50%" : strat === "13" ? "75%" : strat === "19" ? "100%" : "—";
+
+    return `<tr style="border-bottom:0.5px solid var(--border);">
+      <td style="padding:8px;font-weight:700;color:var(--blue-dark);">${lv.label}</td>
+      <td style="padding:8px;color:var(--text-secondary);">${lv.desc}</td>
+      <td style="padding:8px;">
+        <select id="oadr3-map-strat-${lv.level}" style="padding:5px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
+          ${STRATEGIES.map(s => `<option value="${s.val}" ${s.val===strat?"selected":""}>${s.label}</option>`).join("")}
+        </select>
+      </td>
+      <td style="padding:8px;">
+        <select id="oadr3-map-mode-${lv.level}" style="padding:5px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
+          <option value="dlc" ${mode==="dlc"?"selected":""}>DLC</option>
+          <option value="di"  ${mode==="di" ?"selected":""}>BAS</option>
+        </select>
+      </td>
+      <td style="padding:8px;font-weight:600;color:var(--text-primary);">${pct}</td>
+    </tr>`;
+  }).join("");
+}
+
+function saveOadr3Mappings() {
+  const saved = (() => {
+    try { return JSON.parse(localStorage.getItem("lcp_oadr_mappings") || "{}"); } catch(e) { return {}; }
+  })();
+  [0,1,2,3].forEach(lv => {
+    const strat = document.getElementById(`oadr3-map-strat-${lv}`)?.value || "";
+    const mode  = document.getElementById(`oadr3-map-mode-${lv}`)?.value  || "dlc";
+    saved[`oadr3_${lv}`] = { strategy:strat, mode };
+  });
+  localStorage.setItem("lcp_oadr_mappings", JSON.stringify(saved));
+  const statusEl = document.getElementById("oadr3-mapping-status");
+  if (statusEl) { statusEl.textContent = "✅ Mappings saved."; statusEl.style.display="block"; statusEl.style.color="var(--green-dark)"; setTimeout(()=>statusEl.style.display="none",2500); }
+}
+
+function renderOadr3DrConfig() {
+  // Point to the shared dr-device-config-list-3 div, reuse same loadDRConfig data
+  const list3 = document.getElementById("dr-device-config-list-3");
+  const list2 = document.getElementById("dr-device-config-list");
+  if (list3 && list2) {
+    list3.innerHTML = list2.innerHTML || '<div class="sched-empty">Loading device DR configuration…</div>';
+  }
+}
+
+async function simulateOadr3Event() {
+  const statusEl = document.getElementById("oadr3-test-status");
+  const level    = parseInt(document.getElementById("oadr3-test-signal")?.value ?? 2);
+  const progId   = document.getElementById("oadr3-test-program")?.value;
+  const durMins  = parseInt(document.getElementById("oadr3-test-duration")?.value || 30);
+
+  if (!progId) {
+    if (statusEl) { statusEl.textContent = "Please select a program."; statusEl.style.display="block"; statusEl.style.color="var(--red)"; }
+    return;
+  }
+
+  const prog = oadr3Programs.find(p => p.id === progId);
+  const vtn  = oadr3VTNs.find(v => v.id === prog?.vtn_id);
+  if (!prog || !vtn) {
+    if (statusEl) { statusEl.textContent = "Program or VTN not found."; statusEl.style.display="block"; statusEl.style.color="var(--red)"; }
+    return;
+  }
+
+  if (statusEl) { statusEl.textContent = "⏳ Simulating event…"; statusEl.style.display="block"; statusEl.style.color="var(--text-secondary)"; }
+
+  const now   = new Date();
+  const start = new Date(now.getTime() + 60000); // 1 min from now
+  const end   = new Date(start.getTime() + durMins * 60000);
+
+  // Build synthetic OpenADR 3.0 event
+  const syntheticEvent = {
+    id:          `test-${Date.now()}`,
+    eventName:   `Test Event — Level ${level}`,
+    programID:   prog.program_id,
+    intervalPeriod: {
+      start:    start.toISOString(),
+      duration: `PT${durMins}M`
+    },
+    intervals: [{
+      id: 0,
+      payloads: [{ type:"SIMPLE", values:[level] }]
+    }]
+  };
+
+  try {
+    await oadr3ExecuteEvent(vtn, prog, syntheticEvent, level);
+    if (statusEl) { statusEl.textContent = `✅ Test event (Level ${level}) dispatched to ${prog.target_name || prog.target_id}. Check device status.`; statusEl.style.color="var(--green-dark)"; }
+    await loadOadr3Events();
+  } catch(e) {
+    if (statusEl) { statusEl.textContent = `❌ Error: ${e.message}`; statusEl.style.color="var(--red)"; }
+  }
+}
+
+// Populate test program dropdown when tab loads
+function populateOadr3TestDropdown() {
+  const sel = document.getElementById("oadr3-test-program");
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Select Program —</option>' +
+    oadr3Programs.map(p => {
+      const vtn = oadr3VTNs.find(v => v.id === p.vtn_id);
+      return `<option value="${p.id}">${p.program_name || p.program_id} (${vtn?.name||"?"})</option>`;
+    }).join("");
+}
+// ── End OpenADR 3.0 Mapping & Config ─────────────────────────────────────────
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // End OpenADR 3.0
 // ═══════════════════════════════════════════════════════════════════════════════
