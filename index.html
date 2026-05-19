@@ -814,7 +814,47 @@
       </div>
     </div>
 
-      <!-- History Charts -->
+      <!-- Relay Correlation Timeline -->
+      <div class="history-panel" style="margin-top:16px;" id="relay-timeline-panel">
+        <div class="history-header">
+          <div class="history-title">⚡ Relay Correlation Timeline</div>
+          <div class="history-controls">
+            <select class="history-select" id="timeline-device-select">
+              <option value="">All Devices</option>
+            </select>
+            <select class="history-select" id="timeline-range">
+              <option value="6">Last 6 Hours</option>
+              <option value="24" selected>Last 24 Hours</option>
+              <option value="48">Last 48 Hours</option>
+              <option value="168">Last 7 Days</option>
+            </select>
+            <button class="history-load-btn" onclick="loadRelayTimeline()">Load</button>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:12px;">
+          Green bars show relay ON periods. Vertical markers show when events fired — hover for details.
+          <span style="margin-left:10px;">
+            <span style="display:inline-block;width:10px;height:10px;background:#378ADD;border-radius:2px;margin-right:3px;"></span>Scheduled
+            <span style="display:inline-block;width:10px;height:10px;background:#DC2626;border-radius:2px;margin:0 3px 0 8px;"></span>Autopilot
+            <span style="display:inline-block;width:10px;height:10px;background:#D97706;border-radius:2px;margin:0 3px 0 8px;"></span>OpenADR
+            <span style="display:inline-block;width:10px;height:10px;background:#7C3AED;border-radius:2px;margin:0 3px 0 8px;"></span>Manual
+          </span>
+        </div>
+        <div style="position:relative;overflow:hidden;" id="relay-timeline-wrap">
+          <div id="relay-timeline-empty" class="sched-empty">Select a device and click Load to view the relay correlation timeline.</div>
+          <canvas id="relay-timeline-canvas" style="display:none;width:100%;"></canvas>
+        </div>
+        <!-- Tooltip -->
+        <div id="relay-timeline-tooltip" style="
+          display:none;position:fixed;z-index:9999;
+          background:#fff;border:1.5px solid var(--border-md);border-radius:8px;
+          padding:10px 14px;box-shadow:0 4px 20px rgba(0,0,0,.18);
+          font-size:11px;max-width:260px;pointer-events:none;">
+        </div>
+        <div id="relay-timeline-legend" style="display:none;margin-top:8px;font-size:10px;color:var(--text-hint);text-align:right;"></div>
+      </div>
+
+    <!-- History Charts -->
       <div class="history-panel" style="margin-top:16px;">
         <div class="history-header">
           <div class="history-title">Device History Graphs</div>
@@ -6041,7 +6081,7 @@ function runTabInit(name) {
   if (name === "event-history") { loadSchedules(); loadDeviceEvents(); }
   if (name === "eventstats") initEventStats();
   if (name === "data")       loadLatest();
-  if (name === "history")    { loadHistory(); loadCharts(); }
+  if (name === "history")    { initTimelineDeviceSelect(); loadHistory(); loadCharts(); }
   if (name === "map")        loadMap();
   if (name === "groups")     loadGroups();
   if (name === "settings")   initSettingsTab();
@@ -24923,6 +24963,326 @@ function populateOadr3TestDropdown() {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // End OpenADR 3.0
+// ═══════════════════════════════════════════════════════════════════════════════
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Relay Correlation Timeline
+// ═══════════════════════════════════════════════════════════════════════════════
+let _timelineData = null; // cached { readings, events, range }
+
+async function loadRelayTimeline() {
+  const deviceFilter = document.getElementById("timeline-device-select")?.value;
+  const hours        = parseInt(document.getElementById("timeline-range")?.value || 24);
+  const since        = new Date(Date.now() - hours * 3600000);
+  const now          = new Date();
+  const emptyEl      = document.getElementById("relay-timeline-empty");
+  const canvas       = document.getElementById("relay-timeline-canvas");
+  const wrap         = document.getElementById("relay-timeline-wrap");
+  if (!canvas) return;
+
+  if (emptyEl) emptyEl.textContent = "Loading timeline…";
+  canvas.style.display = "none";
+
+  // ── Fetch data in parallel ────────────────────────────────────────────────
+  let readQuery = `device_readings?order=recorded_at.asc&recorded_at=gte.${since.toISOString()}&limit=2000`;
+  if (deviceFilter) readQuery += `&device_uid=eq.${encodeURIComponent(deviceFilter)}`;
+
+  let evQuery = `schedule_queue?order=fire_at.asc&fire_at=gte.${since.toISOString()}&limit=500`;
+  if (deviceFilter) evQuery += `&target_id=eq.${encodeURIComponent(deviceFilter)}`;
+
+  const [readings, events] = await Promise.all([
+    supabaseGet(readQuery).catch(() => []),
+    supabaseGet(evQuery).catch(() => [])
+  ]);
+
+  if (!Array.isArray(readings) || !readings.length) {
+    if (emptyEl) { emptyEl.style.display = "block"; emptyEl.textContent = "No device readings found for selected range."; }
+    return;
+  }
+  if (emptyEl) emptyEl.style.display = "none";
+
+  // Group readings by device
+  const byDevice = {};
+  readings.forEach(r => {
+    if (!byDevice[r.device_uid]) byDevice[r.device_uid] = [];
+    byDevice[r.device_uid].push(r);
+  });
+
+  _timelineData = { byDevice, events: Array.isArray(events) ? events : [], since, now, hours };
+
+  renderRelayTimeline();
+}
+
+function renderRelayTimeline() {
+  if (!_timelineData) return;
+  const { byDevice, events, since, now } = _timelineData;
+  const canvas = document.getElementById("relay-timeline-canvas");
+  const wrap   = document.getElementById("relay-timeline-wrap");
+  if (!canvas || !wrap) return;
+
+  const devices    = Object.keys(byDevice);
+  const RELAYS     = ["relay_status_r1","relay_status_r2","relay_status_r3","relay_status_r4"];
+  const RELAY_LABELS = ["R1","R2","R3","R4"];
+  const ROW_H      = 28;   // px per relay row
+  const LABEL_W    = 100;  // px for left labels (device + relay)
+  const HEADER_H   = 36;   // px for time axis
+  const DEV_GAP    = 12;   // px gap between devices
+  const PAD_R      = 16;
+
+  // Count total rows
+  const totalRows = devices.length * 4;
+  const totalH    = HEADER_H + totalRows * ROW_H + (devices.length - 1) * DEV_GAP + 8;
+
+  canvas.width  = wrap.clientWidth || 900;
+  canvas.height = totalH;
+  canvas.style.display = "block";
+
+  const W    = canvas.width;
+  const chartW = W - LABEL_W - PAD_R;
+  const tStart = since.getTime();
+  const tEnd   = now.getTime();
+  const tRange = tEnd - tStart;
+
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, W, totalH);
+
+  // ── CSS vars → actual colors ──────────────────────────────────────────────
+  const cs = getComputedStyle(document.documentElement);
+  const C = {
+    surface2:    cs.getPropertyValue("--surface2").trim()     || "#f4f4f5",
+    border:      cs.getPropertyValue("--border-md").trim()    || "#e2e2e7",
+    textHint:    cs.getPropertyValue("--text-hint").trim()    || "#8b8b99",
+    textPrimary: cs.getPropertyValue("--text-primary").trim() || "#111",
+    green:       "#16a34a",
+    greenLt:     "#dcfce7",
+    OFF:         "#f1f1f4",
+  };
+
+  const EVENT_COLORS = {
+    autopilot: "#DC2626", openADR:"#D97706", openadr:"#D97706",
+    scheduled: "#378ADD", fired:"#378ADD", sent:"#378ADD",
+    manual:    "#7C3AED", default:"#378ADD"
+  };
+
+  // x position for a timestamp
+  const tx = t => LABEL_W + ((t - tStart) / tRange) * chartW;
+
+  // ── Draw time axis ────────────────────────────────────────────────────────
+  ctx.fillStyle = C.surface2;
+  ctx.fillRect(0, 0, W, HEADER_H);
+  ctx.strokeStyle = C.border;
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(LABEL_W, HEADER_H); ctx.lineTo(W - PAD_R, HEADER_H); ctx.stroke();
+
+  // Tick count based on range
+  const hours = _timelineData.hours;
+  const tickCount = hours <= 6 ? 7 : hours <= 24 ? 9 : hours <= 48 ? 9 : 8;
+  ctx.fillStyle = C.textHint;
+  ctx.font = "10px system-ui,sans-serif";
+  ctx.textAlign = "center";
+  for (let i = 0; i <= tickCount; i++) {
+    const t   = tStart + (i / tickCount) * tRange;
+    const x   = tx(t);
+    const d   = new Date(t);
+    const lbl = hours <= 48
+      ? d.toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" })
+      : d.toLocaleDateString("en-US", { month:"short", day:"numeric" }) + " " +
+        d.toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" });
+    ctx.fillText(lbl, x, HEADER_H - 8);
+    ctx.strokeStyle = C.border;
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(x, HEADER_H - 4); ctx.lineTo(x, totalH); ctx.stroke();
+  }
+
+  // ── Draw relay rows ───────────────────────────────────────────────────────
+  let rowY = HEADER_H;
+  devices.forEach((uid, di) => {
+    const devName = DEVICES.find(d => d.uid === uid)?.name || uid.slice(-6);
+    const rrows   = byDevice[uid];
+
+    RELAYS.forEach((rKey, ri) => {
+      const y   = rowY + ri * ROW_H;
+      const mid = y + ROW_H / 2;
+
+      // Row background (alternating)
+      ctx.fillStyle = ri % 2 === 0 ? "#ffffff" : C.surface2 + "80";
+      ctx.fillRect(LABEL_W, y, chartW, ROW_H);
+
+      // Labels
+      ctx.fillStyle = C.textHint;
+      ctx.font = "bold 10px system-ui,sans-serif";
+      ctx.textAlign = "right";
+      if (ri === 0) {
+        // Device name on first relay row
+        ctx.fillStyle = C.textPrimary;
+        ctx.font = "bold 11px system-ui,sans-serif";
+        ctx.fillText(devName, LABEL_W - 8, mid - 6);
+        ctx.fillStyle = C.textHint;
+        ctx.font = "10px system-ui,sans-serif";
+      }
+      ctx.fillText(RELAY_LABELS[ri], LABEL_W - 8, mid + 5);
+
+      // Draw ON segments
+      let prevT = null, prevOn = null;
+      rrows.forEach(r => {
+        const t  = new Date(r.recorded_at).getTime();
+        const on = r[rKey] === true || r[rKey] === 1 || r[rKey] === "1";
+        if (prevT !== null && prevOn === true) {
+          // Draw ON segment from prevT to t
+          const x1 = Math.max(tx(prevT), tx(tStart));
+          const x2 = Math.min(tx(t), tx(tEnd));
+          if (x2 > x1) {
+            ctx.fillStyle = C.greenLt;
+            ctx.fillRect(x1, y + 4, x2 - x1, ROW_H - 8);
+            ctx.fillStyle = C.green;
+            ctx.fillRect(x1, y + 4, 2, ROW_H - 8); // left edge
+            ctx.fillRect(x2 - 2, y + 4, 2, ROW_H - 8); // right edge
+          }
+        }
+        prevT = t; prevOn = on;
+      });
+      // Extend last ON segment to now if still ON
+      if (prevOn === true && prevT !== null) {
+        const x1 = Math.max(tx(prevT), tx(tStart));
+        const x2 = tx(tEnd);
+        if (x2 > x1) {
+          ctx.fillStyle = C.greenLt;
+          ctx.fillRect(x1, y + 4, x2 - x1, ROW_H - 8);
+          ctx.fillStyle = C.green;
+          ctx.fillRect(x1, y + 4, 2, ROW_H - 8);
+        }
+      }
+
+      // Row border
+      ctx.strokeStyle = C.border;
+      ctx.lineWidth = 0.5;
+      ctx.beginPath(); ctx.moveTo(LABEL_W, y + ROW_H); ctx.lineTo(W - PAD_R, y + ROW_H); ctx.stroke();
+    });
+
+    rowY += 4 * ROW_H + (di < devices.length - 1 ? DEV_GAP : 0);
+  });
+
+  // ── Draw event markers ────────────────────────────────────────────────────
+  _timelineData.markers = [];
+
+  events.forEach(ev => {
+    const fireAt = ev.fire_at ? new Date(ev.fire_at).getTime() : null;
+    if (!fireAt || fireAt < tStart || fireAt > tEnd) return;
+
+    const tier  = ev.tier || (ev.status === "fired" && !ev.one_time ? "autopilot" : ev.event_type || "sent");
+    const color = EVENT_COLORS[tier] || EVENT_COLORS[ev.event_type] || EVENT_COLORS.default;
+    const x     = tx(fireAt);
+    const dur   = ev.duration_minutes ? ev.duration_minutes * 60000 : 0;
+    const endX  = dur ? Math.min(tx(fireAt + dur), tx(tEnd)) : null;
+
+    // Draw duration shading
+    if (endX && endX > x) {
+      ctx.fillStyle = color + "18";
+      ctx.fillRect(x, HEADER_H, endX - x, totalH - HEADER_H);
+    }
+
+    // Vertical marker line
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.moveTo(x, HEADER_H); ctx.lineTo(x, totalH); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Diamond marker at top
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x, HEADER_H + 2);
+    ctx.lineTo(x + 6, HEADER_H + 9);
+    ctx.lineTo(x, HEADER_H + 16);
+    ctx.lineTo(x - 6, HEADER_H + 9);
+    ctx.closePath();
+    ctx.fill();
+
+    // Store for hover
+    _timelineData.markers.push({ x, ev, color, fireAt, dur, endX });
+  });
+
+  // ── Legend ────────────────────────────────────────────────────────────────
+  const legEl = document.getElementById("relay-timeline-legend");
+  if (legEl) {
+    legEl.style.display = "block";
+    legEl.textContent = `${readings.length} readings · ${events.length} events · ${since.toLocaleString()} → ${now.toLocaleString()}`;
+  }
+
+  // ── Hover handling ────────────────────────────────────────────────────────
+  canvas.onmousemove = (e) => {
+    const rect    = canvas.getBoundingClientRect();
+    const scaleX  = canvas.width / rect.width;
+    const mx      = (e.clientX - rect.left) * scaleX;
+    const tooltip = document.getElementById("relay-timeline-tooltip");
+    if (!tooltip) return;
+
+    // Find nearest marker within 12px
+    let nearest = null, minDist = 12 * scaleX;
+    (_timelineData?.markers || []).forEach(m => {
+      const d = Math.abs(m.x - mx);
+      if (d < minDist) { minDist = d; nearest = m; }
+    });
+
+    if (nearest) {
+      const ev = nearest.ev;
+      const typeLabels = { switch:"⚡ Switch/Relay", bas_di:"🏢 BAS Mode", ev:"🔌 EV", battery:"🔋 Battery", generator:"⚙️ Generator", openadr:"📡 OpenADR", hybrid:"🔀 Hybrid" };
+      tooltip.style.display = "block";
+      tooltip.style.left    = (e.clientX + 12) + "px";
+      tooltip.style.top     = (e.clientY - 10) + "px";
+      tooltip.style.borderColor = nearest.color;
+      tooltip.innerHTML = `
+        <div style="font-weight:700;color:${nearest.color};margin-bottom:4px;">${ev.name || "Event"}</div>
+        <div style="color:#555;margin-bottom:2px;">${typeLabels[ev.event_type] || ev.event_type || "—"}</div>
+        <div style="color:#777;margin-bottom:2px;">🎯 ${ev.target_name || ev.target_id || "—"}</div>
+        <div style="color:#777;margin-bottom:2px;">📅 ${new Date(nearest.fireAt).toLocaleString()}</div>
+        ${ev.duration_minutes ? `<div style="color:#777;">⏱ ${ev.duration_minutes} min</div>` : ""}
+        <div style="margin-top:4px;padding-top:4px;border-top:0.5px solid #eee;">
+          <span style="font-size:10px;padding:1px 6px;border-radius:8px;background:${nearest.color}22;color:${nearest.color};font-weight:600;">
+            ${ev.status || "—"}
+          </span>
+        </div>`;
+      canvas.style.cursor = "pointer";
+    } else {
+      tooltip.style.display = "none";
+      canvas.style.cursor   = "default";
+    }
+  };
+
+  canvas.onmouseleave = () => {
+    const t = document.getElementById("relay-timeline-tooltip");
+    if (t) t.style.display = "none";
+  };
+
+  canvas.onclick = (e) => {
+    const rect   = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const mx     = (e.clientX - rect.left) * scaleX;
+    let nearest = null, minDist = 14 * scaleX;
+    (_timelineData?.markers || []).forEach(m => {
+      const d = Math.abs(m.x - mx);
+      if (d < minDist) { minDist = d; nearest = m; }
+    });
+    if (nearest) showEventDetail({ type:"queue", item: nearest.ev });
+  };
+}
+
+// Redraw on resize
+window.addEventListener("resize", () => {
+  if (_timelineData) renderRelayTimeline();
+});
+
+// Wire device selector
+function initTimelineDeviceSelect() {
+  const sel = document.getElementById("timeline-device-select");
+  if (!sel) return;
+  const relays = DEVICES.filter(d => (!d.type || d.type === "relay") && !d.uid.includes("PLACEHOLDER"));
+  sel.innerHTML = '<option value="">All Devices</option>' +
+    relays.map(d => `<option value="${d.uid}">${d.name}</option>`).join("");
+}
+// ═══════════════════════════════════════════════════════════════════════════════
+// End Relay Correlation Timeline
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ── Chart tab selector ────────────────────────────────────────────────────────
