@@ -25266,10 +25266,19 @@ function renderRelayTimeline() {
     legEl.textContent = `${readCount} readings · ${events.length} events · ${since.toLocaleString([], {dateStyle:"short",timeStyle:"short"})} → ${now.toLocaleTimeString([], {timeStyle:"short"})}`;
   }
 
-  // ── Mouse events (use CSS coordinates for hit detection) ─────────────────
+  // ── Mouse events ──────────────────────────────────────────────────────────
+  // Recalculate marker X from timestamp at event time (not stored cssX)
+  // so it's always correct regardless of scroll/resize/DPR
+  const liveX = (fireAt) => {
+    const rect   = canvas.getBoundingClientRect();
+    const cssW2  = rect.width;
+    const chartW2 = cssW2 - LABEL_W - PAD_R;
+    return LABEL_W + Math.max(0, Math.min(1, (fireAt - tStart) / tRange)) * chartW2;
+  };
+
   const getCanvasX = (e) => {
     const rect = canvas.getBoundingClientRect();
-    return e.clientX - rect.left; // already CSS px
+    return e.clientX - rect.left;
   };
 
   canvas.onmousemove = (e) => {
@@ -25279,7 +25288,8 @@ function renderRelayTimeline() {
 
     let nearest = null, minDist = 14;
     (_timelineData?.markers || []).forEach(m => {
-      const d = Math.abs(m.cssX - mx);
+      const lx = liveX(m.fireAt);
+      const d  = Math.abs(lx - mx);
       if (d < minDist) { minDist = d; nearest = m; }
     });
 
@@ -25319,7 +25329,8 @@ function renderRelayTimeline() {
     const mx = getCanvasX(e);
     let nearest = null, minDist = 16;
     (_timelineData?.markers || []).forEach(m => {
-      const d = Math.abs(m.cssX - mx);
+      const lx = liveX(m.fireAt);
+      const d  = Math.abs(lx - mx);
       if (d < minDist) { minDist = d; nearest = m; }
     });
     if (nearest) showEventDetail({ type:"queue", item: nearest.ev });
