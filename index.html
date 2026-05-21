@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<head> 
+<head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Load Control Panel v2.0.0</title>
@@ -1028,6 +1028,18 @@
         </div>
         <div class="sched-form">
 
+          <!-- ── DR Program Quick-fill ── -->
+          <div class="sched-field full">
+            <label class="sched-label">Load from DR Program <span style="font-size:10px;color:var(--text-hint);font-weight:400;">(optional — auto-fills event type, target, and strategy)</span></label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <select class="sched-select" id="sf-dr-program" onchange="applyDRProgramToForm()" style="flex:1;">
+                <option value="">— Select a program to auto-fill, or configure manually below —</option>
+              </select>
+              <button class="queue-refresh" onclick="clearDRProgramSelection()" style="white-space:nowrap;">✕ Clear</button>
+            </div>
+            <div id="sf-dr-program-info" style="display:none;margin-top:6px;padding:8px 12px;background:var(--blue-lt);border:0.5px solid var(--blue-dark);border-radius:var(--radius-sm);font-size:11px;color:var(--blue-dark);line-height:1.6;"></div>
+          </div>
+
           <!-- ── Step 1: Event Name ── -->
           <div class="sched-field full">
             <label class="sched-label">Event Name</label>
@@ -1391,111 +1403,7 @@
             </div>
             <div style="font-size:11px;color:var(--text-hint);">Sends an OpenADR 2.0b event to the configured VEN. Device dispatch follows the signal level → LC strategy mapping in OpenADR Config.</div>
           </div>
-      <div class="sched-card">
-        <div class="sched-card-header">
-          <div class="sched-card-title">Create New Event <button class="help-icon" onclick="openHelp('scheduling')" title="Help">?</button></div>
-        </div>
-        <div class="sched-form">
 
-
-
-
-          <div class="sched-field">
-            <label class="sched-label">Time</label>
-            <div style="display:flex;gap:6px;align-items:center;">
-              <select class="sched-select" id="sf-hour" style="flex:1;">
-                <option value="" disabled selected>HH</option>
-                <option value="00">12 AM</option>
-                <option value="01">1 AM</option>
-                <option value="02">2 AM</option>
-                <option value="03">3 AM</option>
-                <option value="04">4 AM</option>
-                <option value="05">5 AM</option>
-                <option value="06">6 AM</option>
-                <option value="07">7 AM</option>
-                <option value="08">8 AM</option>
-                <option value="09">9 AM</option>
-                <option value="10">10 AM</option>
-                <option value="11">11 AM</option>
-                <option value="12">12 PM</option>
-                <option value="13">1 PM</option>
-                <option value="14">2 PM</option>
-                <option value="15">3 PM</option>
-                <option value="16">4 PM</option>
-                <option value="17">5 PM</option>
-                <option value="18">6 PM</option>
-                <option value="19">7 PM</option>
-                <option value="20">8 PM</option>
-                <option value="21">9 PM</option>
-                <option value="22">10 PM</option>
-                <option value="23">11 PM</option>
-              </select>
-              <span style="font-size:14px;font-weight:600;color:var(--text-hint);">:</span>
-              <select class="sched-select" id="sf-minute" style="flex:1;">
-                <option value="" disabled selected>MM</option>
-                <option value="00">00</option>
-                <option value="15">15</option>
-                <option value="30">30</option>
-                <option value="45">45</option>
-              </select>
-            </div>
-          </div>
-          <div class="sched-field" id="sf-date-field">
-            <label class="sched-label">Date (One Time)</label>
-            <input class="sched-input" id="sf-date" type="date" />
-          </div>
-          <div class="sched-field">
-            <label class="sched-label">Event Duration</label>
-            <select class="sched-select" id="sf-duration">
-              <option value="" disabled selected>— Choose Duration —</option>
-              <option value="15">15 minutes</option>
-              <option value="30">30 minutes</option>
-              <option value="45">45 minutes</option>
-              <option value="60">1 hour</option>
-              <option value="75">1 hr 15 min</option>
-              <option value="90">1 hr 30 min</option>
-              <option value="105">1 hr 45 min</option>
-              <option value="120">2 hours</option>
-              <option value="135">2 hr 15 min</option>
-              <option value="150">2 hr 30 min</option>
-              <option value="165">2 hr 45 min</option>
-              <option value="180">3 hours</option>
-              <option value="195">3 hr 15 min</option>
-              <option value="210">3 hr 30 min</option>
-              <option value="225">3 hr 45 min</option>
-              <option value="240">4 hours</option>
-              <option value="255">4 hr 15 min</option>
-              <option value="270">4 hr 30 min</option>
-              <option value="285">4 hr 45 min</option>
-              <option value="300">5 hours</option>
-              <option value="315">5 hr 15 min</option>
-              <option value="330">5 hr 30 min</option>
-              <option value="345">5 hr 45 min</option>
-              <option value="360">6 hours</option>
-              <option value="375">6 hr 15 min</option>
-              <option value="390">6 hr 30 min</option>
-              <option value="405">6 hr 45 min</option>
-              <option value="420">7 hours</option>
-              <option value="435">7 hr 15 min</option>
-              <option value="450">7 hr 30 min</option>
-              <option value="465">7 hr 45 min</option>
-              <option value="480">8 hours</option>
-            </select>
-          </div>
-          <div class="sched-field">
-            <label class="sched-label">Timezone</label>
-            <select class="sched-select" id="sf-timezone">
-            </select>
-          </div>
-
-
-          <div class="sched-field full">
-            <button class="sched-submit-btn" onclick="showSchedConfirm()">Save Schedule</button>
-          </div>
-        </div>
-      </div>
-
-    </div>
   </div>
 </div>
 </div>
@@ -5967,28 +5875,28 @@ async function loadAllAssetsIntoDevices() {
   // Load EV, battery, generator from localStorage + Supabase and inject into DEVICES
   // so they appear in group selectors and target dropdowns without opening their tabs first
 
-  const safeGet = async (q, key) => {
+  const safeGet = async (q, key, key2) => {
     let db = [], local = [];
     try { const r = await supabaseGet(q); if (Array.isArray(r)) db = r; } catch(e) {}
     try { const s = localStorage.getItem(key); if (s) local = JSON.parse(s); } catch(e) {}
+    // Also check alternate key if provided
+    if (key2) {
+      try { const s2 = localStorage.getItem(key2); if (s2) { const l2 = JSON.parse(s2); local = [...local, ...l2]; } } catch(e) {}
+    }
     const ids = new Set(db.map(r => r.station_id || r.asset_id));
     return [...db, ...local.filter(r => !(ids.has(r.station_id) || ids.has(r.asset_id)))];
   };
 
   const [evRows, battRows, genRows] = await Promise.all([
-    safeGet("ev_chargers?enabled=eq.true&order=enrolled_at.asc",       "lcp_ev_chargers_v1"),
+    safeGet("ev_chargers?enabled=eq.true&order=enrolled_at.asc",       "lcp_ev_chargers_v1", "lcp_ev_dev_assets_v1"),
     safeGet("battery_assets?enabled=eq.true&order=enrolled_at.asc",    "lcp_battery_assets_v1"),
     safeGet("generator_assets?enabled=eq.true&order=enrolled_at.asc",  "lcp_generator_assets_v1"),
   ]);
 
-  // Populate global arrays used by existing inject functions
-  if (!evChargers.length && evRows.length) {
-    evChargers = evRows;
-    if (typeof evDevAssets === "undefined") window.evDevAssets = evRows;
-    else evDevAssets = evRows;
-  }
-  if (!batteryAssets.length && battRows.length) batteryAssets = battRows;
-  if (!generatorAssets.length && genRows.length) generatorAssets = genRows;
+  // Always update global arrays with latest data
+  if (evRows.length)   { evChargers = evRows; if (typeof evDevAssets !== "undefined") evDevAssets = evRows; }
+  if (battRows.length) { batteryAssets = battRows; }
+  if (genRows.length)  { generatorAssets = genRows; }
 
   // Inject into DEVICES directly using same pattern as inject functions
   DEVICES = DEVICES.filter(d => d.type === "relay" || !d.type);
@@ -6366,9 +6274,6 @@ async function initScheduler() {
   if (!schedulerInitialized) {
     schedulerInitialized = true;
     console.log("Initializing scheduler for first time");
-    // No longer needed — device handles scheduling internally
-    // scheduleCheckInterval = setInterval(checkSchedules, 15000);
-    // Load queue only on first init
     await loadGroupNamesForScheduler();
     populateTzSelector();
     populateTargetSelector();
@@ -6379,12 +6284,14 @@ async function initScheduler() {
     renderLCResponseParser("lcr-parser-panel");
     renderBubbleUpParser("bu-parser-panel");
     setTimeout(async () => { await prefillEventName(); }, 100);
+    populateDRProgramSelector(); // populate program dropdown
   } else {
     await loadGroupNamesForScheduler();
     populateTargetSelector();
     updateSchedulerTimezone();
     await loadSchedules();
     await loadDeviceEvents();
+    populateDRProgramSelector();
   }
 }
 
@@ -25138,6 +25045,131 @@ async function exportFeedCSV(feedKey, feedLabel) {
 }
 // ── End Programs Summary ───────────────────────────────────────────────────────
 
+
+// ── DR Program → Create Event integration ────────────────────────────────────
+function populateDRProgramSelector() {
+  const sel = document.getElementById("sf-dr-program");
+  if (!sel) return;
+  // Keep the first placeholder option
+  sel.innerHTML = '<option value="">— Select a program to auto-fill, or configure manually below —</option>';
+  if (!drPrograms?.length) {
+    // Try loading if not already loaded
+    loadDRPrograms().then(() => populateDRProgramSelector());
+    return;
+  }
+  drPrograms.filter(p => p.enabled !== false).forEach(p => {
+    const devices = Array.isArray(p.devices) ? p.devices : [];
+    const mode    = p.mode || (p.bas_mode ? "BAS" : "DLC");
+    const opt     = document.createElement("option");
+    opt.value       = p.id;
+    opt.textContent = `${p.name} — ${mode} — ${devices.length} device${devices.length!==1?"s":""}${p.utility ? " ("+p.utility+")" : ""}`;
+    sel.appendChild(opt);
+  });
+}
+
+function applyDRProgramToForm() {
+  const sel     = document.getElementById("sf-dr-program");
+  const infoEl  = document.getElementById("sf-dr-program-info");
+  const progId  = sel?.value;
+  if (!progId) { if (infoEl) infoEl.style.display = "none"; return; }
+
+  const prog    = drPrograms?.find(p => p.id?.toString() === progId.toString());
+  if (!prog) return;
+
+  const devices  = Array.isArray(prog.devices)  ? prog.devices  : [];
+  const mappings = Array.isArray(prog.mappings)  ? prog.mappings : [];
+  const mode     = prog.mode || (prog.bas_mode ? "di" : "dlc");
+  const evType   = mode === "di" ? "bas_di" : "switch";
+
+  // 1. Select event type
+  selectEventType(evType);
+
+  // 2. Set target — if program has multiple devices use a group if available,
+  //    otherwise default to first device
+  const targetTypeEl = document.getElementById("sf-target-type");
+  const targetEl     = document.getElementById("sf-target");
+
+  if (devices.length > 1) {
+    // Try to find a group that contains all program devices
+    let bestGroup = null;
+    const progUids = new Set(devices.map(d => typeof d === "string" ? d : d.uid));
+    Object.entries(groupAssignments).forEach(([uid, gnums]) => {
+      gnums.forEach(gnum => {
+        const members = DEVICES.filter(d => (groupAssignments[d.uid]||[]).includes(gnum));
+        const memberUids = new Set(members.map(d => d.uid));
+        const overlap = [...progUids].filter(u => memberUids.has(u)).length;
+        if (overlap === progUids.size) bestGroup = gnum; // all program devices in this group
+      });
+    });
+
+    if (bestGroup) {
+      if (targetTypeEl) targetTypeEl.value = "group";
+      onTargetTypeChange();
+      setTimeout(() => {
+        if (targetEl) targetEl.value = `group_${bestGroup}`;
+      }, 50);
+    } else {
+      // Fall back to first device
+      const firstUid = typeof devices[0] === "string" ? devices[0] : devices[0]?.uid;
+      if (targetTypeEl) targetTypeEl.value = "device";
+      onTargetTypeChange();
+      setTimeout(() => { if (targetEl) targetEl.value = firstUid; }, 50);
+    }
+  } else if (devices.length === 1) {
+    const uid = typeof devices[0] === "string" ? devices[0] : devices[0]?.uid;
+    if (targetTypeEl) targetTypeEl.value = "device";
+    onTargetTypeChange();
+    setTimeout(() => { if (targetEl) targetEl.value = uid; }, 50);
+  }
+
+  // 3. Set relay action and mode
+  const relayActionEl = document.getElementById("sf-relay-action");
+  const modeEl        = document.getElementById("sf-mode");
+  if (relayActionEl) relayActionEl.value = prog.relay_action || "all_on";
+  if (modeEl)        modeEl.value        = mode;
+
+  // 4. Set strategy from mappings (use level 2 / medium as default)
+  const stratEl = document.getElementById("sf-strategy");
+  if (stratEl && mappings.length) {
+    const mid = mappings[Math.floor(mappings.length / 2)];
+    const stratVal = mid?.strategy || mid?.stratVal || "9|15|30";
+    // Find matching option
+    const opts = [...stratEl.options];
+    const match = opts.find(o => o.value === stratVal || o.value.startsWith(stratVal.split("|")[0]+"|"));
+    if (match) stratEl.value = match.value;
+  }
+
+  // 5. Show info banner
+  if (infoEl) {
+    const deviceNames = devices.map(d => {
+      const uid  = typeof d === "string" ? d : d.uid;
+      const dev  = DEVICES.find(x => x.uid === uid);
+      return dev?.name || uid;
+    }).join(", ");
+    infoEl.style.display = "block";
+    infoEl.innerHTML = `
+      <strong>${prog.name}</strong>${prog.utility ? ` — ${prog.utility}` : ""}<br/>
+      Mode: <strong>${mode.toUpperCase()}</strong> &bull;
+      Event type: <strong>${evType === "bas_di" ? "BAS Mode" : "Switch/Relay"}</strong> &bull;
+      Devices: <strong>${devices.length}</strong>${deviceNames ? ` (${deviceNames})` : ""}<br/>
+      ${prog.notes ? `<span style="color:var(--text-secondary);">${prog.notes}</span>` : ""}`;
+  }
+
+  // 6. Pre-fill event name with program name
+  const nameEl = document.getElementById("sf-name");
+  if (nameEl && !nameEl.value) {
+    nameEl.value = prog.name + " Event";
+  }
+}
+
+function clearDRProgramSelection() {
+  const sel    = document.getElementById("sf-dr-program");
+  const infoEl = document.getElementById("sf-dr-program-info");
+  if (sel)    sel.value = "";
+  if (infoEl) infoEl.style.display = "none";
+}
+// ── End DR Program integration ────────────────────────────────────────────────
+
 // ── Trigger Log CSV Export ─────────────────────────────────────────────────────
 let _triggerLogRows = [];
 
@@ -26722,6 +26754,7 @@ function showHelpTab(key) {
       </div>
     </div>
   </div>
+</div>
 
 </body>
 </html>
