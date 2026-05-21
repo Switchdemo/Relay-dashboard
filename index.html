@@ -1403,7 +1403,111 @@
             </div>
             <div style="font-size:11px;color:var(--text-hint);">Sends an OpenADR 2.0b event to the configured VEN. Device dispatch follows the signal level → LC strategy mapping in OpenADR Config.</div>
           </div>
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">Create New Event <button class="help-icon" onclick="openHelp('scheduling')" title="Help">?</button></div>
+        </div>
+        <div class="sched-form">
 
+
+
+
+          <div class="sched-field">
+            <label class="sched-label">Time</label>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <select class="sched-select" id="sf-hour" style="flex:1;">
+                <option value="" disabled selected>HH</option>
+                <option value="00">12 AM</option>
+                <option value="01">1 AM</option>
+                <option value="02">2 AM</option>
+                <option value="03">3 AM</option>
+                <option value="04">4 AM</option>
+                <option value="05">5 AM</option>
+                <option value="06">6 AM</option>
+                <option value="07">7 AM</option>
+                <option value="08">8 AM</option>
+                <option value="09">9 AM</option>
+                <option value="10">10 AM</option>
+                <option value="11">11 AM</option>
+                <option value="12">12 PM</option>
+                <option value="13">1 PM</option>
+                <option value="14">2 PM</option>
+                <option value="15">3 PM</option>
+                <option value="16">4 PM</option>
+                <option value="17">5 PM</option>
+                <option value="18">6 PM</option>
+                <option value="19">7 PM</option>
+                <option value="20">8 PM</option>
+                <option value="21">9 PM</option>
+                <option value="22">10 PM</option>
+                <option value="23">11 PM</option>
+              </select>
+              <span style="font-size:14px;font-weight:600;color:var(--text-hint);">:</span>
+              <select class="sched-select" id="sf-minute" style="flex:1;">
+                <option value="" disabled selected>MM</option>
+                <option value="00">00</option>
+                <option value="15">15</option>
+                <option value="30">30</option>
+                <option value="45">45</option>
+              </select>
+            </div>
+          </div>
+          <div class="sched-field" id="sf-date-field">
+            <label class="sched-label">Date (One Time)</label>
+            <input class="sched-input" id="sf-date" type="date" />
+          </div>
+          <div class="sched-field">
+            <label class="sched-label">Event Duration</label>
+            <select class="sched-select" id="sf-duration">
+              <option value="" disabled selected>— Choose Duration —</option>
+              <option value="15">15 minutes</option>
+              <option value="30">30 minutes</option>
+              <option value="45">45 minutes</option>
+              <option value="60">1 hour</option>
+              <option value="75">1 hr 15 min</option>
+              <option value="90">1 hr 30 min</option>
+              <option value="105">1 hr 45 min</option>
+              <option value="120">2 hours</option>
+              <option value="135">2 hr 15 min</option>
+              <option value="150">2 hr 30 min</option>
+              <option value="165">2 hr 45 min</option>
+              <option value="180">3 hours</option>
+              <option value="195">3 hr 15 min</option>
+              <option value="210">3 hr 30 min</option>
+              <option value="225">3 hr 45 min</option>
+              <option value="240">4 hours</option>
+              <option value="255">4 hr 15 min</option>
+              <option value="270">4 hr 30 min</option>
+              <option value="285">4 hr 45 min</option>
+              <option value="300">5 hours</option>
+              <option value="315">5 hr 15 min</option>
+              <option value="330">5 hr 30 min</option>
+              <option value="345">5 hr 45 min</option>
+              <option value="360">6 hours</option>
+              <option value="375">6 hr 15 min</option>
+              <option value="390">6 hr 30 min</option>
+              <option value="405">6 hr 45 min</option>
+              <option value="420">7 hours</option>
+              <option value="435">7 hr 15 min</option>
+              <option value="450">7 hr 30 min</option>
+              <option value="465">7 hr 45 min</option>
+              <option value="480">8 hours</option>
+            </select>
+          </div>
+          <div class="sched-field">
+            <label class="sched-label">Timezone</label>
+            <select class="sched-select" id="sf-timezone">
+            </select>
+          </div>
+
+
+          <div class="sched-field full">
+            <button class="sched-submit-btn" onclick="showSchedConfirm()">Save Schedule</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
   </div>
 </div>
 </div>
@@ -5879,10 +5983,7 @@ async function loadAllAssetsIntoDevices() {
     let db = [], local = [];
     try { const r = await supabaseGet(q); if (Array.isArray(r)) db = r; } catch(e) {}
     try { const s = localStorage.getItem(key); if (s) local = JSON.parse(s); } catch(e) {}
-    // Also check alternate key if provided
-    if (key2) {
-      try { const s2 = localStorage.getItem(key2); if (s2) { const l2 = JSON.parse(s2); local = [...local, ...l2]; } } catch(e) {}
-    }
+    if (key2) { try { const s2 = localStorage.getItem(key2); if (s2) local = [...local, ...JSON.parse(s2)]; } catch(e) {} }
     const ids = new Set(db.map(r => r.station_id || r.asset_id));
     return [...db, ...local.filter(r => !(ids.has(r.station_id) || ids.has(r.asset_id)))];
   };
@@ -5893,10 +5994,14 @@ async function loadAllAssetsIntoDevices() {
     safeGet("generator_assets?enabled=eq.true&order=enrolled_at.asc",  "lcp_generator_assets_v1"),
   ]);
 
-  // Always update global arrays with latest data
-  if (evRows.length)   { evChargers = evRows; if (typeof evDevAssets !== "undefined") evDevAssets = evRows; }
-  if (battRows.length) { batteryAssets = battRows; }
-  if (genRows.length)  { generatorAssets = genRows; }
+  // Populate global arrays used by existing inject functions
+  if (!evChargers.length && evRows.length) {
+    evChargers = evRows;
+    if (typeof evDevAssets === "undefined") window.evDevAssets = evRows;
+    else evDevAssets = evRows;
+  }
+  if (!batteryAssets.length && battRows.length) batteryAssets = battRows;
+  if (!generatorAssets.length && genRows.length) generatorAssets = genRows;
 
   // Inject into DEVICES directly using same pattern as inject functions
   DEVICES = DEVICES.filter(d => d.type === "relay" || !d.type);
@@ -6355,6 +6460,7 @@ function getBrowserTz() {
 
 function populateTzSelector() {
   const sel = document.getElementById("sf-timezone");
+  if (!sel) return;
   const browserTz = getBrowserTz();
   // Find best match in our NA_TIMEZONES list
   const match = NA_TIMEZONES.find(t => t.tz === browserTz);
@@ -6368,8 +6474,9 @@ function populateTzSelector() {
 }
 
 function populateTargetSelector() {
-  const type = document.getElementById("sf-target-type").value;
+  const type = document.getElementById("sf-target-type")?.value;
   const sel  = document.getElementById("sf-target");
+  if (!type || !sel) return;
   const placeholder = `<option value="" disabled selected>— Choose One —</option>`;
 
   if (type === "group") {
@@ -26754,7 +26861,6 @@ function showHelpTab(key) {
       </div>
     </div>
   </div>
-</div>
 
 </body>
 </html>
