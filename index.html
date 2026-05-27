@@ -12913,9 +12913,11 @@ function setDeviceDisabled(deviceId, disabled) {
 // ── Send Command ──────────────────────────────────────────────────────────────
 async function send(deviceId, key, label) {
   if (busy) return false;
+  const dev = DEVICES.find(d => d.id === deviceId);
+  if (!dev) { setStatus("error", "Unknown device — command blocked."); return false; }
   busy = true; setDeviceDisabled(deviceId, true); setStatus("sending", label + "...");
   try {
-    const res = await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(COMMANDS[key]) });
+    const res = await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "X-Device-UID": dev.uid }, body: JSON.stringify(COMMANDS[key]) });
     if (res.ok) { setStatus("ready", label + " — done."); busy = false; setDeviceDisabled(deviceId, false); return true; }
     else { setStatus("error", "Error " + res.status + " — command failed."); busy = false; setDeviceDisabled(deviceId, false); return false; }
   } catch(e) { setStatus("error", "Network error — check connection."); busy = false; setDeviceDisabled(deviceId, false); return false; }
@@ -12946,7 +12948,7 @@ async function sendToDevice(uid, key) {
     return;
   }
   try {
-    await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(COMMANDS[key]) });
+    await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "X-Device-UID": uid }, body: JSON.stringify(COMMANDS[key]) });
   } catch(e) { console.error("Send error", uid, e); }
 }
 async function toggleRelay(deviceId, num) {
