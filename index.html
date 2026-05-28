@@ -91,6 +91,18 @@
   .relay-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 3px; }
   .relay-dot.on { background: var(--green); }
   .relay-dot.off { background: #d3d1c7; }
+  /* Load sensing indicator — shown only on sensing_capable devices */
+  .load-calling-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10px; font-weight: 600; color: #b45309;
+    background: #fef3c7; border: 1px solid #f59e0b;
+    border-radius: 4px; padding: 1px 5px; margin-left: 6px;
+    animation: pulse-amber 1.8s ease-in-out infinite;
+  }
+  .load-calling-badge::before { content: "●"; font-size: 8px; }
+  @keyframes pulse-amber {
+    0%, 100% { opacity: 1; } 50% { opacity: 0.55; }
+  }
 
   /* ── History ── */
   .history-panel { max-width: 900px; width:100%; margin: 0 auto; background: var(--surface); border: 0.5px solid var(--border-md); border-radius: var(--radius); padding: 1.25rem; overflow:hidden; box-sizing:border-box; }
@@ -5949,9 +5961,9 @@ let DEVICES = [
 
 async function loadDevicesFromDB() {
   try {
-    const rows = await supabaseGet("devices?enabled=eq.true&order=id.asc");
+    const rows = await supabaseGet("devices?enabled=eq.true&order=id.asc&select=*");
     if (Array.isArray(rows) && rows.length > 0) {
-      DEVICES = rows.map(r => ({ id: r.device_id, uid: r.uid, name: r.name, type: r.type||"relay", location: r.location||"" }));
+      DEVICES = rows.map(r => ({ id: r.device_id, uid: r.uid, name: r.name, type: r.type||"relay", location: r.location||"", sensing_capable: r.sensing_capable||false }));
     } else {
       DEVICES = [
         { id: "device1", uid: "dev:868032061596023", name: "Unit 6023", type:"relay" },
@@ -12840,6 +12852,7 @@ function buildControls() {
             <span class="relay-row-label">Relay ${n}</span>
             <div style="display:flex;align-items:center;gap:10px;">
               <span class="relay-row-state" id="rlbl-${device.id}-${n}">Off</span>
+              ${device.sensing_capable ? `<span class="load-calling-badge" id="lcbadge-${device.id}-${n}" style="display:none;">Load Calling</span>` : ""}
               <div class="toggle" id="rtgl-${device.id}-${n}"><div class="track"></div><div class="thumb"></div></div>
             </div>
           </div>`).join("")}
@@ -12889,13 +12902,17 @@ function buildDataCards() {
 }
 
 // ── UI Helpers ────────────────────────────────────────────────────────────────
-function setRelayUI(deviceId, num, on) {
+function setRelayUI(deviceId, num, on, loadCalling) {
   relayState[deviceId][num] = on;
   document.getElementById(`row-${deviceId}-${num}`).classList.toggle("on", on);
   document.getElementById(`rtgl-${deviceId}-${num}`).classList.toggle("on", on);
   const lbl = document.getElementById(`rlbl-${deviceId}-${num}`);
   lbl.textContent = on ? "On" : "Off";
   lbl.className = "relay-row-state" + (on ? " on" : "");
+  // Load calling badge — only present on sensing_capable devices.
+  // Show when relay is OFF and load is calling (y bit = 1).
+  const badge = document.getElementById(`lcbadge-${deviceId}-${num}`);
+  if (badge) badge.style.display = (!on && loadCalling) ? "" : "none";
 }
 function setAllUI(deviceId, on) {
   relayState[deviceId].all = on;
@@ -13327,10 +13344,10 @@ async function loadLatestDevice(deviceId) {
     }
 
     container.innerHTML = activeEventPill + `<div class="data-fields">
-      <div class="data-field"><span class="data-field-name">Relay 1</span><span class="data-field-value">${relayDot(r.relay_status_r1)}</span></div>
-      <div class="data-field"><span class="data-field-name">Relay 2</span><span class="data-field-value">${relayDot(r.relay_status_r2)}</span></div>
-      <div class="data-field"><span class="data-field-name">Relay 3</span><span class="data-field-value">${relayDot(r.relay_status_r3)}</span></div>
-      <div class="data-field"><span class="data-field-name">Relay 4</span><span class="data-field-value">${relayDot(r.relay_status_r4)}</span></div>
+      <div class="data-field"><span class="data-field-name">Relay 1</span><span class="data-field-value">${relayDot(r.relay_status_r1)}${device.sensing_capable && r.load_present_r1 && !r.relay_active_r1 ? ' <span style="color:#b45309;font-size:10px;font-weight:600;">● Calling</span>' : ""}</span></div>
+      <div class="data-field"><span class="data-field-name">Relay 2</span><span class="data-field-value">${relayDot(r.relay_status_r2)}${device.sensing_capable && r.load_present_r2 && !r.relay_active_r2 ? ' <span style="color:#b45309;font-size:10px;font-weight:600;">● Calling</span>' : ""}</span></div>
+      <div class="data-field"><span class="data-field-name">Relay 3</span><span class="data-field-value">${relayDot(r.relay_status_r3)}${device.sensing_capable && r.load_present_r3 && !r.relay_active_r3 ? ' <span style="color:#b45309;font-size:10px;font-weight:600;">● Calling</span>' : ""}</span></div>
+      <div class="data-field"><span class="data-field-name">Relay 4</span><span class="data-field-value">${relayDot(r.relay_status_r4)}${device.sensing_capable && r.load_present_r4 && !r.relay_active_r4 ? ' <span style="color:#b45309;font-size:10px;font-weight:600;">● Calling</span>' : ""}</span></div>
       <div class="data-field"><span class="data-field-name">Voltage</span><span class="data-field-value">${r.voltage ? (r.voltage/10).toFixed(1) + " V" : "—"}</span></div>
       <div class="data-field"><span class="data-field-name">Current</span><span class="data-field-value">${r.current ? (r.current/10).toFixed(1) + " A" : "—"}</span></div>
       <div class="data-field"><span class="data-field-name">Watts</span><span class="data-field-value">${r.watts_consumed ? r.watts_consumed + " W" : "—"}</span></div>
@@ -13339,6 +13356,18 @@ async function loadLatestDevice(deviceId) {
       <div class="data-field"><span class="data-field-name">Location</span><span class="data-field-value">${r.location ?? "—"}</span></div>
     </div>`;
     tsEl.textContent = `Last updated: ${new Date(r.recorded_at).toLocaleString()}`;
+
+    // Sync load calling badges on the relay control card if this device has sensing.
+    // relay_active_rN = relay switched on; load_present_rN = load calling while relay open.
+    if (device.sensing_capable) {
+      [1,2,3,4].forEach(n => {
+        const badge = document.getElementById(`lcbadge-${deviceId}-${n}`);
+        if (!badge) return;
+        const active  = r[`relay_active_r${n}`];
+        const calling = r[`load_present_r${n}`];
+        badge.style.display = (!active && calling) ? "" : "none";
+      });
+    }
 
     // Load health data - use device_readings SW/SQ as primary, device_health for voltage/temp
     const healthEl = document.getElementById(`health-strip-${deviceId}`);
