@@ -734,6 +734,7 @@
     <button class="sub-tab-btn" id="sub-ev-chargers" onclick="switchSub('devices','ev-chargers',this)">&#128268; EV Chargers</button>
     <button class="sub-tab-btn" id="sub-battery" onclick="switchSub('devices','battery',this)">&#128267; Battery Systems</button>
     <button class="sub-tab-btn" id="sub-generators" onclick="switchSub('devices','generators',this)">&#9889; Generators</button>
+    <button class="sub-tab-btn" id="sub-pelican" onclick="switchSub('devices','pelican',this)">🌡️ Pelican Sites</button>
   </div>
   <div class="status-bar">
     <div class="dot ready" id="dot"></div>
@@ -6038,6 +6039,17 @@ async function loadAllAssetsIntoDevices() {
     if (!relayState[uid]) relayState[uid] = {1:false,2:false,3:false,4:false,all:false};
   });
 
+  // Inject Pelican sites into DEVICES for group and target selectors
+  if (typeof pelicanSites !== "undefined" && pelicanSites.length) {
+    pelicanSites.forEach(s => {
+      const uid = `pelican_${s.site_name}`;
+      if (!DEVICES.find(d => d.id === uid)) {
+        DEVICES.push({ id: uid, uid, name: s.display_name || s.site_name, type: "pelican", pelicanSite: s });
+        if (!relayState[uid]) relayState[uid] = {1:false,2:false,3:false,4:false,all:false};
+      }
+    });
+  }
+
   if (typeof refreshGroupSelectors === "function") refreshGroupSelectors();
   if (typeof populateTargetSelector === "function") populateTargetSelector();
 }
@@ -9778,6 +9790,8 @@ async function onSignedIn(session) {
   await loadDevicesFromDB();
   buildControls();
   buildDataCards();
+  // Load Pelican sites in background (non-blocking)
+  loadPelicanSites().catch(e => console.warn("Pelican load:", e.message));
   // Start OpenADR background poller immediately after login
   startOADRPoller();
   // Start NWS weather poller if location is already saved
@@ -23521,6 +23535,308 @@ async function loadGeneratorLog() {
 
 
 
+
+// ── Pelican Wireless ─────────────────────────────────────────────────────────
+
+let pelicanSites = [];
+
+async function loadPelicanSites() {
+  try {
+    const rows = await supabaseGet("pelican_sites?enabled=eq.true&order=created_at.asc");
+    pelicanSites = Array.isArray(rows) ? rows : [];
+  } catch(e) { pelicanSites = []; }
+  renderPelicanSites();
+  populatePelicanDispatchSelector();
+}
+
+function renderPelicanSites() {
+  const list  = document.getElementById("pelican-site-list");
+  const badge = document.getElementById("pelican-status-badge");
+  if (!list) return;
+
+  const total   = pelicanSites.length;
+  const active  = pelicanSites.filter(s => s.status === "active_event").length;
+  const idle    = pelicanSites.filter(s => s.status === "idle").length;
+  const tStats  = pelicanSites.reduce((a, s) => ({
+    count:   a.count   + (s.thermostat_count        || 0),
+    setback: a.setback + (s.thermostats_in_setback  || 0)
+  }), { count: 0, setback: 0 });
+
+  const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  setEl("pelican-stat-total",      total || "—");
+  setEl("pelican-stat-active",     active || "0");
+  setEl("pelican-stat-idle",       idle || "0");
+  setEl("pelican-stat-thermostats",tStats.count || "—");
+  setEl("pelican-stat-setback",    tStats.setback || "0");
+  if (badge) badge.textContent = `${total} site${total !== 1 ? "s" : ""}`;
+
+  if (!total) { list.innerHTML = '<div class="data-empty">No Pelican sites configured. Click + Add Site to get started.</div>'; return; }
+
+  const levelLabel = l => (["Normal","Moderate","High","Special"][l] || l);
+  const levelColor = l => (["var(--green-dark)","var(--amber)","var(--red)","var(--red)"][l] || "inherit");
+
+  list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <thead><tr>
+      <th style="text-align:left;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Site</th>
+      <th style="text-align:left;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Auth</th>
+      <th style="text-align:center;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Status</th>
+      <th style="text-align:center;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Thermostats</th>
+      <th style="text-align:center;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">In Setback</th>
+      <th style="text-align:center;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Last Poll</th>
+      <th style="text-align:right;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Actions</th>
+    </tr></thead>
+    <tbody>${pelicanSites.map(s => {
+      const isActive = s.status === "active_event";
+      const statusDot = isActive
+        ? `<span style="color:var(--red);font-weight:700;">● Active DR ${s.active_event_level !== null ? `(${levelLabel(s.active_event_level)})` : ""}</span>`
+        : s.status === "error"
+          ? `<span style="color:var(--amber);">⚠ Error</span>`
+          : `<span style="color:var(--green-dark);">● Idle</span>`;
+      const pollStr = s.last_polled_at
+        ? new Date(s.last_polled_at).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})
+        : "Never";
+      return `<tr>
+        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);">
+          <div style="font-weight:600;">${s.display_name}</div>
+          <div style="font-size:10px;color:var(--text-hint);font-family:monospace;">${s.site_name}.officeclimatecontrol.net</div>
+          ${s.notes ? `<div style="font-size:10px;color:var(--text-hint);margin-top:2px;">${s.notes}</div>` : ""}
+        </td>
+        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);">
+          <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:var(--surface2);font-family:monospace;">
+            ${s.auth_mode === "mysites" ? "MySites" : "Direct"}
+          </span>
+        </td>
+        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:center;">${statusDot}</td>
+        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:center;">${s.thermostat_count ?? "—"}</td>
+        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:center;font-weight:${(s.thermostats_in_setback||0)>0?"700":"400"};color:${(s.thermostats_in_setback||0)>0?"var(--amber)":"inherit"};">${s.thermostats_in_setback ?? 0}</td>
+        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:center;color:var(--text-hint);font-size:11px;">${pollStr}</td>
+        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:right;">
+          <div style="display:flex;gap:6px;justify-content:flex-end;">
+            <button onclick="pelicanShedSingle('${s.site_name}','${s.auth_mode}',${s.dr_level_default||2})"
+              style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--red);background:rgba(220,38,38,0.08);color:var(--red);font-size:10px;font-weight:600;cursor:pointer;">
+              Shed
+            </button>
+            <button onclick="pelicanRestoreSingle('${s.site_name}','${s.auth_mode}')"
+              style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--green-dark);background:var(--green-bg);color:var(--green-dark);font-size:10px;font-weight:600;cursor:pointer;">
+              Restore
+            </button>
+            <button onclick="pelicanPollSingle('${s.site_name}','${s.auth_mode}')"
+              style="padding:4px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:10px;cursor:pointer;">
+              📊
+            </button>
+            <button onclick="removePelicanSite('${s.site_name}')"
+              style="padding:4px 8px;border-radius:4px;border:0.5px solid var(--red);background:transparent;color:var(--red);font-size:10px;cursor:pointer;">
+              ✕
+            </button>
+          </div>
+        </td>
+      </tr>`;
+    }).join("")}</tbody></table>`;
+}
+
+function populatePelicanDispatchSelector() {
+  const sel = document.getElementById("pelican-dispatch-site");
+  if (!sel) return;
+  // Keep the "All enrolled sites" option, replace rest
+  while (sel.options.length > 1) sel.remove(1);
+  pelicanSites.filter(s => s.dr_enrolled).forEach(s => {
+    const opt = new Option(s.display_name || s.site_name, s.site_name);
+    opt.dataset.authMode = s.auth_mode;
+    sel.add(opt);
+  });
+}
+
+function togglePelicanEnrollForm() {
+  const f = document.getElementById("pelican-enroll-form");
+  if (f) f.style.display = f.style.display === "none" ? "" : "none";
+}
+
+function pelicanAuthModeChanged() {
+  const mode = document.getElementById("pelican-form-auth-mode")?.value;
+  const dNote = document.getElementById("pelican-form-direct-note");
+  const mNote = document.getElementById("pelican-form-mysites-note");
+  if (dNote) dNote.style.display = mode === "direct" ? "" : "none";
+  if (mNote) mNote.style.display = mode === "mysites" ? "" : "none";
+}
+
+async function savePelicanSite() {
+  const siteName   = (document.getElementById("pelican-form-site-name")?.value || "").trim().toLowerCase();
+  const displayName= (document.getElementById("pelican-form-display-name")?.value || "").trim();
+  const authMode   = document.getElementById("pelican-form-auth-mode")?.value || "direct";
+  const drLevel    = parseInt(document.getElementById("pelican-form-dr-level")?.value || "2");
+  const notes      = (document.getElementById("pelican-form-notes")?.value || "").trim();
+
+  if (!siteName || !displayName) { alert("Site name and display name are required."); return; }
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(siteName)) { alert("Site name must be lowercase letters, numbers, and hyphens only."); return; }
+
+  try {
+    await supabasePost("pelican_sites", {
+      site_name: siteName, display_name: displayName,
+      auth_mode: authMode, dr_level_default: drLevel,
+      notes: notes || null, status: "unknown", enabled: true, dr_enrolled: true
+    });
+    togglePelicanEnrollForm();
+    ["pelican-form-site-name","pelican-form-display-name","pelican-form-notes"].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = "";
+    });
+    await loadPelicanSites();
+  } catch(e) { alert("Failed to save site: " + e.message); }
+}
+
+async function removePelicanSite(siteName) {
+  if (!confirm(`Remove ${siteName} from Pelican sites? This does not affect the Pelican system itself.`)) return;
+  try {
+    await supabaseDelete("pelican_sites", `site_name=eq.${encodeURIComponent(siteName)}`);
+    await loadPelicanSites();
+  } catch(e) { alert("Remove failed: " + e.message); }
+}
+
+function setPelicanStatus(msg, color = "var(--text-secondary)") {
+  const el = document.getElementById("pelican-dispatch-status");
+  if (el) { el.textContent = msg; el.style.color = color; }
+}
+
+async function pelicanShedSingle(siteName, authMode, level = 2) {
+  const duration = parseInt(document.getElementById("pelican-dispatch-duration")?.value || "60");
+  setPelicanStatus(`Sending DR level ${level} to ${siteName}…`, "var(--amber)");
+  try {
+    const res = await fetch(PROXY_URL.replace(/\/$/, "") + "/pelican/shed", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ site_name: siteName, auth_mode: authMode, duration_minutes: duration, level, fired_by: currentSession?.user?.email })
+    });
+    const data = await res.json();
+    if (data.success) {
+      setPelicanStatus(`✅ DR level ${level} sent to ${siteName}`, "var(--green-dark)");
+    } else {
+      setPelicanStatus(`⚠ Pelican API error: ${JSON.stringify(data.data)}`, "var(--red)");
+    }
+    await loadPelicanSites();
+    await loadPelicanLog();
+  } catch(e) { setPelicanStatus(`Error: ${e.message}`, "var(--red)"); }
+}
+
+async function pelicanRestoreSingle(siteName, authMode) {
+  setPelicanStatus(`Restoring ${siteName}…`, "var(--text-hint)");
+  try {
+    const res = await fetch(PROXY_URL.replace(/\/$/, "") + "/pelican/restore", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ site_name: siteName, auth_mode: authMode, fired_by: currentSession?.user?.email })
+    });
+    const data = await res.json();
+    if (data.success) {
+      setPelicanStatus(`✅ ${siteName} restored`, "var(--green-dark)");
+    } else {
+      setPelicanStatus(`⚠ Restore error: ${JSON.stringify(data.data)}`, "var(--red)");
+    }
+    await loadPelicanSites();
+    await loadPelicanLog();
+  } catch(e) { setPelicanStatus(`Error: ${e.message}`, "var(--red)"); }
+}
+
+async function pelicanPollSingle(siteName, authMode) {
+  try {
+    const res = await fetch(`${PROXY_URL.replace(/\/$/, "")}/pelican/status?site_name=${encodeURIComponent(siteName)}&auth_mode=${authMode}`);
+    const data = await res.json();
+    if (data.success) {
+      setPelicanStatus(`${siteName}: ${data.in_setback} of ${data.thermostats?.length || 0} thermostats in setback`, "var(--blue-dark)");
+    } else {
+      setPelicanStatus(`Poll error: ${data.error}`, "var(--red)");
+    }
+    await loadPelicanSites();
+  } catch(e) { setPelicanStatus(`Poll error: ${e.message}`, "var(--red)"); }
+}
+
+async function dispatchPelicanDR() {
+  const sel      = document.getElementById("pelican-dispatch-site");
+  const level    = parseInt(document.getElementById("pelican-dispatch-level")?.value || "2");
+  const duration = parseInt(document.getElementById("pelican-dispatch-duration")?.value || "60");
+  const siteVal  = sel?.value || "all";
+
+  if (siteVal === "all") {
+    const enrolled = pelicanSites.filter(s => s.dr_enrolled && s.enabled);
+    if (!enrolled.length) { setPelicanStatus("No enrolled sites.", "var(--text-hint)"); return; }
+    setPelicanStatus(`Sending DR level ${level} to ${enrolled.length} sites…`, "var(--amber)");
+    const results = await Promise.all(enrolled.map(s =>
+      fetch(PROXY_URL.replace(/\/$/, "") + "/pelican/shed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ site_name: s.site_name, auth_mode: s.auth_mode, duration_minutes: duration, level, fired_by: currentSession?.user?.email })
+      }).then(r => r.json()).catch(e => ({ success: false, error: e.message }))
+    ));
+    const ok = results.filter(r => r.success).length;
+    setPelicanStatus(`✅ DR sent to ${ok}/${enrolled.length} sites`, ok === enrolled.length ? "var(--green-dark)" : "var(--amber)");
+  } else {
+    const opt      = sel.options[sel.selectedIndex];
+    const authMode = opt.dataset.authMode || "direct";
+    await pelicanShedSingle(siteVal, authMode, level);
+    return;
+  }
+  await loadPelicanSites();
+  await loadPelicanLog();
+}
+
+async function restorePelicanDR() {
+  const active = pelicanSites.filter(s => s.status === "active_event" && s.enabled);
+  if (!active.length) { setPelicanStatus("No sites currently in active DR.", "var(--text-hint)"); return; }
+  setPelicanStatus(`Restoring ${active.length} active sites…`, "var(--text-hint)");
+  await Promise.all(active.map(s => pelicanRestoreSingle(s.site_name, s.auth_mode)));
+}
+
+async function pollPelicanStatus() {
+  const enrolled = pelicanSites.filter(s => s.enabled);
+  if (!enrolled.length) { setPelicanStatus("No sites to poll.", "var(--text-hint)"); return; }
+  setPelicanStatus(`Polling ${enrolled.length} sites…`, "var(--text-hint)");
+  await Promise.all(enrolled.map(s => pelicanPollSingle(s.site_name, s.auth_mode)));
+  setPelicanStatus(`Poll complete — ${enrolled.length} sites updated`, "var(--green-dark)");
+}
+
+async function refreshPelicanSites() {
+  await loadPelicanSites();
+  await loadPelicanLog();
+}
+
+async function loadPelicanLog() {
+  const list = document.getElementById("pelican-log-list");
+  if (!list) return;
+  try {
+    const rows = await supabaseGet("pelican_dr_log?order=fired_at.desc&limit=50");
+    if (!Array.isArray(rows) || !rows.length) {
+      list.innerHTML = '<div class="data-empty">No Pelican DR events logged yet.</div>';
+      return;
+    }
+    const levelLabel = l => (l !== null && l !== undefined) ? ["Normal","Moderate","High","Special"][l] || l : "—";
+    list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead><tr>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Site</th>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Action</th>
+        <th style="text-align:center;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Level</th>
+        <th style="text-align:center;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Duration</th>
+        <th style="text-align:center;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Result</th>
+        <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">By / Time</th>
+      </tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);">
+          <div style="font-weight:500;">${r.display_name || r.site_name}</div>
+          <div style="font-size:10px;color:var(--text-hint);font-family:monospace;">${r.site_name}</div>
+        </td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-weight:700;color:${r.action==="shed"?"var(--red)":r.action==="restore"?"var(--green-dark)":"var(--text-hint)"};">${(r.action||"").toUpperCase()}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:center;">${levelLabel(r.level)}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:center;">${r.duration_mins ? r.duration_mins + " min" : "—"}</td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:center;">
+          ${r.success ? '<span style="color:var(--green-dark);">✓</span>' : '<span style="color:var(--red);">✗</span>'}
+        </td>
+        <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;color:var(--text-hint);">
+          ${r.fired_by || "—"}<br/>
+          <span style="font-size:10px;">${new Date(r.fired_at).toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}</span>
+        </td>
+      </tr>`).join("")}</tbody></table>`;
+  } catch(e) {
+    list.innerHTML = '<div class="data-empty">Run pelican_migration.sql to create the log table.</div>';
+  }
+}
+
 // ── DR Programs (non-OpenADR) ─────────────────────────────────────────────────
 
 let drPrograms      = [];   // all configured programs
@@ -26892,6 +27208,152 @@ function showHelpTab(key) {
       </div>
     </div>
   </div>
+
+
+<div class="tab-pane" id="tab-pelican">
+  <div class="scroll-content">
+    <div style="max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <!-- Fleet Overview -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">🌡️ Pelican Wireless Sites</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span id="pelican-status-badge" style="font-size:11px;font-family:monospace;padding:2px 8px;border-radius:10px;background:var(--surface2);color:var(--text-hint);">Loading...</span>
+            <button class="queue-refresh" onclick="refreshPelicanSites()">Refresh</button>
+            <button onclick="togglePelicanEnrollForm()" style="padding:6px 14px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">+ Add Site</button>
+          </div>
+        </div>
+
+        <!-- Fleet stats -->
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:14px;">
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="pelican-stat-total">—</div><div class="ev-meter-lbl">Total Sites</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="pelican-stat-active" style="color:var(--red);">—</div><div class="ev-meter-lbl">Active DR</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="pelican-stat-idle" style="color:var(--green-dark);">—</div><div class="ev-meter-lbl">Idle</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="pelican-stat-thermostats">—</div><div class="ev-meter-lbl">Thermostats</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="pelican-stat-setback" style="color:var(--amber);">—</div><div class="ev-meter-lbl">In Setback</div></div>
+        </div>
+
+        <!-- Architecture note -->
+        <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--text-hint);margin-bottom:14px;line-height:1.7;">
+          ℹ️ <strong>Pelican DR = site-wide thermostat setback.</strong>
+          Sending a DR event adjusts setpoints for all enrolled thermostats at the site according to the configured level (0=Normal, 1=Moderate, 2=High, 3=Special).
+          Participation rules and setback amounts are configured in the Pelican App per site.
+          <strong>Direct auth</strong> uses per-site credentials stored as Worker secrets.
+          <strong>MySites auth</strong> uses one shared account token valid for 24 hours across all sites.
+        </div>
+
+        <!-- Add Site form -->
+        <div id="pelican-enroll-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:16px;margin-bottom:14px;border:0.5px solid var(--border-md);">
+          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;font-family:monospace;">Add Pelican Site</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Site Name (subdomain) *</div>
+              <input id="pelican-form-site-name" type="text" placeholder="e.g. acme-north" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;box-sizing:border-box;" />
+              <div style="font-size:10px;color:var(--text-hint);margin-top:3px;">The subdomain of your Pelican site URL: <em>[sitename].officeclimatecontrol.net</em></div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Display Name *</div>
+              <input id="pelican-form-display-name" type="text" placeholder="e.g. ACME North Building" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;box-sizing:border-box;" />
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Authentication Mode *</div>
+              <select id="pelican-form-auth-mode" onchange="pelicanAuthModeChanged()" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="direct">Direct (per-site credentials)</option>
+                <option value="mysites">MySites (shared account token)</option>
+              </select>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Default DR Level</div>
+              <select id="pelican-form-dr-level" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="0">0 — Normal</option>
+                <option value="1">1 — Moderate</option>
+                <option value="2" selected>2 — High</option>
+                <option value="3">3 — Special</option>
+              </select>
+            </div>
+          </div>
+          <!-- Direct auth reminder -->
+          <div id="pelican-form-direct-note" style="background:rgba(59,130,246,0.08);border:0.5px solid var(--blue);border-radius:var(--radius-sm);padding:10px 14px;font-size:11px;color:var(--blue-dark);margin-bottom:10px;line-height:1.6;">
+            🔑 <strong>Direct auth:</strong> After saving, add two Worker secrets in the Cloudflare dashboard:<br/>
+            <code style="font-size:10px;">PELICAN_[SITENAME_UPPER]_USER</code> and <code style="font-size:10px;">PELICAN_[SITENAME_UPPER]_PASS</code><br/>
+            Replace hyphens with underscores and use all caps for the site name.
+          </div>
+          <!-- MySites auth reminder -->
+          <div id="pelican-form-mysites-note" style="display:none;background:rgba(59,130,246,0.08);border:0.5px solid var(--blue);border-radius:var(--radius-sm);padding:10px 14px;font-size:11px;color:var(--blue-dark);margin-bottom:10px;line-height:1.6;">
+            🔑 <strong>MySites auth:</strong> Ensure <code style="font-size:10px;">PELICAN_MYSITES_USER</code> and <code style="font-size:10px;">PELICAN_MYSITES_PASS</code> are set as Worker secrets in the Cloudflare dashboard. These are shared across all MySites-managed sites.
+          </div>
+          <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Notes (optional)</div>
+          <input id="pelican-form-notes" type="text" placeholder="e.g. 12 thermostats, 2-story office" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;margin-bottom:12px;box-sizing:border-box;" />
+          <div style="display:flex;gap:8px;">
+            <button onclick="savePelicanSite()" style="padding:7px 20px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Save Site</button>
+            <button onclick="togglePelicanEnrollForm()" style="padding:7px 14px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:transparent;font-size:12px;cursor:pointer;">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Site list -->
+        <div id="pelican-site-list"><div class="data-empty">Loading Pelican sites…</div></div>
+      </div>
+
+      <!-- DR Dispatch -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">⚡ Dispatch DR Event</div>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:14px;">
+          Send a demand response event to one or all enrolled Pelican sites. Thermostat participation is pre-configured in the Pelican App per site.
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end;margin-bottom:14px;">
+          <div>
+            <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Target Site</div>
+            <select id="pelican-dispatch-site" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="all">All enrolled sites</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">DR Level</div>
+            <select id="pelican-dispatch-level" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="0">0 — Normal (restore)</option>
+              <option value="1">1 — Moderate</option>
+              <option value="2" selected>2 — High</option>
+              <option value="3">3 — Special</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Duration (minutes)</div>
+            <input type="number" id="pelican-dispatch-duration" value="60" min="1" max="480"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;box-sizing:border-box;" />
+          </div>
+          <button onclick="dispatchPelicanDR()"
+            style="padding:8px 20px;border-radius:var(--radius-sm);border:none;background:var(--amber);color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">
+            🔴 Shed
+          </button>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button onclick="restorePelicanDR()"
+            style="padding:7px 20px;border-radius:var(--radius-sm);border:1.5px solid var(--green-dark);background:var(--green-bg);color:var(--green-dark);font-size:12px;font-weight:700;cursor:pointer;">
+            🟢 Restore All
+          </button>
+          <button onclick="pollPelicanStatus()"
+            style="padding:7px 14px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;cursor:pointer;">
+            📊 Poll Status
+          </button>
+        </div>
+        <div id="pelican-dispatch-status" style="margin-top:10px;font-size:12px;min-height:18px;"></div>
+      </div>
+
+      <!-- DR Log -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">📋 DR Activity Log</div>
+          <button class="queue-refresh" onclick="loadPelicanLog()">Refresh</button>
+        </div>
+        <div id="pelican-log-list"><div class="data-empty">No DR events logged yet.</div></div>
+      </div>
+
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
