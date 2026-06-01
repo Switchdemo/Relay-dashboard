@@ -6102,14 +6102,14 @@ let groupAssignments = {}; // { device_uid: [group_numbers] }
 // ── Supabase ──────────────────────────────────────────────────────────────────
 async function supabaseGet(query) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${query}`, {
-    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}` }
   });
   return res.json();
 }
 async function supabasePost(table, data) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method: "POST",
-    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
     body: JSON.stringify(data)
   });
   if (!res.ok) {
@@ -6121,14 +6121,14 @@ async function supabasePost(table, data) {
 async function supabaseUpsert(table, data, onConflict) {
   return fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
     method: "POST",
-    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" },
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" },
     body: JSON.stringify(data)
   });
 }
 async function supabaseDelete(table, filter) {
   return fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, {
     method: "DELETE",
-    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}` }
   });
 }
 
@@ -6137,7 +6137,7 @@ async function supabasePatch(path, data) {
     method: "PATCH",
     headers: {
       "apikey": SUPABASE_KEY,
-      "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
       "Content-Type": "application/json",
       "Prefer": "return=minimal"
     },
@@ -7099,7 +7099,7 @@ async function queueNow(scheduleId) {
   // Update last_fired_at on schedule
   await fetch(`${SUPABASE_URL}/rest/v1/schedules?id=eq.${scheduleId}`, {
     method: "PATCH",
-    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
     body: JSON.stringify({ last_fired_at: fireAt })
   });
 
@@ -7110,7 +7110,7 @@ async function queueNow(scheduleId) {
 async function toggleSchedule(id, currentEnabled) {
   await fetch(`${SUPABASE_URL}/rest/v1/schedules?id=eq.${id}`, {
     method: "PATCH",
-    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
     body: JSON.stringify({ enabled: !currentEnabled })
   });
   await loadSchedules();
@@ -7120,7 +7120,7 @@ async function deleteSchedule(id) {
   // Cancel any pending queue items for this schedule
   await fetch(`${SUPABASE_URL}/rest/v1/schedule_queue?schedule_id=eq.${id}&status=eq.pending`, {
     method: "PATCH",
-    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
     body: JSON.stringify({ status: "cancelled" })
   });
   await supabaseDelete("schedules", `id=eq.${id}`);
@@ -7232,7 +7232,7 @@ async function fireNow(id) {
   // Mark as fired
   await fetch(`${SUPABASE_URL}/rest/v1/schedule_queue?id=eq.${id}`, {
     method: "PATCH",
-    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
     body: JSON.stringify({ status: "sent", fired_at: new Date().toISOString() })
   });
   await loadQueue();
@@ -7241,7 +7241,7 @@ async function fireNow(id) {
 async function cancelQueueItem(id) {
   await fetch(`${SUPABASE_URL}/rest/v1/schedule_queue?id=eq.${id}`, {
     method: "PATCH",
-    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
     body: JSON.stringify({ status: "cancelled" })
   });
   setStatus("ready", "Queue item cancelled.");
@@ -7309,7 +7309,7 @@ async function checkSchedules() {
     // Update last_fired_at on schedule
     await fetch(`${SUPABASE_URL}/rest/v1/schedules?id=eq.${s.id}`, {
       method: "PATCH",
-      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
       body: JSON.stringify({ last_fired_at: fireAt })
     });
 
@@ -7327,7 +7327,7 @@ async function fireReadyQueueItems() {
     // Mark fired BEFORE executing to prevent double-fire
     await fetch(`${SUPABASE_URL}/rest/v1/schedule_queue?id=eq.${item.id}`, {
       method: "PATCH",
-      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
       body: JSON.stringify({ status: "sent", fired_at: now.toISOString() })
     });
     await executeQueuedCommand(item);
@@ -8036,7 +8036,7 @@ async function cancelAllEvents() {
   // Mark all fired/pending queue items as cancelled in Supabase
   await fetch(`${SUPABASE_URL}/rest/v1/schedule_queue?status=in.(pending,fired)`, {
     method: "PATCH",
-    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
     body: JSON.stringify({ status: "cancelled" })
   });
   setStatus("ready", `Restore sent to all ${DEVICES.length} devices — all events cancelled.`);
@@ -10262,11 +10262,11 @@ async function registerAssetAsDevice(assetId, name, type, location) {
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/devices?uid=eq.${encodeURIComponent(uid)}`, {
       method: "DELETE",
-      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}` }
+      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}` }
     });
     await fetch(`${SUPABASE_URL}/rest/v1/devices`, {
       method: "POST",
-      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`,
+      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
         "Content-Type":"application/json", "Prefer":"return=minimal" },
       body: JSON.stringify({ uid, name, type, location: location||null, enabled:true })
     });
@@ -10287,7 +10287,7 @@ async function unregisterAssetDevice(assetId, type) {
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/devices?uid=eq.${encodeURIComponent(uid)}`, {
       method: "DELETE",
-      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}` }
+      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}` }
     });
   } catch(e) {}
   const idx = DEVICES.findIndex(d => d.uid === uid);
@@ -12141,7 +12141,7 @@ async function saveAllDRConfig() {
       await fetch(`${SUPABASE_URL}/rest/v1/device_dr_config?on_conflict=device_uid`, {
         method: "POST",
         headers: {
-          "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+          "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
           "Content-Type": "application/json",
           "Prefer": "resolution=merge-duplicates,return=minimal"
         },
@@ -12162,7 +12162,7 @@ async function saveAllDRConfig() {
         await fetch(`${SUPABASE_URL}/rest/v1/device_relay_dr_config?on_conflict=device_uid,relay_number`, {
           method: "POST",
           headers: {
-            "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+            "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
             "Content-Type": "application/json",
             "Prefer": "resolution=merge-duplicates,return=minimal"
           },
@@ -12286,7 +12286,7 @@ async function saveVTNConfig() {
     } else {
       await fetch(`${SUPABASE_URL}/rest/v1/openadr_vtn_config`, {
         method: "POST",
-        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
           "Content-Type": "application/json", "Prefer": "return=minimal" },
         body: JSON.stringify(config)
       });
@@ -12624,7 +12624,7 @@ async function sendUpdateReport(evt, readingType, value) {
   // Store in openadr_reports
   await fetch(`${SUPABASE_URL}/rest/v1/openadr_reports`, {
     method: "POST",
-    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
       "Content-Type": "application/json", "Prefer": "return=minimal" },
     body: JSON.stringify({
       vtn_event_id: evt.vtn_event_id, report_name: "oadrUpdateReport",
@@ -12716,7 +12716,7 @@ async function simulateOpenADREvent() {
     // Insert simulated event
     await fetch(`${SUPABASE_URL}/rest/v1/openadr_events`, {
       method: "POST",
-      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
         "Content-Type": "application/json", "Prefer": "return=minimal" },
       body: JSON.stringify({
         vtn_event_id:  vtnEventId,
@@ -13192,7 +13192,7 @@ async function removeLastGroup() {
     // Remove all device assignments for this group
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/device_groups?group_number=eq.${lastNum}`, {
-        method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+        method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`}
       });
     } catch(e) {}
     Object.keys(groupAssignments).forEach(uid => {
@@ -13202,7 +13202,7 @@ async function removeLastGroup() {
   // Remove from group_names
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/group_names?group_number=eq.${lastNum}`, {
-      method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+      method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`}
     });
   } catch(e) {}
   delete groupNames[lastNum];
@@ -13582,7 +13582,7 @@ async function addNewDevice() {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/devices`, {
       method: "POST",
       headers: {
-        "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
         "Content-Type": "application/json", "Prefer": "return=minimal"
       },
       body: JSON.stringify({ device_id: deviceId, uid, name, enabled: true })
@@ -13606,7 +13606,7 @@ async function toggleDeviceEnabled(id, enabled, name) {
     await fetch(`${SUPABASE_URL}/rest/v1/devices?id=eq.${id}`, {
       method: "PATCH",
       headers: {
-        "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
         "Content-Type": "application/json", "Prefer": "return=minimal"
       },
       body: JSON.stringify({ enabled })
@@ -13624,7 +13624,7 @@ async function removeDevice(id, name) {
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/devices?id=eq.${id}`, {
       method: "DELETE",
-      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}` }
     });
     setStatus("ready", `${name} removed.`);
     await loadDevicesFromDB();
@@ -14406,7 +14406,7 @@ async function addFeedFromDiscovery(feedKey) {
     }
     const res = await fetch(`${SUPABASE_URL}/rest/v1/monitor_feeds`, {
       method:"POST",
-      headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", "Prefer":"return=representation" },
+      headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`, "Content-Type":"application/json", "Prefer":"return=representation" },
       body: JSON.stringify({ feed_key:feedKey, label:def.label, unit:def.unit, interval_minutes:def.interval, auth_required:def.auth !== "none", endpoint_url:def.testUrl||null, enabled:true, added_at:new Date().toISOString() })
     });
     if (!res.ok) {
@@ -14460,7 +14460,7 @@ async function loadActiveFeeds() {
 async function removeFeed(id) {
   if (!confirm("Remove this feed? Any rules using it will be disabled.")) return;
   await fetch(`${SUPABASE_URL}/rest/v1/monitor_feeds?id=eq.${id}`, {
-    method:"DELETE", headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}` }
+    method:"DELETE", headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}` }
   });
   await loadActiveFeeds();
 }
@@ -14660,7 +14660,7 @@ async function saveRule() {
   try {
     if (editingRuleId) {
       await fetch(`${SUPABASE_URL}/rest/v1/monitor_rules?id=eq.${editingRuleId}`, {
-        method:"PATCH", headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", "Prefer":"return=minimal" },
+        method:"PATCH", headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`, "Content-Type":"application/json", "Prefer":"return=minimal" },
         body: JSON.stringify(record)
       });
     } else {
@@ -14726,7 +14726,7 @@ async function editRule(id) {
 
 async function toggleRuleEnabled(id, enabled) {
   await fetch(`${SUPABASE_URL}/rest/v1/monitor_rules?id=eq.${id}`, {
-    method:"PATCH", headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", "Prefer":"return=minimal" },
+    method:"PATCH", headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`, "Content-Type":"application/json", "Prefer":"return=minimal" },
     body: JSON.stringify({ enabled })
   });
   await loadRules();
@@ -14735,7 +14735,7 @@ async function toggleRuleEnabled(id, enabled) {
 async function deleteRule(id) {
   if (!confirm("Delete this rule?")) return;
   await fetch(`${SUPABASE_URL}/rest/v1/monitor_rules?id=eq.${id}`, {
-    method:"DELETE", headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}` }
+    method:"DELETE", headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}` }
   });
   await loadRules();
 }
@@ -15118,7 +15118,7 @@ async function cancelAutopilot(ruleId) {
   // Update log entry
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/monitor_trigger_log?rule_id=eq.${ruleId}&outcome=eq.pending`, {
-      method:"PATCH", headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json" },
+      method:"PATCH", headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`, "Content-Type":"application/json" },
       body: JSON.stringify({ outcome:"cancelled" })
     });
   } catch(e) {}
@@ -15213,7 +15213,7 @@ async function fireAutopilotEvent(rule, fv) {
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/monitor_trigger_log?rule_id=eq.${rule.id}&outcome=eq.pending`, {
       method:"PATCH",
-      headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json" },
+      headers:{ "apikey":SUPABASE_KEY, "Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`, "Content-Type":"application/json" },
       body: JSON.stringify({ outcome:"fired" })
     });
   } catch(e) {}
@@ -16418,7 +16418,7 @@ async function cancelPendingEvent(ruleId, token) {
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/pending_notifications?token=eq.${token}`, {
         method: "PATCH",
-        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
           "Content-Type": "application/json", "Prefer": "return=minimal" },
         body: JSON.stringify({ cancelled: true, cancelled_at: new Date().toISOString(), cancelled_by: currentUser?.email })
       });
@@ -16429,7 +16429,7 @@ async function cancelPendingEvent(ruleId, token) {
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/monitor_trigger_log?rule_id=eq.${ruleId}&outcome=eq.pending`, {
       method: "PATCH",
-      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
         "Content-Type": "application/json", "Prefer": "return=minimal" },
       body: JSON.stringify({ outcome: "cancelled", cancelled_by: currentUser?.email })
     });
@@ -20132,7 +20132,7 @@ async function saveUtilityConfig() {
       method,
       headers: {
         "apikey": SUPABASE_KEY,
-        "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
         "Content-Type": "application/json",
         "Prefer": "return=representation"
       },
@@ -20274,7 +20274,7 @@ async function removeUtility(id) {
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/utility_outage_config?id=eq.${id}`, {
         method: "DELETE",
-        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}` }
       });
     } catch(e) { console.warn("removeUtility Supabase:", e.message); }
   }
@@ -20671,7 +20671,7 @@ function populateSCADATerritorySelect() {
 async function deleteSCADATerritory(id) {
   if (!confirm("Remove this territory?")) return;
   await fetch(`${SUPABASE_URL}/rest/v1/scada_territories?id=eq.${id}`, {
-    method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+    method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`}
   });
   await loadSCADATerritories();
 }
@@ -20721,7 +20721,7 @@ async function saveSCADASource() {
       method: "POST",
       headers: {
         "apikey": SUPABASE_KEY,
-        "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
         "Content-Type": "application/json",
         "Prefer": "return=representation"
       },
@@ -20876,7 +20876,7 @@ async function testSCADASource(id) {
 async function removeSCADASource(id) {
   if (!confirm("Remove this SCADA source? Associated data points will be orphaned.")) return;
   await fetch(`${SUPABASE_URL}/rest/v1/scada_sources?id=eq.${id}`, {
-    method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+    method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`}
   });
   await loadSCADASources();
 }
@@ -20974,7 +20974,7 @@ async function loadSCADAPointMap() {
 async function removeSCADAPoint(id) {
   if (!confirm("Remove this data point?")) return;
   await fetch(`${SUPABASE_URL}/rest/v1/scada_points?id=eq.${id}`, {
-    method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+    method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`}
   });
   await loadSCADAPointMap();
 }
@@ -21093,7 +21093,7 @@ async function pollSCADAREST() {
         // Update source status
         await fetch(`${SUPABASE_URL}/rest/v1/scada_sources?id=eq.${src.id}`, {
           method:"PATCH",
-          headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json","Prefer":"return=minimal"},
+          headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`,"Content-Type":"application/json","Prefer":"return=minimal"},
           body:JSON.stringify({status:"active",last_poll:new Date().toISOString()})
         });
       }
@@ -21129,7 +21129,7 @@ async function recordSCADASnapshot() {
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/scada_readings`, {
       method:"POST",
-      headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json","Prefer":"return=minimal"},
+      headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`,"Content-Type":"application/json","Prefer":"return=minimal"},
       body:JSON.stringify(records)
     });
     console.log(`SCADA snapshot: recorded ${records.length} points at ${now}`);
@@ -21176,7 +21176,7 @@ async function importSCADACSV() {
     for (const chunk of chunks) {
       await fetch(`${SUPABASE_URL}/rest/v1/scada_readings`, {
         method:"POST",
-        headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json","Prefer":"return=minimal"},
+        headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`,"Content-Type":"application/json","Prefer":"return=minimal"},
         body:JSON.stringify(chunk)
       });
     }
@@ -21330,7 +21330,7 @@ async function enrollCharger() {
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/ev_chargers`, {
       method: "POST",
-      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`, "Content-Type":"application/json", "Prefer":"return=representation" },
+      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`, "Content-Type":"application/json", "Prefer":"return=representation" },
       body: JSON.stringify(record)
     });
     if (res.ok) saved = true;
@@ -21478,7 +21478,7 @@ async function removeEVCharger(stationId) {
   if (!confirm(`Remove ${stationId} from enrollment?`)) return;
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/ev_chargers?station_id=eq.${encodeURIComponent(stationId)}`, {
-      method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+      method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`}
     });
   } catch(e) {}
   // Also remove from localStorage
@@ -21888,7 +21888,7 @@ async function saveEVDevAsset() {
       : `${SUPABASE_URL}/rest/v1/ev_chargers`;
     const res = await fetch(url, {
       method: isEdit ? "PATCH" : "POST",
-      headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+      headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
         "Content-Type":"application/json","Prefer":"return=representation"},
       body: JSON.stringify(record)
     });
@@ -22040,7 +22040,7 @@ async function removeEVDevAsset(stationId) {
   if (!confirm("Remove this EV charger asset?")) return;
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/ev_chargers?station_id=eq.${encodeURIComponent(stationId)}`, {
-      method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+      method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`}
     });
   } catch(e) {}
   const local = JSON.parse(localStorage.getItem(EV_DEV_KEY) || "[]");
@@ -22532,7 +22532,7 @@ async function saveBatteryAsset() {
       : `${SUPABASE_URL}/rest/v1/battery_assets`;
     const res = await fetch(url, {
       method: isEdit ? "PATCH" : "POST",
-      headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+      headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
         "Content-Type":"application/json","Prefer":"return=representation"},
       body: JSON.stringify(record)
     });
@@ -22771,7 +22771,7 @@ async function removeBatteryAsset(assetId) {
   if (!confirm("Remove this battery asset?")) return;
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/battery_assets?asset_id=eq.${encodeURIComponent(assetId)}`, {
-      method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+      method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`}
     });
   } catch(e) {}
   const local = JSON.parse(localStorage.getItem(BATT_STORAGE_KEY) || "[]");
@@ -23156,7 +23156,7 @@ async function saveGeneratorAsset() {
       : `${SUPABASE_URL}/rest/v1/generator_assets`;
     const res = await fetch(url, {
       method: isEdit ? "PATCH" : "POST",
-      headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+      headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
         "Content-Type":"application/json","Prefer":"return=representation"},
       body: JSON.stringify(record)
     });
@@ -23377,7 +23377,7 @@ async function removeGeneratorAsset(assetId) {
   if (!confirm("Remove this generator asset?")) return;
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/generator_assets?asset_id=eq.${encodeURIComponent(assetId)}`, {
-      method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+      method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`}
     });
   } catch(e) {}
   const local = JSON.parse(localStorage.getItem(GEN_STORAGE_KEY) || "[]");
@@ -24072,7 +24072,7 @@ async function saveDRProgram() {
       // Update existing
       const res = await fetch(`${SUPABASE_URL}/rest/v1/dr_programs?id=eq.${drpEditingId}`, {
         method:"PATCH",
-        headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+        headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
           "Content-Type":"application/json","Prefer":"return=minimal"},
         body: JSON.stringify(record)
       });
@@ -24081,7 +24081,7 @@ async function saveDRProgram() {
       record.created_at = new Date().toISOString();
       const res = await fetch(`${SUPABASE_URL}/rest/v1/dr_programs`, {
         method:"POST",
-        headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+        headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
           "Content-Type":"application/json","Prefer":"return=representation"},
         body: JSON.stringify(record)
       });
@@ -24259,7 +24259,7 @@ async function deleteDRProgram(programId) {
   if (!confirm(`Delete "${prog?.name || "this program"}"?`)) return;
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/dr_programs?id=eq.${programId}`, {
-      method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+      method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`}
     });
   } catch(e) {}
   const local = JSON.parse(localStorage.getItem("lcp_dr_programs_v1") || "[]");
@@ -24615,7 +24615,7 @@ async function oadr3GetToken(vtn) {
     // Cache in Supabase
     await fetch(`${SUPABASE_URL}/rest/v1/oadr3_vtns?id=eq.${vtn.id}`, {
       method:  "PATCH",
-      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`,
+      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
                  "Content-Type":"application/json", "Prefer":"return=minimal" },
       body: JSON.stringify({ access_token:token, token_expires_at:expiresAt })
     });
@@ -24706,7 +24706,7 @@ async function oadr3PollVTN(vtn) {
     // Update last_polled_at
     await fetch(`${SUPABASE_URL}/rest/v1/oadr3_vtns?id=eq.${vtn.id}`, {
       method: "PATCH",
-      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`,
+      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
                  "Content-Type":"application/json", "Prefer":"return=minimal" },
       body: JSON.stringify({ last_polled_at: new Date().toISOString(), status:"ok" })
     });
@@ -24714,7 +24714,7 @@ async function oadr3PollVTN(vtn) {
     console.error(`oadr3PollVTN ${vtn.name}:`, e);
     await fetch(`${SUPABASE_URL}/rest/v1/oadr3_vtns?id=eq.${vtn.id}`, {
       method: "PATCH",
-      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`,
+      headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
                  "Content-Type":"application/json", "Prefer":"return=minimal" },
       body: JSON.stringify({ status:`error: ${e.message}` })
     });
@@ -24775,7 +24775,7 @@ async function oadr3ExecuteEvent(vtn, prog, ev, signalLevel) {
   // Mark as executed
   await fetch(`${SUPABASE_URL}/rest/v1/oadr3_events?event_id=eq.${encodeURIComponent(ev.id)}`, {
     method: "PATCH",
-    headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${SUPABASE_KEY}`,
+    headers: { "apikey":SUPABASE_KEY, "Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
                "Content-Type":"application/json", "Prefer":"return=minimal" },
     body: JSON.stringify({ executed:true, executed_at:new Date().toISOString() })
   });
@@ -24974,7 +24974,7 @@ async function saveOadr3Vtn() {
   try {
     if (editId) {
       await fetch(`${SUPABASE_URL}/rest/v1/oadr3_vtns?id=eq.${editId}`, {
-        method:"PATCH", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+        method:"PATCH", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
           "Content-Type":"application/json","Prefer":"return=minimal"},
         body: JSON.stringify(record)
       });
@@ -25011,7 +25011,7 @@ async function testOadr3Vtn() {
 async function deleteOadr3Vtn(id) {
   if (!confirm("Delete this VTN connection? All associated programs and events will also be removed.")) return;
   await fetch(`${SUPABASE_URL}/rest/v1/oadr3_vtns?id=eq.${id}`, {
-    method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+    method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`}
   });
   await loadOadr3VTNs();
   await loadOadr3Programs();
@@ -25019,7 +25019,7 @@ async function deleteOadr3Vtn(id) {
 
 async function toggleOadr3VTN(id, enabled) {
   await fetch(`${SUPABASE_URL}/rest/v1/oadr3_vtns?id=eq.${id}`, {
-    method:"PATCH", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+    method:"PATCH", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
       "Content-Type":"application/json","Prefer":"return=minimal"},
     body: JSON.stringify({ enabled })
   });
@@ -25190,7 +25190,7 @@ async function saveOadr3Program() {
   try {
     if (editId) {
       await fetch(`${SUPABASE_URL}/rest/v1/oadr3_programs?id=eq.${editId}`, {
-        method:"PATCH", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+        method:"PATCH", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
           "Content-Type":"application/json","Prefer":"return=minimal"},
         body: JSON.stringify(record)
       });
@@ -25207,14 +25207,14 @@ async function saveOadr3Program() {
 async function deleteOadr3Program(id) {
   if (!confirm("Remove this program enrollment?")) return;
   await fetch(`${SUPABASE_URL}/rest/v1/oadr3_programs?id=eq.${id}`, {
-    method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+    method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`}
   });
   await loadOadr3Programs();
 }
 
 async function toggleOadr3Program(id, enabled) {
   await fetch(`${SUPABASE_URL}/rest/v1/oadr3_programs?id=eq.${id}`, {
-    method:"PATCH", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+    method:"PATCH", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
       "Content-Type":"application/json","Prefer":"return=minimal"},
     body: JSON.stringify({ enabled })
   });
