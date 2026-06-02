@@ -23916,44 +23916,104 @@ function renderDerapiAssets() {
   derapiChargers.forEach(c   => { if (c.siteID) { chargerBySite[c.siteID] = (chargerBySite[c.siteID] || []); chargerBySite[c.siteID].push(c); } });
   derapiThermostats.forEach(t=> { if (t.siteID) { thermBySite[t.siteID]   = (thermBySite[t.siteID]   || []); thermBySite[t.siteID].push(t); } });
 
-  list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px;">
-    <thead><tr>
-      <th style="text-align:left;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Site</th>
-      <th style="text-align:left;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Vendor</th>
-      <th style="text-align:center;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">🔋 Batteries</th>
-      <th style="text-align:center;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">☀️ Solar</th>
-      <th style="text-align:center;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">🔌 Chargers</th>
-      <th style="text-align:center;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">🌡️ Thermostats</th>
-      <th style="text-align:right;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Actions</th>
-    </tr></thead>
-    <tbody>${derapiSites.map((s, i) => {
-      const batts  = battBySite[s.id]    || [];
-      const solars = solarBySite[s.id]   || [];
-      const chars  = chargerBySite[s.id] || [];
-      const therms = thermBySite[s.id]   || [];
-      return `<tr style="background:${i%2===0?"var(--surface)":"var(--surface2)"}">
-        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);">
-          <div style="font-weight:600;">${s.name || s.id}</div>
-          <div style="font-size:10px;color:var(--text-hint);font-family:monospace;">${s.id}</div>
-          ${s.location?.timezone ? `<div style="font-size:10px;color:var(--text-hint);">${s.location.timezone}</div>` : ""}
-        </td>
-        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);">
-          <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:var(--surface2);font-family:monospace;">${s.vendor || "—"}</span>
-        </td>
-        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:center;">${batts.length || "—"}</td>
-        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:center;">${solars.length || "—"}</td>
-        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:center;">${chars.length || "—"}</td>
-        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:center;">${therms.length || "—"}</td>
-        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:right;">
-          <div style="display:flex;gap:6px;justify-content:flex-end;">
-            <button onclick="addDerapiVirtualDevice('${s.id}')" title="Add virtual device to this site"
-              style="padding:4px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:10px;cursor:pointer;">+ Device</button>
-            <button onclick="deleteDerapiVirtualSite('${s.id}')" title="Delete virtual site"
-              style="padding:4px 8px;border-radius:4px;border:0.5px solid var(--red);background:transparent;color:var(--red);font-size:10px;cursor:pointer;">✕</button>
+  // Helper: render a device row with delete button
+  const deviceTypeMap = { battery:"battery", solar:"solar", charger:"charger", thermostat:"thermostat" };
+  const deviceRow = (d, type, icon) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;margin:2px 0;background:var(--surface);border-radius:4px;border:0.5px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span>${icon}</span>
+        <div>
+          <div style="font-size:11px;font-weight:600;">${d.name || d.model || d.id}</div>
+          <div style="font-size:10px;color:var(--text-hint);font-family:monospace;">${d.id}</div>
+          ${d.serialNumber ? `<div style="font-size:10px;color:var(--text-hint);">S/N: ${d.serialNumber}</div>` : ""}
+        </div>
+      </div>
+      <button onclick="deleteDerapiVirtualDevice('${d.id}','${type}')"
+        title="Delete this device"
+        style="padding:2px 7px;border-radius:4px;border:0.5px solid var(--red);background:transparent;color:var(--red);font-size:10px;cursor:pointer;flex-shrink:0;">✕</button>
+    </div>`;
+
+  list.innerHTML = derapiSites.map((s, i) => {
+    const batts  = battBySite[s.id]    || [];
+    const solars = solarBySite[s.id]   || [];
+    const chars  = chargerBySite[s.id] || [];
+    const therms = thermBySite[s.id]   || [];
+    const totalDevices = batts.length + solars.length + chars.length + therms.length;
+
+    return `<div style="background:${i%2===0?"var(--surface)":"var(--surface2)"};border:0.5px solid var(--border-md);border-radius:var(--radius-sm);margin-bottom:8px;overflow:hidden;">
+      <!-- Site header row -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;"
+           onclick="toggleDerapiSiteExpand('${s.id}')">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span id="derapi-chevron-${s.id}" style="font-size:10px;color:var(--text-hint);transition:transform 0.2s;display:inline-block;transform:${totalDevices>0?"rotate(90deg)":"rotate(0deg)"};">▶</span>
+          <div>
+            <div style="font-weight:600;font-size:13px;">${s.name || s.id}</div>
+            <div style="font-size:10px;color:var(--text-hint);font-family:monospace;">${s.id}</div>
           </div>
-        </td>
-      </tr>`;
-    }).join("")}</tbody></table>`;
+          <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:var(--surface2);font-family:monospace;">${s.vendor || "virtual"}</span>
+          ${s.location?.timezone ? `<span style="font-size:10px;color:var(--text-hint);">${s.location.timezone}</span>` : ""}
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <!-- Device type badges -->
+          <div style="display:flex;gap:6px;font-size:11px;">
+            ${batts.length  ? `<span style="padding:2px 7px;border-radius:10px;background:rgba(22,101,52,0.12);color:var(--green-dark);font-weight:600;">🔋 ${batts.length}</span>` : ""}
+            ${solars.length ? `<span style="padding:2px 7px;border-radius:10px;background:rgba(146,64,14,0.12);color:var(--amber);font-weight:600;">☀️ ${solars.length}</span>` : ""}
+            ${chars.length  ? `<span style="padding:2px 7px;border-radius:10px;background:rgba(30,92,139,0.12);color:var(--blue-dark,#1e5c8b);font-weight:600;">🔌 ${chars.length}</span>` : ""}
+            ${therms.length ? `<span style="padding:2px 7px;border-radius:10px;background:rgba(220,38,38,0.1);color:var(--red);font-weight:600;">🌡️ ${therms.length}</span>` : ""}
+            ${!totalDevices ? `<span style="font-size:10px;color:var(--text-hint);">No devices</span>` : ""}
+          </div>
+          <!-- Action buttons -->
+          <div style="display:flex;gap:6px;" onclick="event.stopPropagation()">
+            <button onclick="addDerapiVirtualDevice('${s.id}')" title="Add virtual device"
+              style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;cursor:pointer;font-weight:600;">+ Device</button>
+            <button onclick="deleteDerapiVirtualSite('${s.id}')" title="Delete site"
+              style="padding:4px 8px;border-radius:4px;border:0.5px solid var(--red);background:transparent;color:var(--red);font-size:11px;cursor:pointer;">✕ Site</button>
+          </div>
+        </div>
+      </div>
+      <!-- Expandable device list -->
+      <div id="derapi-devices-${s.id}" style="display:${totalDevices>0?"block":"none"};padding:0 14px 12px 14px;border-top:0.5px solid var(--border);">
+        ${batts.length  ? `<div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 4px;">🔋 Batteries</div>${batts.map(d=>deviceRow(d,"battery","🔋")).join("")}` : ""}
+        ${solars.length ? `<div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 4px;">☀️ Solar Inverters</div>${solars.map(d=>deviceRow(d,"solar","☀️")).join("")}` : ""}
+        ${chars.length  ? `<div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 4px;">🔌 EV Chargers</div>${chars.map(d=>deviceRow(d,"charger","🔌")).join("")}` : ""}
+        ${therms.length ? `<div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 4px;">🌡️ Thermostats</div>${therms.map(d=>deviceRow(d,"thermostat","🌡️")).join("")}` : ""}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function toggleDerapiSiteExpand(siteID) {
+  const panel   = document.getElementById(`derapi-devices-${siteID}`);
+  const chevron = document.getElementById(`derapi-chevron-${siteID}`);
+  if (!panel) return;
+  const expanded = panel.style.display !== "none";
+  panel.style.display   = expanded ? "none" : "block";
+  if (chevron) chevron.style.transform = expanded ? "rotate(0deg)" : "rotate(90deg)";
+}
+
+async function deleteDerapiVirtualDevice(deviceID, deviceType) {
+  if (!confirm(`Delete ${deviceType} ${deviceID}?`)) return;
+  try {
+    const res = await fetch(`${DERAPI_URL()}/derapi/virtual/delete`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resourceType: deviceType, id: deviceID })
+    }).then(r => r.json());
+    if (res.error) throw new Error(res.error);
+    // Immediately remove from the correct local array so counts update instantly
+    const arrayMap = {
+      battery:    () => { derapiBatteries   = derapiBatteries.filter(d => d.id !== deviceID); },
+      solar:      () => { derapiSolar       = derapiSolar.filter(d => d.id !== deviceID); },
+      charger:    () => { derapiChargers    = derapiChargers.filter(d => d.id !== deviceID); },
+      thermostat: () => { derapiThermostats = derapiThermostats.filter(d => d.id !== deviceID); },
+    };
+    if (arrayMap[deviceType]) arrayMap[deviceType]();
+    renderDerapiAssets();
+    populateDerapiSiteSelector();
+    // Background sync
+    loadDerapiAssets().catch(e => console.warn("DERapi refresh:", e.message));
+  } catch(e) {
+    alert("Delete failed: " + e.message);
+  }
 }
 
 function populateDerapiSiteSelector() {
@@ -24021,6 +24081,13 @@ async function createDerapiVirtual() {
 
     document.getElementById("derapi-virtual-site-id").value = "";
     await loadDerapiAssets();
+    // Auto-expand the site that was just modified so devices are immediately visible
+    if (finalSiteID) {
+      const panel = document.getElementById(`derapi-devices-${finalSiteID}`);
+      const chevron = document.getElementById(`derapi-chevron-${finalSiteID}`);
+      if (panel) panel.style.display = "block";
+      if (chevron) chevron.style.transform = "rotate(90deg)";
+    }
   } catch(e) {
     setDerapiVirtualStatus(`Error: ${e.message}`, "var(--red)");
   }
@@ -24034,7 +24101,17 @@ async function deleteDerapiVirtualSite(siteID) {
       body: JSON.stringify({ resourceType: "site", id: siteID })
     }).then(r => r.json());
     if (res.error) throw new Error(res.error);
-    await loadDerapiAssets();
+    // Immediately purge deleted site and all its devices from local arrays
+    // so counts update instantly without waiting for API propagation
+    derapiSites        = derapiSites.filter(s => s.id !== siteID);
+    derapiBatteries    = derapiBatteries.filter(d => d.siteID !== siteID);
+    derapiSolar        = derapiSolar.filter(d => d.siteID !== siteID);
+    derapiChargers     = derapiChargers.filter(d => d.siteID !== siteID);
+    derapiThermostats  = derapiThermostats.filter(d => d.siteID !== siteID);
+    renderDerapiAssets();
+    populateDerapiSiteSelector();
+    // Then do a full refresh in the background to sync with API
+    loadDerapiAssets().catch(e => console.warn("DERapi refresh:", e.message));
   } catch(e) {
     alert("Delete failed: " + e.message);
   }
