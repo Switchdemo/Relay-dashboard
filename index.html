@@ -735,6 +735,7 @@
     <button class="sub-tab-btn" id="sub-battery" onclick="switchSub('devices','battery',this)">&#128267; Battery Systems</button>
     <button class="sub-tab-btn" id="sub-generators" onclick="switchSub('devices','generators',this)">&#9889; Generators</button>
     <button class="sub-tab-btn" id="sub-pelican" onclick="switchSub('devices','pelican',this)">🌡️ Pelican Sites</button>
+    <button class="sub-tab-btn" id="sub-derapi" onclick="switchSub('devices','derapi',this)">⚡ DERapi Assets</button>
   </div>
   <div class="status-bar">
     <div class="dot ready" id="dot"></div>
@@ -9792,6 +9793,8 @@ async function onSignedIn(session) {
   buildDataCards();
   // Load Pelican sites in background (non-blocking)
   loadPelicanSites().catch(e => console.warn("Pelican load:", e.message));
+  loadDerapiAssets().catch(e => console.warn("DERapi load:", e.message));
+  initDerapiEventTimes();
   // Start OpenADR background poller immediately after login
   startOADRPoller();
   // Start NWS weather poller if location is already saved
@@ -23837,6 +23840,332 @@ async function loadPelicanLog() {
   }
 }
 
+
+// ── DERapi Integration ────────────────────────────────────────────────────────
+
+let derapiSites      = [];
+let derapiBatteries  = [];
+let derapiSolar      = [];
+let derapiChargers   = [];
+let derapiThermostats = [];
+
+const DERAPI_URL = () => PROXY_URL.replace(/\/$/, "");
+
+function setDerapiStatus(msg, color = "var(--text-secondary)") {
+  const el = document.getElementById("derapi-event-status");
+  if (el) { el.textContent = msg; el.style.color = color; }
+}
+
+function setDerapiVirtualStatus(msg, color = "var(--text-hint)") {
+  const el = document.getElementById("derapi-virtual-status");
+  if (el) { el.textContent = msg; el.style.color = color; }
+}
+
+async function loadDerapiAssets() {
+  document.getElementById("derapi-status-badge").textContent = "Loading…";
+  try {
+    const [sitesRes, battRes, solarRes, chargersRes, thermRes] = await Promise.all([
+      fetch(`${DERAPI_URL()}/derapi/sites`).then(r => r.json()),
+      fetch(`${DERAPI_URL()}/derapi/batteries`).then(r => r.json()),
+      fetch(`${DERAPI_URL()}/derapi/solar-inverters`).then(r => r.json()),
+      fetch(`${DERAPI_URL()}/derapi/ev-chargers`).then(r => r.json()),
+      fetch(`${DERAPI_URL()}/derapi/thermostats`).then(r => r.json()),
+    ]);
+
+    derapiSites       = sitesRes?.sites       || sitesRes?.items       || (Array.isArray(sitesRes)      ? sitesRes      : []);
+    derapiBatteries   = battRes?.batteries    || battRes?.items        || (Array.isArray(battRes)       ? battRes       : []);
+    derapiSolar       = solarRes?.solarInverters || solarRes?.items    || (Array.isArray(solarRes)      ? solarRes      : []);
+    derapiChargers    = chargersRes?.chargers || chargersRes?.items    || (Array.isArray(chargersRes)   ? chargersRes   : []);
+    derapiThermostats = thermRes?.thermostats || thermRes?.items       || (Array.isArray(thermRes)      ? thermRes      : []);
+
+    renderDerapiAssets();
+    populateDerapiSiteSelector();
+    await loadDerapiLog();
+    await loadDerapiActiveEvents();
+  } catch(e) {
+    console.error("DERapi load error:", e);
+    document.getElementById("derapi-status-badge").textContent = "Error";
+    document.getElementById("derapi-sites-list").innerHTML =
+      `<div class="data-empty" style="color:var(--red);">Failed to load: ${e.message}. Check DERAPI_API_KEY is set in Worker secrets.</div>`;
+  }
+}
+
+function renderDerapiAssets() {
+  const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  setEl("derapi-stat-sites",       derapiSites.length       || "0");
+  setEl("derapi-stat-batteries",   derapiBatteries.length   || "0");
+  setEl("derapi-stat-solar",       derapiSolar.length       || "0");
+  setEl("derapi-stat-chargers",    derapiChargers.length    || "0");
+  setEl("derapi-stat-thermostats", derapiThermostats.length || "0");
+  document.getElementById("derapi-status-badge").textContent =
+    `${derapiSites.length} site${derapiSites.length !== 1 ? "s" : ""}`;
+
+  const list = document.getElementById("derapi-sites-list");
+  if (!derapiSites.length) {
+    list.innerHTML = `<div class="data-empty">No DERapi sites found. Use the + Virtual Site button to create test resources, or connect real devices via the <a href="https://console.derapi.com" target="_blank" style="color:var(--blue-dark,#1e5c8b)">DERapi console</a>.</div>`;
+    return;
+  }
+
+  // Build a lookup of devices by siteID for display
+  const battBySite  = {};
+  const solarBySite = {};
+  const chargerBySite = {};
+  const thermBySite = {};
+  derapiBatteries.forEach(b  => { if (b.siteID) { battBySite[b.siteID]    = (battBySite[b.siteID]    || []); battBySite[b.siteID].push(b); } });
+  derapiSolar.forEach(s      => { if (s.siteID) { solarBySite[s.siteID]   = (solarBySite[s.siteID]   || []); solarBySite[s.siteID].push(s); } });
+  derapiChargers.forEach(c   => { if (c.siteID) { chargerBySite[c.siteID] = (chargerBySite[c.siteID] || []); chargerBySite[c.siteID].push(c); } });
+  derapiThermostats.forEach(t=> { if (t.siteID) { thermBySite[t.siteID]   = (thermBySite[t.siteID]   || []); thermBySite[t.siteID].push(t); } });
+
+  list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <thead><tr>
+      <th style="text-align:left;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Site</th>
+      <th style="text-align:left;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Vendor</th>
+      <th style="text-align:center;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">🔋 Batteries</th>
+      <th style="text-align:center;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">☀️ Solar</th>
+      <th style="text-align:center;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">🔌 Chargers</th>
+      <th style="text-align:center;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">🌡️ Thermostats</th>
+      <th style="text-align:right;padding:8px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Actions</th>
+    </tr></thead>
+    <tbody>${derapiSites.map((s, i) => {
+      const batts  = battBySite[s.id]    || [];
+      const solars = solarBySite[s.id]   || [];
+      const chars  = chargerBySite[s.id] || [];
+      const therms = thermBySite[s.id]   || [];
+      return `<tr style="background:${i%2===0?"var(--surface)":"var(--surface2)"}">
+        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);">
+          <div style="font-weight:600;">${s.name || s.id}</div>
+          <div style="font-size:10px;color:var(--text-hint);font-family:monospace;">${s.id}</div>
+          ${s.location?.timezone ? `<div style="font-size:10px;color:var(--text-hint);">${s.location.timezone}</div>` : ""}
+        </td>
+        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);">
+          <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:var(--surface2);font-family:monospace;">${s.vendor || "—"}</span>
+        </td>
+        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:center;">${batts.length || "—"}</td>
+        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:center;">${solars.length || "—"}</td>
+        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:center;">${chars.length || "—"}</td>
+        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:center;">${therms.length || "—"}</td>
+        <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:right;">
+          <div style="display:flex;gap:6px;justify-content:flex-end;">
+            <button onclick="addDerapiVirtualDevice('${s.id}')" title="Add virtual device to this site"
+              style="padding:4px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:10px;cursor:pointer;">+ Device</button>
+            <button onclick="deleteDerapiVirtualSite('${s.id}')" title="Delete virtual site"
+              style="padding:4px 8px;border-radius:4px;border:0.5px solid var(--red);background:transparent;color:var(--red);font-size:10px;cursor:pointer;">✕</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join("")}</tbody></table>`;
+}
+
+function populateDerapiSiteSelector() {
+  const sel = document.getElementById("derapi-event-sites");
+  if (!sel) return;
+  while (sel.options.length > 1) sel.remove(1);
+  derapiSites.forEach(s => {
+    const opt = new Option(s.name || s.id, s.id);
+    sel.add(opt);
+  });
+}
+
+function toggleDerapiVirtualForm() {
+  const f = document.getElementById("derapi-virtual-form");
+  if (f) f.style.display = f.style.display === "none" ? "" : "none";
+}
+
+function addDerapiVirtualDevice(siteID) {
+  const f = document.getElementById("derapi-virtual-form");
+  const siteInput = document.getElementById("derapi-virtual-site-id");
+  if (f) f.style.display = "";
+  if (siteInput) siteInput.value = siteID;
+}
+
+async function createDerapiVirtual() {
+  const siteID     = (document.getElementById("derapi-virtual-site-id")?.value || "").trim();
+  const deviceType = document.getElementById("derapi-virtual-device-type")?.value || "";
+
+  setDerapiVirtualStatus("Creating…", "var(--text-hint)");
+  try {
+    let finalSiteID = siteID;
+
+    // Create site if no siteID provided
+    if (!siteID) {
+      const siteRes = await fetch(`${DERAPI_URL()}/derapi/virtual/site`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({})
+      }).then(r => r.json());
+      if (siteRes.error) throw new Error(siteRes.error);
+      finalSiteID = siteRes.id;
+      setDerapiVirtualStatus(`Site created: ${finalSiteID}`, "var(--green-dark)");
+    }
+
+    // Add device if type selected
+    if (deviceType && finalSiteID) {
+      const devRes = await fetch(`${DERAPI_URL()}/derapi/virtual/device`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceType, siteID: finalSiteID })
+      }).then(r => r.json());
+      if (devRes.error) throw new Error(devRes.error);
+      setDerapiVirtualStatus(`${deviceType} created: ${devRes.id} on site ${finalSiteID}`, "var(--green-dark)");
+    } else if (!deviceType) {
+      setDerapiVirtualStatus(`Site created: ${finalSiteID}`, "var(--green-dark)");
+    }
+
+    document.getElementById("derapi-virtual-site-id").value = "";
+    await loadDerapiAssets();
+  } catch(e) {
+    setDerapiVirtualStatus(`Error: ${e.message}`, "var(--red)");
+  }
+}
+
+async function deleteDerapiVirtualSite(siteID) {
+  if (!confirm(`Delete virtual site ${siteID}? This also removes all virtual devices attached to it.`)) return;
+  try {
+    const res = await fetch(`${DERAPI_URL()}/derapi/virtual`, {
+      method: "DELETE", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resourceType: "site", id: siteID })
+    }).then(r => r.json());
+    if (res.error) throw new Error(res.error);
+    await loadDerapiAssets();
+  } catch(e) {
+    alert("Delete failed: " + e.message);
+  }
+}
+
+function setDerapiEventTimes(durationMins) {
+  if (!durationMins) return;
+  const now   = new Date();
+  const end   = new Date(now.getTime() + parseInt(durationMins) * 60000);
+  const fmt   = d => d.toISOString().slice(0,16);
+  const startEl = document.getElementById("derapi-event-start");
+  const endEl   = document.getElementById("derapi-event-end");
+  if (startEl) startEl.value = fmt(now);
+  if (endEl)   endEl.value   = fmt(end);
+}
+
+async function dispatchDerapiEvent() {
+  const sel       = document.getElementById("derapi-event-sites");
+  const startVal  = document.getElementById("derapi-event-start")?.value;
+  const endVal    = document.getElementById("derapi-event-end")?.value;
+
+  if (!startVal || !endVal) { setDerapiStatus("Start and end time required.", "var(--red)"); return; }
+
+  const selectedOptions = Array.from(sel?.selectedOptions || []);
+  const allSelected     = selectedOptions.some(o => o.value === "all");
+  const siteIDs         = allSelected
+    ? derapiSites.map(s => s.id)
+    : selectedOptions.map(o => o.value).filter(v => v !== "all");
+
+  if (!siteIDs.length) { setDerapiStatus("Select at least one site.", "var(--red)"); return; }
+
+  const startTime = new Date(startVal).toISOString();
+  const endTime   = new Date(endVal).toISOString();
+
+  setDerapiStatus(`Dispatching to ${siteIDs.length} site${siteIDs.length !== 1 ? "s" : ""}…`, "var(--amber)");
+  try {
+    const res = await fetch(`${DERAPI_URL()}/derapi/control-events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ siteIDs, startTime, endTime, fired_by: currentSession?.user?.email })
+    }).then(r => r.json());
+
+    if (res.error || res.id === undefined) {
+      setDerapiStatus(`⚠ DERapi error: ${res.error || JSON.stringify(res)}`, "var(--red)");
+    } else {
+      setDerapiStatus(`✅ Event created: ${res.id} — ${siteIDs.length} site${siteIDs.length!==1?"s":""}`, "var(--green-dark)");
+      await loadDerapiLog();
+      await loadDerapiActiveEvents();
+    }
+  } catch(e) {
+    setDerapiStatus(`Error: ${e.message}`, "var(--red)");
+  }
+}
+
+async function cancelDerapiEvent(eventID) {
+  if (!confirm(`Cancel DERapi Control Event ${eventID}?`)) return;
+  try {
+    const res = await fetch(`${DERAPI_URL()}/derapi/control-events/cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eventID, fired_by: currentSession?.user?.email })
+    }).then(r => r.json());
+    if (res.error) throw new Error(res.error);
+    setDerapiStatus(`✅ Event ${eventID} cancelled`, "var(--green-dark)");
+    await loadDerapiLog();
+    await loadDerapiActiveEvents();
+  } catch(e) {
+    setDerapiStatus(`Cancel error: ${e.message}`, "var(--red)");
+  }
+}
+
+async function loadDerapiActiveEvents() {
+  const container = document.getElementById("derapi-active-events");
+  if (!container) return;
+  try {
+    const data = await fetch(`${DERAPI_URL()}/derapi/control-events`).then(r => r.json());
+    const events = data?.controlEvents || data?.items || (Array.isArray(data) ? data : []);
+    const active = events.filter(e => e.status === "active" || e.status === "upcoming" || e.status === "pending");
+    if (!active.length) { container.innerHTML = ""; return; }
+    container.innerHTML = `
+      <div style="font-size:11px;font-weight:600;color:var(--text-hint);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">Active / Upcoming Events</div>
+      ${active.map(e => `
+        <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(220,38,38,0.06);border:0.5px solid var(--red);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:6px;">
+          <div>
+            <span style="font-weight:600;font-size:12px;color:var(--red);">● ${e.status?.toUpperCase()}</span>
+            <span style="font-size:11px;color:var(--text-hint);margin-left:10px;font-family:monospace;">${e.id}</span>
+            <span style="font-size:11px;color:var(--text-hint);margin-left:10px;">
+              ${new Date(e.startTime||e.start).toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}
+              → ${new Date(e.endTime||e.end).toLocaleString([], {hour:"2-digit",minute:"2-digit"})}
+            </span>
+          </div>
+          <button onclick="cancelDerapiEvent('${e.id}')"
+            style="padding:4px 12px;border-radius:4px;border:0.5px solid var(--red);background:transparent;color:var(--red);font-size:11px;font-weight:600;cursor:pointer;">
+            Cancel
+          </button>
+        </div>`).join("")}`;
+  } catch(e) {
+    console.warn("DERapi active events error:", e.message);
+  }
+}
+
+async function loadDerapiLog() {
+  const list = document.getElementById("derapi-log-list");
+  if (!list) return;
+  try {
+    const rows = await supabaseGet("derapi_dr_log?order=fired_at.desc&limit=50");
+    if (!Array.isArray(rows) || !rows.length) {
+      list.innerHTML = '<div class="data-empty">No DERapi events logged yet. Run the SQL migration first.</div>';
+      return;
+    }
+    list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead><tr>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Action</th>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Event ID</th>
+        <th style="text-align:left;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Sites</th>
+        <th style="text-align:center;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Result</th>
+        <th style="text-align:right;padding:7px 10px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">By / Time</th>
+      </tr></thead>
+      <tbody>${rows.map(r => {
+        let siteList = "—";
+        try { const ids = JSON.parse(r.site_ids || "[]"); siteList = ids.length ? `${ids.length} site${ids.length!==1?"s":""}` : "—"; } catch {}
+        return `<tr>
+          <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-weight:700;color:${r.action==="shed"?"var(--red)":r.action==="cancel"?"var(--amber)":"var(--text-hint)"};">${(r.action||"").toUpperCase()}</td>
+          <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-family:monospace;font-size:10px;color:var(--text-hint);">${r.derapi_event_id || "—"}</td>
+          <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);">${siteList}</td>
+          <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:center;">${r.success ? '<span style="color:var(--green-dark);">✓</span>' : '<span style="color:var(--red);">✗</span>'}</td>
+          <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);text-align:right;color:var(--text-hint);">
+            ${r.fired_by || "—"}<br/>
+            <span style="font-size:10px;">${new Date(r.fired_at).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}</span>
+          </td>
+        </tr>`;
+      }).join("")}</tbody></table>`;
+  } catch(e) {
+    list.innerHTML = '<div class="data-empty">Run derapi_migration.sql to create the log table.</div>';
+  }
+}
+
+// Set default event times on load (now → +1 hour)
+function initDerapiEventTimes() {
+  setDerapiEventTimes("60");
+}
+
 // ── DR Programs (non-OpenADR) ─────────────────────────────────────────────────
 
 let drPrograms      = [];   // all configured programs
@@ -27349,6 +27678,123 @@ function showHelpTab(key) {
           <button class="queue-refresh" onclick="loadPelicanLog()">Refresh</button>
         </div>
         <div id="pelican-log-list"><div class="data-empty">No DR events logged yet.</div></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+<div class="tab-pane" id="tab-derapi">
+  <div class="scroll-content">
+    <div style="max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <!-- Fleet Stats -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">⚡ DERapi — Distributed Energy Resources</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span id="derapi-status-badge" style="font-size:11px;font-family:monospace;padding:2px 8px;border-radius:10px;background:var(--surface2);color:var(--text-hint);">Loading…</span>
+            <button class="queue-refresh" onclick="loadDerapiAssets()">Refresh</button>
+            <button onclick="toggleDerapiVirtualForm()" style="padding:6px 14px;border-radius:var(--radius-sm);border:none;background:var(--blue-dark,#1e5c8b);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">+ Virtual Site</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:14px;line-height:1.6;">
+          DERapi provides a single unified API across batteries, solar inverters, EV chargers, and thermostats from all major vendors.
+          Virtual mode lets you create and manage simulated devices for testing without real hardware.
+          <strong>DERAPI_API_KEY</strong> must be set as a Cloudflare Worker secret.
+        </div>
+
+        <!-- Fleet stats bar -->
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:14px;">
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="derapi-stat-sites">—</div><div class="ev-meter-lbl">Sites</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="derapi-stat-batteries" style="color:var(--green-dark);">—</div><div class="ev-meter-lbl">Batteries</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="derapi-stat-solar" style="color:var(--amber);">—</div><div class="ev-meter-lbl">Solar Inverters</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="derapi-stat-chargers" style="color:var(--blue-dark,#1e5c8b);">—</div><div class="ev-meter-lbl">EV Chargers</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="derapi-stat-thermostats" style="color:var(--red);">—</div><div class="ev-meter-lbl">Thermostats</div></div>
+        </div>
+
+        <!-- Virtual site/device creation form -->
+        <div id="derapi-virtual-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:16px;margin-bottom:14px;border:0.5px solid var(--border-md);">
+          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;font-family:monospace;">Create Virtual Resources</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-bottom:10px;">
+            <div>
+              <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Site ID (leave blank to create new)</div>
+              <input id="derapi-virtual-site-id" type="text" placeholder="site-xxxxxxxxxxxxxxxx"
+                style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;box-sizing:border-box;" />
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Add Device Type</div>
+              <select id="derapi-virtual-device-type" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="">Site only</option>
+                <option value="battery">🔋 Battery</option>
+                <option value="solar">☀️ Solar Inverter</option>
+                <option value="charger">🔌 EV Charger</option>
+                <option value="thermostat">🌡️ Thermostat</option>
+              </select>
+            </div>
+            <button onclick="createDerapiVirtual()" style="padding:8px 20px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">Create</button>
+          </div>
+          <div id="derapi-virtual-status" style="font-size:12px;min-height:18px;color:var(--text-hint);"></div>
+          <div style="margin-top:10px;text-align:right;">
+            <button onclick="toggleDerapiVirtualForm()" style="font-size:11px;color:var(--text-hint);background:none;border:none;cursor:pointer;">Close</button>
+          </div>
+        </div>
+
+        <!-- Sites table -->
+        <div id="derapi-sites-list"><div class="data-empty">Loading DERapi sites…</div></div>
+      </div>
+
+      <!-- Control Events -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">⚡ Dispatch Control Event (DR)</div>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:14px;">
+          Send a demand response Control Event to selected DERapi sites. Events target battery, solar, EV charger, and thermostat resources at each site simultaneously.
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px;align-items:end;margin-bottom:12px;">
+          <div>
+            <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Target Sites</div>
+            <select id="derapi-event-sites" multiple style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;height:72px;">
+              <option value="all">All Sites</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Start Time</div>
+            <input type="datetime-local" id="derapi-event-start" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;box-sizing:border-box;" />
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">End Time</div>
+            <input type="datetime-local" id="derapi-event-end" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;box-sizing:border-box;" />
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Duration Shortcut</div>
+            <select id="derapi-event-duration" onchange="setDerapiEventTimes(this.value)" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="">Custom</option>
+              <option value="30">30 minutes</option>
+              <option value="60" selected>1 hour</option>
+              <option value="120">2 hours</option>
+              <option value="240">4 hours</option>
+            </select>
+          </div>
+          <button onclick="dispatchDerapiEvent()" style="padding:8px 20px;border-radius:var(--radius-sm);border:none;background:var(--amber);color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;align-self:end;">
+            🔴 Dispatch
+          </button>
+        </div>
+        <div id="derapi-event-status" style="font-size:12px;min-height:18px;color:var(--text-secondary);margin-bottom:10px;"></div>
+
+        <!-- Active events list -->
+        <div id="derapi-active-events" style="margin-top:8px;"></div>
+      </div>
+
+      <!-- DR Activity Log -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">📋 Control Event Log</div>
+          <button class="queue-refresh" onclick="loadDerapiLog()">Refresh</button>
+        </div>
+        <div id="derapi-log-list"><div class="data-empty">No DERapi events logged yet.</div></div>
       </div>
 
     </div>
