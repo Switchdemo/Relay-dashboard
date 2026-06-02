@@ -24029,8 +24029,8 @@ async function createDerapiVirtual() {
 async function deleteDerapiVirtualSite(siteID) {
   if (!confirm(`Delete virtual site ${siteID}? This also removes all virtual devices attached to it.`)) return;
   try {
-    const res = await fetch(`${DERAPI_URL()}/derapi/virtual`, {
-      method: "DELETE", headers: { "Content-Type": "application/json" },
+    const res = await fetch(`${DERAPI_URL()}/derapi/virtual/delete`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ resourceType: "site", id: siteID })
     }).then(r => r.json());
     if (res.error) throw new Error(res.error);
