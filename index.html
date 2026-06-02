@@ -23864,19 +23864,34 @@ function setDerapiVirtualStatus(msg, color = "var(--text-hint)") {
 async function loadDerapiAssets() {
   document.getElementById("derapi-status-badge").textContent = "Loading…";
   try {
-    const [sitesRes, battRes, solarRes, chargersRes, thermRes] = await Promise.all([
-      fetch(`${DERAPI_URL()}/derapi/sites`).then(r => r.json()),
-      fetch(`${DERAPI_URL()}/derapi/batteries`).then(r => r.json()),
-      fetch(`${DERAPI_URL()}/derapi/solar-inverters`).then(r => r.json()),
-      fetch(`${DERAPI_URL()}/derapi/ev-chargers`).then(r => r.json()),
-      fetch(`${DERAPI_URL()}/derapi/thermostats`).then(r => r.json()),
-    ]);
+    // Step 1: get flat site list
+    const sitesRes = await fetch(`${DERAPI_URL()}/derapi/sites`).then(r => r.json());
+    const siteList = sitesRes?.sites || sitesRes?.items || (Array.isArray(sitesRes) ? sitesRes : []);
 
-    derapiSites       = sitesRes?.sites       || sitesRes?.items       || (Array.isArray(sitesRes)      ? sitesRes      : []);
-    derapiBatteries   = battRes?.batteries    || battRes?.items        || (Array.isArray(battRes)       ? battRes       : []);
-    derapiSolar       = solarRes?.solarInverters || solarRes?.items    || (Array.isArray(solarRes)      ? solarRes      : []);
-    derapiChargers    = chargersRes?.chargers || chargersRes?.items    || (Array.isArray(chargersRes)   ? chargersRes   : []);
-    derapiThermostats = thermRes?.thermostats || thermRes?.items       || (Array.isArray(thermRes)      ? thermRes      : []);
+    // Step 2: fetch each site's details to get nested device lists with IDs
+    // Derapi flat device endpoints don't return siteID, so we build the mapping from site details
+    const siteDetails = await Promise.all(
+      siteList.map(s =>
+        fetch(`${DERAPI_URL()}/derapi/site-details?id=${encodeURIComponent(s.id)}`)
+          .then(r => r.json())
+          .catch(() => s)  // fall back to bare site if detail fetch fails
+      )
+    );
+
+    // Rebuild device arrays from site details, stamping siteID onto each device
+    derapiSites       = siteDetails;
+    derapiBatteries   = [];
+    derapiSolar       = [];
+    derapiChargers    = [];
+    derapiThermostats = [];
+
+    siteDetails.forEach(site => {
+      const sid = site.id;
+      (site.batteries      || []).forEach(d => derapiBatteries.push({ ...d, siteID: sid }));
+      (site.solarInverters || []).forEach(d => derapiSolar.push({ ...d, siteID: sid }));
+      (site.chargers       || []).forEach(d => derapiChargers.push({ ...d, siteID: sid }));
+      (site.thermostats    || []).forEach(d => derapiThermostats.push({ ...d, siteID: sid }));
+    });
 
     renderDerapiAssets();
     populateDerapiSiteSelector();
