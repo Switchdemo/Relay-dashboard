@@ -8187,7 +8187,7 @@ async function exportHistory() {
         r.voltage ? (r.voltage/10).toFixed(1) : "",
         r.current ? (r.current/10).toFixed(1) : "",
         r.watts_consumed ?? "",
-        r.power_factor ?? "",
+        r.power_factor != null ? (r.power_factor/1000).toFixed(3) : "",
         r.customer_comfort > 0 ? "On" : "Off"
       ].map(v => `"${v}"`).join(",");
     });
@@ -8237,10 +8237,10 @@ async function loadCharts() {
   const activePanel = document.getElementById(`chart-panel-${activeChart}`);
   if (activePanel) activePanel.style.display = "block";
 
-  buildChart("chart-voltage", "Voltage (V)",    labels, rows.map(r => r.voltage ?? null),        "#378ADD");
-  buildChart("chart-current", "Current (A)",    labels, rows.map(r => r.current ?? null),        "#1D9E75");
+  buildChart("chart-voltage", "Voltage (V)",    labels, rows.map(r => r.voltage != null ? r.voltage / 10 : null),        "#378ADD");
+  buildChart("chart-current", "Current (A)",    labels, rows.map(r => r.current != null ? r.current / 10 : null),        "#1D9E75");
   buildChart("chart-watts",   "Power (W)",      labels, rows.map(r => r.watts_consumed ?? null), "#BA7517");
-  buildChart("chart-pf",      "Power Factor",   labels, rows.map(r => r.power_factor ?? null),   "#7C3AED");
+  buildChart("chart-pf",      "Power Factor",   labels, rows.map(r => r.power_factor != null ? r.power_factor / 1000 : null),   "#7C3AED");
 
   // Resize active chart after a frame to ensure proper fit
   requestAnimationFrame(() => {
@@ -11636,9 +11636,9 @@ async function collectEnergyReadings(monitor) {
           relay_status_r2: r.relay_status_r2,
           relay_status_r3: r.relay_status_r3,
           relay_status_r4: r.relay_status_r4,
-          voltage:         r.voltage,
-          current:         r.current,
-          power_factor:    r.power_factor,
+          voltage:         r.voltage != null ? r.voltage / 10 : null,
+          current:         r.current != null ? r.current / 10 : null,
+          power_factor:    r.power_factor != null ? r.power_factor / 1000 : null,
           watts_consumed:  r.watts_consumed,
           sw_value:        r.sw_value,
           sq_value:        r.sq_value,
@@ -13365,7 +13365,7 @@ async function loadLatestDevice(deviceId) {
       <div class="data-field"><span class="data-field-name">Voltage</span><span class="data-field-value">${r.voltage ? (r.voltage/10).toFixed(1) + " V" : "—"}</span></div>
       <div class="data-field"><span class="data-field-name">Current</span><span class="data-field-value">${r.current ? (r.current/10).toFixed(1) + " A" : "—"}</span></div>
       <div class="data-field"><span class="data-field-name">Watts</span><span class="data-field-value">${r.watts_consumed ? r.watts_consumed + " W" : "—"}</span></div>
-      <div class="data-field"><span class="data-field-name">Power Factor</span><span class="data-field-value">${r.power_factor ?? "—"}</span></div>
+      <div class="data-field"><span class="data-field-name">Power Factor</span><span class="data-field-value">${r.power_factor != null ? (r.power_factor/1000).toFixed(3) : "—"}</span></div>
       <div class="data-field"><span class="data-field-name">Comfort</span><span class="data-field-value">${r.customer_comfort > 0 ? "On" : "Off"}</span></div>
       <div class="data-field"><span class="data-field-name">Location</span><span class="data-field-value">${r.location ?? "—"}</span></div>
     </div>`;
@@ -13481,8 +13481,8 @@ async function loadHistory() {
         <td>${new Date(r.recorded_at).toLocaleString()}</td><td>${devName}</td>
         <td>${relayDot(r.relay_status_r1)}</td><td>${relayDot(r.relay_status_r2)}</td>
         <td>${relayDot(r.relay_status_r3)}</td><td>${relayDot(r.relay_status_r4)}</td>
-        <td>${r.voltage ?? "—"}</td><td>${r.current ?? "—"}</td>
-        <td>${r.watts_consumed ?? "—"}</td><td>${r.power_factor ?? "—"}</td>
+        <td>${r.voltage != null ? (r.voltage/10).toFixed(1)+"V" : "—"}</td><td>${r.current != null ? (r.current/10).toFixed(1)+"A" : "—"}</td>
+        <td>${r.watts_consumed != null ? r.watts_consumed+"W" : "—"}</td><td>${r.power_factor != null ? (r.power_factor/1000).toFixed(3) : "—"}</td>
         <td>${r.customer_comfort > 0 ? "On" : "Off"}</td>
       </tr>`;
     }).join("");
