@@ -25744,7 +25744,7 @@ async function loadSummaryPrograms() {
   // Load OpenADR 2.0b VTN config from program_settings
   let oadr2 = [];
   try {
-    const rows = await supabaseGet("program_settings?setting_key=like.vtn_%").catch(() => []);
+    const rows = await supabaseGet("program_settings?setting_key=like.vtn_%25").catch(() => []);
     if (Array.isArray(rows) && rows.length) {
       // Group settings into VTN objects
       const vtnMap = {};
