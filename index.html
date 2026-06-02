@@ -9795,6 +9795,8 @@ async function onSignedIn(session) {
   loadPelicanSites().catch(e => console.warn("Pelican load:", e.message));
   loadDerapiAssets().catch(e => console.warn("DERapi load:", e.message));
   initDerapiEventTimes();
+  // Pre-load summary programs so counts are ready when user visits the tab
+  loadSummaryPrograms().catch(e => console.warn("Summary load:", e.message));
   // Start OpenADR background poller immediately after login
   startOADRPoller();
   // Start NWS weather poller if location is already saved
@@ -24154,19 +24156,22 @@ async function dispatchDerapiEvent() {
 
   if (!siteIDs.length) { setDerapiStatus("Select at least one site.", "var(--red)"); return; }
 
-  const startTime = new Date(startVal).toISOString();
-  const endTime   = new Date(endVal).toISOString();
+  const start  = new Date(startVal).toISOString();
+  const end    = new Date(endVal).toISOString();
+  const type    = document.getElementById("derapi-event-type")?.value    || "batterysystem";
+  const command = document.getElementById("derapi-event-command")?.value || "discharge";
+  const powerPercent = parseInt(document.getElementById("derapi-event-power")?.value || "100");
 
-  setDerapiStatus(`Dispatching to ${siteIDs.length} site${siteIDs.length !== 1 ? "s" : ""}…`, "var(--amber)");
+  setDerapiStatus(`Dispatching ${command} to ${siteIDs.length} site${siteIDs.length !== 1 ? "s" : ""}…`, "var(--amber)");
   try {
     const res = await fetch(`${DERAPI_URL()}/derapi/control-events`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ siteIDs, startTime, endTime, fired_by: currentSession?.user?.email })
+      body: JSON.stringify({ siteIDs, start, end, type, command, powerPercent, fired_by: currentSession?.user?.email })
     }).then(r => r.json());
 
-    if (res.error || res.id === undefined) {
-      setDerapiStatus(`⚠ DERapi error: ${res.error || JSON.stringify(res)}`, "var(--red)");
+    if (res.error || res.detail) {
+      setDerapiStatus(`⚠ DERapi error: ${res.detail || res.error || JSON.stringify(res)}`, "var(--red)");
     } else {
       setDerapiStatus(`✅ Event created: ${res.id} — ${siteIDs.length} site${siteIDs.length!==1?"s":""}`, "var(--green-dark)");
       await loadDerapiLog();
@@ -25806,22 +25811,31 @@ async function loadSummaryPrograms() {
     }
   }
 
-  // ── OpenADR 2.0b ─────────────────────────────────────────────────────────
+  // ── OpenADR 2.0b — read from Supabase (not DOM) so works on first load ─────
   const list2 = document.getElementById("prog-oadr2-list");
   if (list2) {
-    // Read from existing OpenADR config fields
-    const vtnUrl    = document.getElementById("oadr-vtn-url")?.value || document.getElementById("vtn-url")?.value || "";
-    const venId     = document.getElementById("oadr-ven-id")?.value  || "";
-    const venName   = document.getElementById("oadr-ven-name")?.value || "";
-    if (vtnUrl) {
-      list2.innerHTML = `<div style="padding:10px 12px;">
-        <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:4px;">Configured VTN</div>
-        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:2px;">URL: <code style="font-family:monospace;color:var(--blue-dark);">${vtnUrl}</code></div>
-        ${venId   ? `<div style="font-size:11px;color:var(--text-secondary);">VEN ID: ${venId}</div>` : ""}
-        ${venName ? `<div style="font-size:11px;color:var(--text-secondary);">VEN Name: ${venName}</div>` : ""}
-      </div>`;
-    } else {
-      list2.innerHTML = `<div class="sched-empty">No OpenADR 2.0b VTN configured. Go to Admin → OpenADR 2.0b to configure.</div>`;
+    try {
+      const psRows = await supabaseGet("program_settings?setting_key=in.(vtn_url,ven_id,ven_name)").catch(() => []);
+      const ps = {};
+      if (Array.isArray(psRows)) psRows.forEach(r => { ps[r.setting_key] = r.setting_value; });
+      const vtnUrl  = ps["vtn_url"]  || "";
+      const venId   = ps["ven_id"]   || "";
+      const venName = ps["ven_name"] || "";
+      if (vtnUrl) {
+        list2.innerHTML = `<div style="padding:10px 12px;">
+          <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:4px;">Configured VTN</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:2px;">URL: <code style="font-family:monospace;color:var(--blue-dark);">${vtnUrl}</code></div>
+          ${venId   ? `<div style="font-size:11px;color:var(--text-secondary);">VEN ID: ${venId}</div>` : ""}
+          ${venName ? `<div style="font-size:11px;color:var(--text-secondary);">VEN Name: ${venName}</div>` : ""}
+        </div>`;
+        // Also update the count tile if it shows 0
+        const oadr2El = document.getElementById("prog-count-oadr2");
+        if (oadr2El && oadr2El.textContent === "0") oadr2El.textContent = "1";
+      } else {
+        list2.innerHTML = `<div class="sched-empty">No OpenADR 2.0b VTN configured. Go to Admin → OpenADR 2.0b to configure.</div>`;
+      }
+    } catch(e) {
+      list2.innerHTML = `<div class="sched-empty">No OpenADR 2.0b VTN configured.</div>`;
     }
   }
 
@@ -27852,12 +27866,34 @@ function showHelpTab(key) {
         <div style="font-size:12px;color:var(--text-hint);margin-bottom:14px;">
           Send a demand response Control Event to selected DERapi sites. Events target battery, solar, EV charger, and thermostat resources at each site simultaneously.
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px;align-items:end;margin-bottom:12px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;align-items:end;margin-bottom:10px;">
           <div>
             <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Target Sites</div>
             <select id="derapi-event-sites" multiple style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;height:72px;">
               <option value="all">All Sites</option>
             </select>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Resource Type</div>
+            <select id="derapi-event-type" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="batterysystem">🔋 Battery System</option>
+              <option value="thermostats">🌡️ Thermostats</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Command</div>
+            <select id="derapi-event-command" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="discharge" selected>Discharge (Shed)</option>
+              <option value="charge">Charge</option>
+              <option value="idle">Idle (Restore)</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px;align-items:end;margin-bottom:12px;">
+          <div>
+            <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Power %</div>
+            <input type="number" id="derapi-event-power" value="100" min="1" max="100"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;box-sizing:border-box;" />
           </div>
           <div>
             <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Start Time</div>
@@ -27871,7 +27907,7 @@ function showHelpTab(key) {
             <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Duration Shortcut</div>
             <select id="derapi-event-duration" onchange="setDerapiEventTimes(this.value)" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
               <option value="">Custom</option>
-              <option value="30">30 minutes</option>
+              <option value="30">30 min</option>
               <option value="60" selected>1 hour</option>
               <option value="120">2 hours</option>
               <option value="240">4 hours</option>
