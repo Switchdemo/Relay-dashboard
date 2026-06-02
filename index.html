@@ -23972,15 +23972,26 @@ function toggleDerapiVirtualForm() {
 }
 
 function addDerapiVirtualDevice(siteID) {
-  const f = document.getElementById("derapi-virtual-form");
-  const siteInput = document.getElementById("derapi-virtual-site-id");
-  if (f) f.style.display = "";
-  if (siteInput) siteInput.value = siteID;
+  const f          = document.getElementById("derapi-virtual-form");
+  const siteInput  = document.getElementById("derapi-virtual-site-id");
+  const typeSelect = document.getElementById("derapi-virtual-device-type");
+  if (f) { f.style.display = ""; f.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+  if (siteInput)  siteInput.value  = siteID;
+  // Default to battery so user doesn't accidentally create a second site
+  if (typeSelect && !typeSelect.value) typeSelect.value = "battery";
+  setDerapiVirtualStatus("Select a device type and click Create to add it to this site.", "var(--blue-dark,#1e5c8b)");
 }
 
 async function createDerapiVirtual() {
   const siteID     = (document.getElementById("derapi-virtual-site-id")?.value || "").trim();
   const deviceType = document.getElementById("derapi-virtual-device-type")?.value || "";
+
+  // If a siteID is pre-filled (adding device to existing site), require a device type
+  if (siteID && !deviceType) {
+    setDerapiVirtualStatus("Please select a device type to add to this site.", "var(--amber)");
+    document.getElementById("derapi-virtual-device-type")?.focus();
+    return;
+  }
 
   setDerapiVirtualStatus("Creating…", "var(--text-hint)");
   try {
