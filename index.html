@@ -24009,8 +24009,6 @@ async function deleteDerapiVirtualDevice(deviceID, deviceType) {
     if (arrayMap[deviceType]) arrayMap[deviceType]();
     renderDerapiAssets();
     populateDerapiSiteSelector();
-    // Background sync
-    loadDerapiAssets().catch(e => console.warn("DERapi refresh:", e.message));
   } catch(e) {
     alert("Delete failed: " + e.message);
   }
@@ -24110,8 +24108,6 @@ async function deleteDerapiVirtualSite(siteID) {
     derapiThermostats  = derapiThermostats.filter(d => d.siteID !== siteID);
     renderDerapiAssets();
     populateDerapiSiteSelector();
-    // Then do a full refresh in the background to sync with API
-    loadDerapiAssets().catch(e => console.warn("DERapi refresh:", e.message));
   } catch(e) {
     alert("Delete failed: " + e.message);
   }
