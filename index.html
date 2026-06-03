@@ -23702,13 +23702,15 @@ function setPelicanStatus(msg, color = "var(--text-secondary)") {
 }
 
 async function pelicanShedSingle(siteName, authMode, level = 2) {
-  const duration = parseInt(document.getElementById("pelican-dispatch-duration")?.value || "60");
+  const duration  = parseInt(document.getElementById("pelican-dispatch-duration")?.value || "60");
+  const startVal  = document.getElementById("pelican-dispatch-start")?.value;
+  const startTime = startVal ? new Date(startVal).toISOString() : null;
   setPelicanStatus(`Sending DR level ${level} to ${siteName}…`, "var(--amber)");
   try {
     const res = await fetch(PROXY_URL.replace(/\/$/, "") + "/pelican/shed", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ site_name: siteName, auth_mode: authMode, duration_minutes: duration, level, fired_by: currentSession?.user?.email })
+      body: JSON.stringify({ site_name: siteName, auth_mode: authMode, duration_minutes: duration, level, start_time: startTime, fired_by: currentSession?.user?.email })
     });
     const data = await res.json();
     if (data.success) {
@@ -27745,7 +27747,7 @@ function showHelpTab(key) {
         <div style="font-size:12px;color:var(--text-hint);margin-bottom:14px;">
           Send a demand response event to one or all enrolled Pelican sites. Thermostat participation is pre-configured in the Pelican App per site.
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end;margin-bottom:14px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px;align-items:end;margin-bottom:14px;">
           <div>
             <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Target Site</div>
             <select id="pelican-dispatch-site" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
@@ -27764,6 +27766,11 @@ function showHelpTab(key) {
           <div>
             <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Duration (minutes)</div>
             <input type="number" id="pelican-dispatch-duration" value="60" min="1" max="480"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;box-sizing:border-box;" />
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">Start Time (blank = now)</div>
+            <input type="datetime-local" id="pelican-dispatch-start"
               style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;box-sizing:border-box;" />
           </div>
           <button onclick="dispatchPelicanDR()"
