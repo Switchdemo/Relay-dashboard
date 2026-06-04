@@ -10601,7 +10601,9 @@ async function loadFleetHealth() {
       const temp    = health?.temperature != null ? parseFloat(health.temperature) : null;
       const movedTs = health?.moved ? parseInt(health.moved) : null;
       const lastHealthMs = health?.recorded_at ? new Date(health.recorded_at).getTime() : 0;
-      const movedRecently = movedTs && (movedTs * 1000) > (lastHealthMs - 86400000) && hoursAgo < fleetThresholds.noCommsWarn;
+      // Flag as moved only if movement occurred within the last 2 hours (7200000ms)
+      // Using 24h was too broad and flagged devices moved during installation/testing
+      const movedRecently = movedTs && (movedTs * 1000) > (Date.now() - 7200000) && hoursAgo < fleetThresholds.noCommsWarn;
 
       // Use same ONLINE_THRESHOLD_MS (24h) as device badge logic elsewhere in dashboard
       const onlineThreshHrs = ONLINE_THRESHOLD_MS / 3600000;
