@@ -707,11 +707,11 @@
     <button class="sub-tab-btn" id="sub-monitor-outage" onclick="switchSub('monitor','monitor-outage',this)">&#9889; Outage Tracker</button>
     <button class="sub-tab-btn" id="sub-monitor-scada" onclick="switchSub('monitor','monitor-scada',this)">&#128268; SCADA Data</button>
     <button class="sub-tab-btn" id="sub-monitor-ev" onclick="switchSub('monitor','monitor-ev',this)">&#128268; EV Charging</button>
+    <button class="sub-tab-btn" id="sub-monitor-health" onclick="switchSub('monitor','monitor-health',this)">🩺 Fleet Health</button>
   </div>
   <div class="sub-tabs" id="sub-tabs-admin" style="display:none;">
     <button class="sub-tab-btn active" id="sub-admin-users" onclick="switchSub('admin','admin-users',this)">User Management</button>
     <button class="sub-tab-btn" id="sub-admin-devices" onclick="switchSub('admin','admin-devices',this)">Devices</button>
-    <button class="sub-tab-btn" id="sub-admin-health" onclick="switchSub('admin','admin-health',this)">Fleet Health</button>
 
     <button class="sub-tab-btn" id="sub-admin-openadr" onclick="switchSub('admin','admin-openadr',this)">OpenADR 2.0b</button>
     <button class="sub-tab-btn" id="sub-admin-oadr3" onclick="switchSub('admin','admin-oadr3',this)">OpenADR 3.0</button>
@@ -2549,7 +2549,7 @@
 </div>
 
 <!-- ── FLEET HEALTH TAB ── -->
-<div class="tab-pane" id="tab-admin-health">
+<div class="tab-pane" id="tab-monitor-health">
   <div class="scroll-content">
     <div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
 
@@ -6214,7 +6214,7 @@ function runTabInit(name) {
   if (name === "weather")    initWeatherTab();
   if (name === "admin-users") { updateAdminHeader(); loadUsersTable(); }
   if (name === "admin-devices") { loadDeviceManagement(); }
-  if (name === "admin-health") { initFleetHealth(); }
+  if (name === "monitor-health") { initFleetHealth(); }
   if (name === "admin-monitor") { initMonitoring(); }
   if (name === "admin-energy")    { initEnergyMonitor(); }
   if (name === "openadr")         { initOpenADREvents(); }
@@ -10484,6 +10484,8 @@ async function renderMasterAssets() {
 // ── End Master Assets ─────────────────────────────────────────────────────────
 
 async function initFleetHealth() {
+  // Always reload devices from DB to ensure we have the full current list.
+  await loadDevicesFromDB().catch(e => console.warn("loadDevicesFromDB in initFleetHealth:", e));
   await loadThresholds();
   await loadFleetHealth();
   scheduleNightlyCheck();
@@ -10569,7 +10571,9 @@ async function loadFleetHealth() {
     // Build fleet health array from device_health table
     // At scale this would query device_health_daily aggregate instead
     const healthRows = [];
-    for (const device of DEVICES.filter(d => !d.uid.includes('PLACEHOLDER'))) {
+    // Only process relay devices — skip EV/battery/generator asset placeholders
+    const relayUIDs = ["ev_", "batt_", "gen_", "pelican_"];
+    for (const device of DEVICES.filter(d => !d.uid.includes("PLACEHOLDER") && !relayUIDs.some(p => d.uid.startsWith(p)))) {
       // Get best health record (prefer session.begin with signal data)
       let rows = await supabaseGet(
         `device_health?device_uid=eq.${encodeURIComponent(device.uid)}&rsrp=not.is.null&order=recorded_at.desc&limit=1`
@@ -10599,8 +10603,12 @@ async function loadFleetHealth() {
       const lastHealthMs = health?.recorded_at ? new Date(health.recorded_at).getTime() : 0;
       const movedRecently = movedTs && (movedTs * 1000) > (lastHealthMs - 86400000) && hoursAgo < fleetThresholds.noCommsWarn;
 
+      // Use same ONLINE_THRESHOLD_MS (24h) as device badge logic elsewhere in dashboard
+      const onlineThreshHrs = ONLINE_THRESHOLD_MS / 3600000;
+      const isOnlineNow = lastSeenMs > 0 && (Date.now() - lastSeenMs) < ONLINE_THRESHOLD_MS;
       let commsStatus = hoursAgo > fleetThresholds.noCommsCrit ? "critical"
-        : hoursAgo > fleetThresholds.noCommsWarn ? "warning" : "ok";
+        : hoursAgo > fleetThresholds.noCommsWarn ? "warning"
+        : !isOnlineNow ? "warning" : "ok";
       let voltStatus  = voltage == null ? "unknown"
         : voltage < fleetThresholds.voltCrit ? "critical"
         : voltage < fleetThresholds.voltWarn ? "warning" : "ok";
@@ -10612,7 +10620,7 @@ async function loadFleetHealth() {
         commsStatus === "critical" || voltStatus === "critical" || tempStatus === "critical" ? "critical"
         : movedRecently ? "warning"
         : commsStatus === "warning" || voltStatus === "warning" || tempStatus === "warning" ? "warning"
-        : hoursAgo > fleetThresholds.noCommsWarn ? "offline" : "ok";
+        : !isOnlineNow ? "offline" : "ok";
 
       return {
         uid: device.uid, name: device.name,
@@ -10651,14 +10659,17 @@ function toggleFleetCharts() {
 
 function updateFleetSummary() {
   const total    = fleetHealthData.length;
-  const online   = fleetHealthData.filter(d => d.overallStatus === "ok").length;
-  const warning  = fleetHealthData.filter(d => d.overallStatus === "warning").length;
-  const critical = fleetHealthData.filter(d => d.overallStatus === "critical").length;
-  const offline  = fleetHealthData.filter(d => ["offline","critical"].includes(d.overallStatus)).length;
-  const uptime   = total > 0 ? Math.round(((online + warning) / total) * 100) : 0;
+  // Only count relay-type devices (not EV/battery/generator asset placeholders)
+  const relayDevices = fleetHealthData.filter(d => !d.uid.startsWith("ev_") && !d.uid.startsWith("batt_") && !d.uid.startsWith("gen_"));
+  const total2   = relayDevices.length;
+  const online   = relayDevices.filter(d => d.overallStatus === "ok").length;
+  const warning  = relayDevices.filter(d => d.overallStatus === "warning").length;
+  const critical = relayDevices.filter(d => d.overallStatus === "critical").length;
+  const offline  = relayDevices.filter(d => ["offline","critical"].includes(d.overallStatus)).length;
+  const uptime   = total2 > 0 ? Math.round(((online + warning) / total2) * 100) : 0;
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-  set("fh-total",    total);
+  set("fh-total",    total2);
   set("fh-online",   online);
   set("fh-warning",  warning);
   set("fh-critical", critical);
