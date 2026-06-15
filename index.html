@@ -338,6 +338,25 @@
   .season-bar { display:flex;height:12px;border-radius:6px;overflow:hidden;margin:8px 0; }
   .season-segment { height:100%;transition:flex 0.3s; }
 
+  /* ── Virtual Peaker Tab ── */
+  .vp-step { display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:0.5px solid var(--border); }
+  .vp-step-num { width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0;margin-top:2px; }
+  .vp-idle   { background:var(--surface2);color:var(--text-hint); }
+  .vp-active { background:var(--blue-bg);color:var(--blue-dark); }
+  .vp-done   { background:var(--green-bg);color:var(--green-dark); }
+  .vp-badge { font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;white-space:nowrap; }
+  .vp-badge-neutral { background:var(--surface2);color:var(--text-hint); }
+  .vp-badge-info    { background:var(--blue-bg);color:var(--blue-dark); }
+  .vp-badge-success { background:var(--green-bg);color:var(--green-dark); }
+  .vp-badge-warning { background:var(--amber-bg);color:var(--amber); }
+  .vp-device-row { display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border);background:var(--surface2);font-size:12px;margin-bottom:6px; }
+  .vp-tl-item { display:flex;gap:12px;padding:7px 0;border-bottom:0.5px solid var(--border);font-size:12px; }
+  .vp-tl-item:last-child { border-bottom:none; }
+  .vp-tl-time { font-size:11px;color:var(--text-hint);min-width:76px;padding-top:1px; }
+  .vp-stat { background:var(--surface2);border-radius:var(--radius-sm);padding:0.875rem;text-align:center; }
+  .vp-stat-val { font-size:24px;font-weight:700;color:var(--text-primary); }
+  .vp-stat-lbl { font-size:11px;color:var(--text-hint);margin-top:2px; }
+
   @media (max-width: 600px) {
     .devices-grid, .data-grid, .groups-layout { grid-template-columns: 1fr; }
     .group-card:last-child { grid-column: auto; }
@@ -695,6 +714,7 @@
     <button class="tab-btn" id="main-events" onclick="switchMain('events', this)">Events</button>
     <button class="tab-btn" id="main-devices" onclick="switchMain('devices', this)">Devices</button>
     <button class="tab-btn" id="main-weather" onclick="switchMain('weather', this)">Weather</button>
+    <button class="tab-btn" id="main-vp" onclick="switchMain('vp', this)">Virtual Peaker</button>
     <button class="tab-btn" id="main-monitor" onclick="switchMain('monitor', this)">Monitor</button>
     <button class="tab-btn" id="main-admin" onclick="switchMain('admin', this)" style="display:none;">Admin</button>
   </div>
@@ -1656,6 +1676,182 @@
         <div id="event-history-container">
           <div class="sched-empty">Click Load to view event history.</div>
         </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── VIRTUAL PEAKER TAB ── -->
+<div class="tab-pane" id="tab-vp">
+  <div class="scroll-content">
+    <div style="max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
+
+      <!-- Header banner -->
+      <div class="sched-card" style="border-left:3px solid #534AB7;border-radius:0 var(--radius) var(--radius) 0;padding:1rem 1.25rem;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+          <div style="width:28px;height:28px;border-radius:6px;background:#EEEDFE;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#534AB7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          </div>
+          <span style="font-size:15px;font-weight:600;color:var(--text-primary);">Virtual Peaker integration</span>
+          <span style="margin-left:auto;font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:var(--surface2);color:var(--text-hint);">Demo Mode</span>
+        </div>
+        <p style="font-size:12px;color:var(--text-secondary);padding-left:38px;">Simulates a Virtual Peaker SHIFT API event dispatch being received, translated to LC hex commands, and delivered to enrolled devices via Notehub. No live VP account required.</p>
+      </div>
+
+      <!-- Two-column: dispatch form + translation preview -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+
+        <!-- Dispatch form -->
+        <div class="sched-card">
+          <div class="sched-card-header">
+            <div class="sched-card-title">Simulated VP dispatch</div>
+            <span id="vp-status-badge" style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:var(--blue-bg);color:var(--blue-dark);">&#9679; Ready</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <div class="sched-field">
+              <label class="sched-label">Event type</label>
+              <select class="sched-select" id="vp-event-type" onchange="vpUpdateForm()">
+                <option value="dlc">Direct load control (DLC)</option>
+                <option value="di">Distributed intelligence (DI)</option>
+                <option value="restore">Restore / cancel all</option>
+              </select>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div class="sched-field">
+                <label class="sched-label">Target group</label>
+                <select class="sched-select" id="vp-group">
+                  <option value="all">All devices</option>
+                  <option value="1">Group 1</option>
+                  <option value="2">Group 2</option>
+                  <option value="3">Group 3</option>
+                </select>
+              </div>
+              <div class="sched-field">
+                <label class="sched-label">Relay target</label>
+                <select class="sched-select" id="vp-relay">
+                  <option value="all_on">All relays</option>
+                  <option value="relay1_on">Relay 1</option>
+                  <option value="relay2_on">Relay 2</option>
+                  <option value="relay3_on">Relay 3</option>
+                  <option value="relay4_on">Relay 4</option>
+                </select>
+              </div>
+            </div>
+            <div id="vp-strategy-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div class="sched-field">
+                <label class="sched-label">Cycle strategy</label>
+                <select class="sched-select" id="vp-strategy">
+                  <option value="9">50% — 15/15 min (30 min)</option>
+                  <option value="2">50% — 7.5/7.5 min (15 min)</option>
+                  <option value="11">60% — 18/12 min (30 min)</option>
+                  <option value="15">80% — 24/6 min (30 min)</option>
+                  <option value="19">100% — full shed</option>
+                </select>
+              </div>
+              <div class="sched-field">
+                <label class="sched-label">Duration</label>
+                <select class="sched-select" id="vp-duration">
+                  <option value="60">1 hour</option>
+                  <option value="120">2 hours</option>
+                  <option value="180">3 hours</option>
+                  <option value="240">4 hours</option>
+                </select>
+              </div>
+            </div>
+            <div class="sched-field">
+              <label class="sched-label">Dispatch time</label>
+              <div style="display:flex;gap:8px;">
+                <input class="sched-input" type="date" id="vp-date" style="flex:1;" />
+                <input class="sched-input" type="time" id="vp-time" style="flex:1;" />
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:16px;align-items:center;">
+            <button class="sched-submit-btn" style="margin:0;flex:1;" onclick="vpRunDispatch()">
+              &#9658; Simulate VP dispatch
+            </button>
+            <button class="queue-refresh" onclick="vpReset()">Reset</button>
+          </div>
+        </div>
+
+        <!-- Translation preview -->
+        <div class="sched-card">
+          <div class="sched-card-header">
+            <div class="sched-card-title">LC translation preview</div>
+            <span id="vp-trans-badge" style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:var(--surface2);color:var(--text-hint);">Waiting</span>
+          </div>
+          <div id="vp-device-list">
+            <div style="font-size:12px;color:var(--text-hint);text-align:center;padding:1rem 0;">Dispatch a VP event to see device targets and generated LC command.</div>
+          </div>
+          <div style="margin-top:12px;">
+            <div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">LC hex command</div>
+            <div id="vp-hex-preview" style="font-family:monospace;font-size:11px;padding:10px 12px;background:var(--surface2);border:0.5px solid var(--border);border-radius:var(--radius-sm);word-break:break-all;color:var(--text-secondary);">
+              Command will appear here after dispatch
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pipeline steps -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">Integration pipeline</div>
+          <span id="vp-pipeline-badge" style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:var(--surface2);color:var(--text-hint);">Idle</span>
+        </div>
+        <div id="vp-steps" style="display:flex;flex-direction:column;">
+          <div class="vp-step" id="vp-step-1">
+            <div class="vp-step-num vp-idle" id="vp-sn1">1</div>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:500;color:var(--text-primary);">VP dispatch received</div>
+              <div style="font-size:12px;color:var(--text-secondary);" id="vp-sd1">Waiting for dispatch simulation…</div>
+            </div>
+            <span class="vp-badge vp-badge-neutral" id="vp-sb1">—</span>
+          </div>
+          <div class="vp-step" id="vp-step-2">
+            <div class="vp-step-num vp-idle" id="vp-sn2">2</div>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:500;color:var(--text-primary);">Translated to LC parameters</div>
+              <div style="font-size:12px;color:var(--text-secondary);" id="vp-sd2">Mode, strategy and reps derived from VP payload</div>
+            </div>
+            <span class="vp-badge vp-badge-neutral" id="vp-sb2">—</span>
+          </div>
+          <div class="vp-step" id="vp-step-3">
+            <div class="vp-step-num vp-idle" id="vp-sn3">3</div>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:500;color:var(--text-primary);">LC hex command built</div>
+              <div style="font-size:12px;color:var(--text-secondary);" id="vp-sd3">Binary command formatted with event ID and timestamp</div>
+            </div>
+            <span class="vp-badge vp-badge-neutral" id="vp-sb3">—</span>
+          </div>
+          <div class="vp-step" id="vp-step-4">
+            <div class="vp-step-num vp-idle" id="vp-sn4">4</div>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:500;color:var(--text-primary);">Commands queued to Notehub proxy</div>
+              <div style="font-size:12px;color:var(--text-secondary);" id="vp-sd4">data.qi note delivered to each enrolled device</div>
+            </div>
+            <span class="vp-badge vp-badge-neutral" id="vp-sb4">—</span>
+          </div>
+          <div class="vp-step" id="vp-step-5" style="border-bottom:none;">
+            <div class="vp-step-num vp-idle" id="vp-sn5">5</div>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:500;color:var(--text-primary);">Devices acknowledge &amp; execute</div>
+              <div style="font-size:12px;color:var(--text-secondary);" id="vp-sd5">Bubble-up confirms relay state change</div>
+            </div>
+            <span class="vp-badge vp-badge-neutral" id="vp-sb5">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Results (hidden until dispatch runs) -->
+      <div class="sched-card" id="vp-results-card" style="display:none;">
+        <div class="sched-card-header">
+          <div class="sched-card-title">Event results</div>
+          <span id="vp-results-badge" style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:var(--green-bg);color:var(--green-dark);">Complete</span>
+        </div>
+        <div id="vp-stat-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;"></div>
+        <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Activity log</div>
+        <div id="vp-activity-log" style="display:flex;flex-direction:column;"></div>
       </div>
 
     </div>
@@ -6176,6 +6372,7 @@ function switchMain(main, btn) {
   else if (main === "events")  { const s = currentSub.events||"scheduler";  activatePane(s); activateSubBtn("events",s); }
   else if (main === "devices") { const s = currentSub.devices||"data"; activatePane(s); activateSubBtn("devices",s); }
   else if (main === "monitor") { const s = currentSub.monitor||"monitor-triggers"; activatePane(s); activateSubBtn("monitor",s); }
+  else if (main === "vp") { activatePane("vp"); initVPTab(); }
 }
 
 function switchSub(main, sub, btn) {
@@ -6234,6 +6431,7 @@ function runTabInit(name) {
   if (name === "ev-chargers")      { initEVDevicesTab(); }
   if (name === "battery")          { initBatteryTab(); }
   if (name === "generators")       { initGeneratorsTab(); }
+  if (name === "vp")               { initVPTab(); }
 }
 
 function switchTab(name, btn) { switchMain(name, btn); }
@@ -27591,6 +27789,222 @@ function showHelpTab(key) {
 }
 
 // Init help tab with scheduling content when navigated to
+
+// ── VIRTUAL PEAKER INTEGRATION (DEMO) ────────────────────────────────────────
+
+let vpDispatchRunning = false;
+let vpInitialized = false;
+
+function initVPTab() {
+  if (vpInitialized) return;
+  vpInitialized = true;
+  // Set date/time to now
+  const d = new Date();
+  const dateEl = document.getElementById('vp-date');
+  const timeEl = document.getElementById('vp-time');
+  if (dateEl) dateEl.value = d.toISOString().split('T')[0];
+  if (timeEl) {
+    timeEl.value = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  }
+  // Populate group names from live data
+  vpRefreshGroupNames();
+}
+
+function vpRefreshGroupNames() {
+  const sel = document.getElementById('vp-group');
+  if (!sel) return;
+  const extras = Object.keys(groupNames).map(Number).sort((a,b)=>a-b).map(n =>
+    `<option value="${n}">${groupNames[n] || 'Group ' + n}</option>`
+  ).join('');
+  sel.innerHTML = `<option value="all">All devices (${DEVICES.filter(d=>d.type==='relay'||!d.type).length})</option>${extras}`;
+}
+
+function vpUpdateForm() {
+  const et = document.getElementById('vp-event-type').value;
+  const stratRow = document.getElementById('vp-strategy-row');
+  if (stratRow) stratRow.style.opacity = et === 'restore' ? '0.4' : '1';
+}
+
+function vpSetStep(n, state, detail, badge, badgeClass) {
+  const sn = document.getElementById('vp-sn' + n);
+  if (!sn) return;
+  sn.className = 'vp-step-num vp-' + state;
+  sn.textContent = state === 'done' ? '✓' : n;
+  const sd = document.getElementById('vp-sd' + n);
+  if (sd && detail) sd.textContent = detail;
+  const sb = document.getElementById('vp-sb' + n);
+  if (sb) { sb.textContent = badge; sb.className = 'vp-badge vp-badge-' + badgeClass; }
+}
+
+function vpDelay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function vpRunDispatch() {
+  if (vpDispatchRunning) return;
+  vpDispatchRunning = true;
+
+  const btn = document.querySelector('#tab-vp .sched-submit-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Dispatching…'; }
+
+  const eventType  = document.getElementById('vp-event-type').value;
+  const groupVal   = document.getElementById('vp-group').value;
+  const relayVal   = document.getElementById('vp-relay').value;
+  const stratNum   = parseInt(document.getElementById('vp-strategy').value);
+  const durMins    = parseInt(document.getElementById('vp-duration').value);
+  const dateStr    = document.getElementById('vp-date').value;
+  const timeStr    = document.getElementById('vp-time').value;
+  const startUnix  = Math.floor(new Date(dateStr + 'T' + timeStr + ':00').getTime() / 1000);
+
+  const relayDevices = DEVICES.filter(d => d.type === 'relay' || !d.type);
+  const targetDevices = groupVal === 'all'
+    ? relayDevices
+    : relayDevices.filter(d => (groupAssignments[d.uid] || []).includes(parseInt(groupVal)));
+
+  const mode       = eventType === 'di' ? 'di' : 'dlc';
+  const actualStrat = eventType === 'restore' ? 61 : stratNum;
+  const reps       = Math.max(1, Math.round(durMins / 30));
+  const lcHex      = buildLCHex(relayVal, mode, actualStrat, reps, startUnix);
+
+  // Status badges
+  const statusBadge = document.getElementById('vp-status-badge');
+  const transBadge  = document.getElementById('vp-trans-badge');
+  const pipelineBadge = document.getElementById('vp-pipeline-badge');
+  if (statusBadge)   { statusBadge.style.background='var(--amber-bg)'; statusBadge.style.color='var(--amber)'; statusBadge.textContent='⏳ Dispatching'; }
+  if (transBadge)    { transBadge.textContent='Processing'; transBadge.style.background='var(--amber-bg)'; transBadge.style.color='var(--amber)'; }
+  if (pipelineBadge) { pipelineBadge.textContent='Running'; pipelineBadge.style.background='var(--blue-bg)'; pipelineBadge.style.color='var(--blue-dark)'; }
+
+  // Step 1
+  await vpDelay(500);
+  vpSetStep(1, 'active', 'VP event payload received via webhook…', 'Received', 'info');
+  await vpDelay(700);
+  vpSetStep(1, 'done', 'VP event payload received — event ID assigned', 'Received', 'success');
+
+  // Step 2
+  const relayLabels = {all_on:'All relays',relay1_on:'Relay 1',relay2_on:'Relay 2',relay3_on:'Relay 3',relay4_on:'Relay 4'};
+  await vpDelay(400);
+  vpSetStep(2, 'active', 'Translating VP payload to LC parameters…', 'Translating', 'info');
+  await vpDelay(800);
+  vpSetStep(2, 'done',
+    `Mode: ${mode.toUpperCase()} · Strategy: ${actualStrat} · Reps: ${reps} · Target: ${relayLabels[relayVal]||relayVal}`,
+    'Translated', 'success');
+
+  // Step 3 — show hex
+  await vpDelay(400);
+  vpSetStep(3, 'active', 'Building binary LC command…', 'Building', 'info');
+  const hexEl = document.getElementById('vp-hex-preview');
+  if (hexEl) hexEl.textContent = 'Building…';
+  await vpDelay(900);
+  vpSetStep(3, 'done', `${lcHex.length}-char hex command built — checksum verified`, 'Built', 'success');
+  if (hexEl) { hexEl.textContent = lcHex; hexEl.style.color = 'var(--text-primary)'; }
+  if (transBadge) { transBadge.textContent='Translated'; transBadge.style.background='var(--green-bg)'; transBadge.style.color='var(--green-dark)'; }
+
+  // Update device list
+  const devListEl = document.getElementById('vp-device-list');
+  if (devListEl) {
+    const show = targetDevices.slice(0, 3);
+    const extra = targetDevices.length > 3 ? `<div style="font-size:11px;color:var(--text-hint);text-align:center;padding:4px 0;">+ ${targetDevices.length - 3} more devices</div>` : '';
+    devListEl.innerHTML = show.map(d => `
+      <div class="vp-device-row">
+        <div>
+          <div style="font-weight:500;color:var(--text-primary);">${d.name}</div>
+          <div style="font-size:10px;color:var(--text-hint);font-family:monospace;">${d.uid}</div>
+        </div>
+        <span class="vp-badge vp-badge-warning">Sending</span>
+      </div>`).join('') + extra;
+  }
+
+  // Step 4 — send commands
+  await vpDelay(400);
+  vpSetStep(4, 'active', `Queuing ${targetDevices.length} command(s) to Notehub proxy…`, 'Queuing', 'info');
+  await vpDelay(1200);
+
+  // Update device list to "Sent"
+  if (devListEl) {
+    const show = targetDevices.slice(0, 3);
+    const extra = targetDevices.length > 3 ? `<div style="font-size:11px;color:var(--text-hint);text-align:center;padding:4px 0;">+ ${targetDevices.length - 3} more devices</div>` : '';
+    devListEl.innerHTML = show.map(d => `
+      <div class="vp-device-row">
+        <div>
+          <div style="font-weight:500;color:var(--text-primary);">${d.name}</div>
+          <div style="font-size:10px;color:var(--text-hint);font-family:monospace;">${d.uid}</div>
+        </div>
+        <span class="vp-badge vp-badge-success">Sent</span>
+      </div>`).join('') + extra;
+  }
+  vpSetStep(4, 'done', `${targetDevices.length} note.add command(s) accepted by proxy`, 'Queued', 'success');
+
+  // Step 5 — acknowledgement
+  await vpDelay(600);
+  vpSetStep(5, 'active', 'Waiting for device acknowledgement via bubble-up…', 'Waiting', 'info');
+  await vpDelay(1400);
+  const ackCount = Math.max(1, Math.floor(targetDevices.length * 0.92));
+  vpSetStep(5, 'done', `${ackCount}/${targetDevices.length} devices confirmed relay state change`, 'Acknowledged', 'success');
+
+  // Final status
+  if (pipelineBadge) { pipelineBadge.textContent='Complete'; pipelineBadge.style.background='var(--green-bg)'; pipelineBadge.style.color='var(--green-dark)'; }
+  if (statusBadge)   { statusBadge.style.background='var(--green-bg)'; statusBadge.style.color='var(--green-dark)'; statusBadge.textContent='✓ Complete'; }
+
+  // Results card
+  const now = new Date();
+  const fmt = t => t.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  const t1=new Date(now-3800), t2=new Date(now-2900), t3=new Date(now-1800), t4=new Date(now-500), t5=now;
+
+  const statRow = document.getElementById('vp-stat-row');
+  if (statRow) {
+    statRow.innerHTML = `
+      <div class="vp-stat"><div class="vp-stat-val" style="color:var(--green-dark);">${targetDevices.length}</div><div class="vp-stat-lbl">Devices targeted</div></div>
+      <div class="vp-stat"><div class="vp-stat-val" style="color:var(--green-dark);">${ackCount}</div><div class="vp-stat-lbl">Acknowledged</div></div>
+      <div class="vp-stat"><div class="vp-stat-val">${(durMins/60).toFixed(1)}h</div><div class="vp-stat-lbl">Event duration</div></div>
+      <div class="vp-stat"><div class="vp-stat-val">${Math.round(ackCount/targetDevices.length*100)}%</div><div class="vp-stat-lbl">Participation</div></div>`;
+  }
+
+  const groupLabel = groupVal === 'all' ? 'All devices' : (groupNames[parseInt(groupVal)] || 'Group ' + groupVal);
+  const log = document.getElementById('vp-activity-log');
+  if (log) {
+    log.innerHTML = `
+      <div class="vp-tl-item"><div class="vp-tl-time">${fmt(t1)}</div><div><div style="font-weight:500;">VP dispatch payload received</div><div style="color:var(--text-secondary);margin-top:1px;">Event type: ${eventType.toUpperCase()} · Target: ${groupLabel} · ${relayLabels[relayVal]||relayVal}</div></div></div>
+      <div class="vp-tl-item"><div class="vp-tl-time">${fmt(t2)}</div><div><div style="font-weight:500;">LC parameters derived</div><div style="color:var(--text-secondary);margin-top:1px;">Strategy ${actualStrat} · Mode ${mode.toUpperCase()} · ${reps} rep(s) · ${durMins} min duration</div></div></div>
+      <div class="vp-tl-item"><div class="vp-tl-time">${fmt(t3)}</div><div><div style="font-weight:500;">LC hex command built &amp; verified</div><div style="color:var(--text-secondary);margin-top:1px;font-family:monospace;font-size:11px;">${lcHex.substring(0,18)}… · checksum OK</div></div></div>
+      <div class="vp-tl-item"><div class="vp-tl-time">${fmt(t4)}</div><div><div style="font-weight:500;">${targetDevices.length} command(s) queued to Notehub proxy</div><div style="color:var(--text-secondary);margin-top:1px;">All targeted devices received data.qi note</div></div></div>
+      <div class="vp-tl-item"><div class="vp-tl-time">${fmt(t5)}</div><div><div style="font-weight:500;">${ackCount}/${targetDevices.length} devices confirmed via bubble-up</div><div style="color:var(--text-secondary);margin-top:1px;">Relay state change recorded in Supabase</div></div></div>`;
+  }
+
+  const resultsCard = document.getElementById('vp-results-card');
+  if (resultsCard) resultsCard.style.display = 'block';
+  const resultsBadge = document.getElementById('vp-results-badge');
+  if (resultsBadge) resultsBadge.textContent = `${ackCount}/${targetDevices.length} devices`;
+
+  if (btn) { btn.disabled = false; btn.textContent = '▶ Simulate VP dispatch'; }
+  vpDispatchRunning = false;
+}
+
+function vpReset() {
+  if (vpDispatchRunning) return;
+  [1,2,3,4,5].forEach(n => {
+    const details = [
+      'Waiting for dispatch simulation…',
+      'Mode, strategy and reps derived from VP payload',
+      'Binary command formatted with event ID and timestamp',
+      'data.qi note delivered to each enrolled device',
+      'Bubble-up confirms relay state change'
+    ];
+    vpSetStep(n, 'idle', details[n-1], '—', 'neutral');
+  });
+  const statusBadge   = document.getElementById('vp-status-badge');
+  const transBadge    = document.getElementById('vp-trans-badge');
+  const pipelineBadge = document.getElementById('vp-pipeline-badge');
+  if (statusBadge)   { statusBadge.style.background='var(--blue-bg)'; statusBadge.style.color='var(--blue-dark)'; statusBadge.textContent='● Ready'; }
+  if (transBadge)    { transBadge.textContent='Waiting'; transBadge.style.background='var(--surface2)'; transBadge.style.color='var(--text-hint)'; }
+  if (pipelineBadge) { pipelineBadge.textContent='Idle'; pipelineBadge.style.background='var(--surface2)'; pipelineBadge.style.color='var(--text-hint)'; }
+  const hexEl = document.getElementById('vp-hex-preview');
+  if (hexEl) { hexEl.textContent='Command will appear here after dispatch'; hexEl.style.color='var(--text-secondary)'; }
+  const devListEl = document.getElementById('vp-device-list');
+  if (devListEl) devListEl.innerHTML = '<div style="font-size:12px;color:var(--text-hint);text-align:center;padding:1rem 0;">Dispatch a VP event to see device targets and generated LC command.</div>';
+  const resultsCard = document.getElementById('vp-results-card');
+  if (resultsCard) resultsCard.style.display = 'none';
+  const btn = document.querySelector('#tab-vp .sched-submit-btn');
+  if (btn) { btn.disabled = false; btn.textContent = '▶ Simulate VP dispatch'; }
+  vpDispatchRunning = false;
+}
 
 </script>
 
