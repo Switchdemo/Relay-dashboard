@@ -1137,6 +1137,13 @@
                 <div class="sf-tile-sub">Start / stop enrolled generators</div>
               </label>
 
+              <label class="sf-event-type-tile" data-type="thermostat" onclick="selectEventType('thermostat')">
+                <input type="radio" name="sf-event-type" value="thermostat" style="display:none;"/>
+                <div class="sf-tile-icon">🌡️</div>
+                <div class="sf-tile-label">Thermostat</div>
+                <div class="sf-tile-sub">Setpoint setback on enrolled thermostats</div>
+              </label>
+
               <label class="sf-event-type-tile" data-type="openadr" onclick="selectEventType('openadr')">
                 <input type="radio" name="sf-event-type" value="openadr" style="display:none;"/>
                 <div class="sf-tile-icon">&#127760;</div>
@@ -1424,6 +1431,37 @@
               </div>
             </div>
             <div style="font-size:11px;color:var(--text-hint);">Generator DR = start/stop. When started, the site can shed utility load or island.</div>
+          </div>
+
+          <!-- THERMOSTAT controls -->
+          <div id="sf-panel-thermostat" class="sched-field full sf-event-panel" style="display:none;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+              <div>
+                <label class="sched-label">Target Type</label>
+                <select class="sched-select" id="sf-therm-target-type" onchange="onThermTargetTypeChange()">
+                  <option value="" disabled selected>— Select —</option>
+                  <option value="group">Group</option>
+                  <option value="device">Individual Asset</option>
+                </select>
+              </div>
+              <div>
+                <label class="sched-label">Target</label>
+                <select class="sched-select" id="sf-therm-target">
+                  <option value="" disabled selected>— Choose One —</option>
+                </select>
+              </div>
+              <div>
+                <label class="sched-label">Setback Level</label>
+                <select class="sched-select" id="sf-therm-action">
+                  <option value="" disabled selected>— Select level —</option>
+                  <option value="emergency">Emergency — max setback (+6°F)</option>
+                  <option value="high">High Shed — +4°F from setpoint</option>
+                  <option value="moderate">Moderate — +2°F from setpoint</option>
+                  <option value="restore">Restore — return to normal schedule</option>
+                </select>
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--text-hint);">Thermostat DR raises the cooling setpoint (or lowers heating setpoint) to reduce HVAC load. Min comfort limits configured per asset are always maintained.</div>
           </div>
 
           <!-- OPENADR controls -->
@@ -2382,6 +2420,7 @@
             <div class="rule-event-tile"          data-type="ev"        onclick="selectRuleEventType('ev')">🔌 EV Charger</div>
             <div class="rule-event-tile"          data-type="battery"   onclick="selectRuleEventType('battery')">🔋 Battery Backup</div>
             <div class="rule-event-tile"          data-type="generator" onclick="selectRuleEventType('generator')">⚙️ Generator</div>
+            <div class="rule-event-tile"          data-type="thermostat" onclick="selectRuleEventType('thermostat')">🌡️ Thermostat</div>
             <div class="rule-event-tile"          data-type="openADR"   onclick="selectRuleEventType('openADR')">📡 OpenADR</div>
           </div>
         </div>
@@ -2454,6 +2493,22 @@
         <div id="rule-panel-ev"        style="display:none;"><p style="font-size:11px;color:var(--text-hint);margin:0;">All enrolled EV chargers will receive a DR dispatch when this rule fires.</p></div>
         <div id="rule-panel-battery"   style="display:none;"><p style="font-size:11px;color:var(--text-hint);margin:0;">Connected battery backup systems will receive a dispatch when this rule fires.</p></div>
         <div id="rule-panel-generator" style="display:none;"><p style="font-size:11px;color:var(--text-hint);margin:0;">Connected generators will receive a start command when this rule fires.</p></div>
+        <div id="rule-panel-thermostat" style="display:none;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div>
+              <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">Setback Level</label>
+              <select id="rule-therm-action" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                <option value="high" selected>High Shed — +4°F</option>
+                <option value="emergency">Emergency — +6°F</option>
+                <option value="moderate">Moderate — +2°F</option>
+                <option value="restore">Restore — normal schedule</option>
+              </select>
+            </div>
+            <div style="align-self:end;">
+              <p style="font-size:11px;color:var(--text-hint);margin:0;">All DR-enrolled thermostats will receive the selected setback when this rule fires.</p>
+            </div>
+          </div>
+        </div>
         <div id="rule-panel-openADR"   style="display:none;"><p style="font-size:11px;color:var(--text-hint);margin:0;">An OpenADR event will be sent to all enrolled VENs when this rule fires.</p></div>
 
         <!-- Duration (all types) -->
@@ -2909,6 +2964,10 @@
           <div class="fh-stat-card" style="cursor:default;">
             <div style="font-size:10px;color:var(--text-hint);margin-bottom:2px;">Generators</div>
             <div style="font-size:24px;font-weight:700;color:var(--amber);" id="asset-count-generator">—</div>
+          </div>
+          <div class="fh-stat-card" style="cursor:default;">
+            <div style="font-size:10px;color:var(--text-hint);margin-bottom:2px;">Thermostats</div>
+            <div style="font-size:24px;font-weight:700;color:var(--purple);" id="asset-count-thermostat">—</div>
           </div>
           <div class="fh-stat-card" style="cursor:default;">
             <div style="font-size:10px;color:var(--text-hint);margin-bottom:2px;">Total Assets</div>
@@ -6562,10 +6621,11 @@ async function loadAllAssetsIntoDevices() {
     return [...db, ...local.filter(r => !(ids.has(r.station_id) || ids.has(r.asset_id)))];
   };
 
-  const [evRows, battRows, genRows] = await Promise.all([
+  const [evRows, battRows, genRows, thermRows] = await Promise.all([
     safeGet("ev_chargers?enabled=eq.true&order=enrolled_at.asc",       "lcp_ev_chargers_v1", "lcp_ev_dev_assets_v1"),
     safeGet("battery_assets?enabled=eq.true&order=enrolled_at.asc",    "lcp_battery_assets_v1"),
     safeGet("generator_assets?enabled=eq.true&order=enrolled_at.asc",  "lcp_generator_assets_v1"),
+    safeGet("thermostat_assets?enabled=eq.true&order=enrolled_at.asc", "lcp_thermostat_assets_v1"),
   ]);
 
   // Populate global arrays used by existing inject functions
@@ -6576,6 +6636,7 @@ async function loadAllAssetsIntoDevices() {
   }
   if (!batteryAssets.length && battRows.length) batteryAssets = battRows;
   if (!generatorAssets.length && genRows.length) generatorAssets = genRows;
+  if (!thermostatAssets.length && thermRows.length) thermostatAssets = thermRows;
 
   // Inject into DEVICES directly using same pattern as inject functions
   DEVICES = DEVICES.filter(d => d.type === "relay" || !d.type);
@@ -6597,6 +6658,13 @@ async function loadAllAssetsIntoDevices() {
     const uid = `gen_${a.asset_id}`;
     const cfg = typeof a.integ_config === "string" ? (() => { try { return JSON.parse(a.integ_config); } catch(e) { return {}; } })() : (a.integ_config||{});
     DEVICES.push({ id:uid, uid, name:a.name, type:"generator", genAsset:{...a, integ_config:cfg} });
+    if (!relayState[uid]) relayState[uid] = {1:false,2:false,3:false,4:false,all:false};
+  });
+
+  thermRows.forEach(a => {
+    const uid = `therm_${a.asset_id}`;
+    const cfg = typeof a.integ_config === "string" ? (() => { try { return JSON.parse(a.integ_config); } catch(e) { return {}; } })() : (a.integ_config||{});
+    DEVICES.push({ id:uid, uid, name:a.name, type:"thermostat", thermAsset:{...a, integ_config:cfg} });
     if (!relayState[uid]) relayState[uid] = {1:false,2:false,3:false,4:false,all:false};
   });
 
@@ -7101,6 +7169,12 @@ function populateTargetSelector() {
         genDevs.map(d => `<option value="${d.uid}">⚡ ${d.name}</option>`).join("") +
         `</optgroup>`;
     }
+    const thermDevs = DEVICES.filter(d => d.type === "thermostat");
+    if (thermDevs.length) {
+      html += `<optgroup label="Thermostats">` +
+        thermDevs.map(d => `<option value="${d.uid}">🌡️ ${d.name}</option>`).join("") +
+        `</optgroup>`;
+    }
     sel.innerHTML = html;
   }
   sel.value = ""; // ensure placeholder is shown
@@ -7259,6 +7333,17 @@ function showSchedConfirm() {
     targetName    = type === "group" ? (groupNames[parseInt(targetVal.replace("group_",""))] || targetVal) : (unitName(targetVal) || targetVal);
     actionSummary = document.querySelector(`#sf-gen-action option[value="${genAct}"]`)?.text || genAct;
     stratVal      = "gen_action";
+
+  } else if (eventType === "thermostat") {
+    type          = getVal("sf-therm-target-type");
+    targetVal     = getVal("sf-therm-target");
+    const thermAct = getVal("sf-therm-action");
+    if (!type)       { setStatus("error", "Please select a target type."); return; }
+    if (!targetVal)  { setStatus("error", "Please select a thermostat target."); return; }
+    if (!thermAct)   { setStatus("error", "Please select a setback level."); return; }
+    targetName    = type === "group" ? (groupNames[parseInt(targetVal.replace("group_",""))] || targetVal) : (unitName(targetVal) || targetVal);
+    actionSummary = document.querySelector(`#sf-therm-action option[value="${thermAct}"]`)?.text || thermAct;
+    stratVal      = "therm_setback";
 
   } else if (eventType === "openadr") {
     const oadrLevel = getVal("sf-oadr-level");
@@ -7436,6 +7521,31 @@ async function _executeCreateSchedule() {
       status:"sent", fired_at:new Date().toISOString(), event_type:"generator"
     });
     setStatus("ready", `"${name}" generator event dispatched.`);
+    await loadSchedules(); return;
+  }
+
+  // ── Thermostat ──────────────────────────────────────────────────────────────
+  if (evType === "thermostat") {
+    const thermTargetType = getVal("sf-therm-target-type");
+    const thermTarget     = getVal("sf-therm-target");
+    const thermAct        = getVal("sf-therm-action");
+    if (!thermTarget) { setStatus("error", "Please select a thermostat target."); return; }
+    if (!thermAct)    { setStatus("error", "Please select a setback level."); return; }
+    const targets = thermTargetType === "group"
+      ? DEVICES.filter(d => d.type==="thermostat" && (groupAssignments[d.uid]||[]).includes(parseInt(thermTarget.replace("group_",""))))
+      : [DEVICES.find(d => d.uid === thermTarget)].filter(Boolean);
+    for (const d of targets) {
+      const aid = d.uid.replace("therm_","");
+      if (thermAct === "restore") await restoreThermostatSingle(aid);
+      else                        await dispatchThermostatDRSingle(aid, thermAct);
+    }
+    await supabasePost("schedule_queue", {
+      name, fire_at:new Date(schedUnix*1000).toISOString(),
+      target_type:thermTargetType, target_id:thermTarget, target_name:unitName(thermTarget)||thermTarget,
+      relay_action:thermAct, duration_minutes, timezone:tz, action_time:time, one_time:true,
+      status:"sent", fired_at:new Date().toISOString(), event_type:"thermostat"
+    });
+    setStatus("ready", `"${name}" thermostat event dispatched.`);
     await loadSchedules(); return;
   }
 
@@ -10877,6 +10987,7 @@ async function renderMasterAssets() {
   let evRows        = [];
   let battRows      = [];
   let genRows       = [];
+  let thermRows     = [];
   let groupMap      = {}; // { device_uid: [group_numbers] }
   let groupNameMap  = {}; // { group_number: name }
 
@@ -10905,12 +11016,13 @@ async function renderMasterAssets() {
       return [...dbRows, ...localRows.filter(r => !dbIds.has(r.asset_id))];
     };
 
-    const [devices, assignments, ev, batt, gen] = await Promise.all([
+    const [devices, assignments, ev, batt, gen, therm] = await Promise.all([
       safeGet("devices?order=name.asc"),
       safeGet("device_groups?order=group_number"),
       safeGetWithLocal("ev_chargers?enabled=eq.true&order=enrolled_at.asc",       "lcp_ev_chargers_v1"),
       safeGetWithLocal("battery_assets?enabled=eq.true&order=enrolled_at.asc",   "lcp_battery_assets_v1"),
       safeGetWithLocal("generator_assets?enabled=eq.true&order=enrolled_at.asc", "lcp_generator_assets_v1"),
+      safeGetWithLocal("thermostat_assets?enabled=eq.true&order=enrolled_at.asc","lcp_thermostat_assets_v1"),
     ]);
 
     relayDevs = (Array.isArray(devices) ? devices : []).filter(d => !d.uid?.includes("PLACEHOLDER"));
@@ -10930,6 +11042,7 @@ async function renderMasterAssets() {
     evRows   = ev   || [];
     battRows = batt || [];
     genRows  = gen  || [];
+    thermRows = therm || [];
 
   } catch(e) {
     console.error("renderMasterAssets load error:", e);
@@ -10943,6 +11056,7 @@ async function renderMasterAssets() {
     ev:        { icon:"🔌", label:"EV Charger",      color:"var(--blue-dark)"   },
     battery:   { icon:"🔋", label:"Battery System",  color:"var(--green-dark)"  },
     generator: { icon:"⚙️", label:"Generator",       color:"var(--amber)"       },
+    thermostat:{ icon:"🌡️", label:"Thermostat",      color:"var(--purple)"      },
   };
 
   const rows = [];
@@ -10977,8 +11091,16 @@ async function renderMasterAssets() {
       notes:`${a.capacity_kw||"?"}kW${a.integration?` (${a.integration})`:""}`  });
   });
 
+  thermRows.forEach(a => {
+    const uid    = `therm_${a.asset_id}`;
+    const gnums  = groupMap[uid] || [];
+    const gNames = gnums.map(n => groupNameMap[n] || `G${n}`);
+    rows.push({ type:"thermostat", name:a.name||a.asset_id, uid, groups:gNames, gnums, status:a.status||null, qty:1,
+      notes:`Cool: ${a.normal_cool||"?"}°F / Setback: ${a.setback_temp||"?"}°F${a.integration?` (${a.integration})`:""}`  });
+  });
+
   // ── Summary counts ─────────────────────────────────────────────────────────
-  const counts = { relay:0, ev:0, battery:0, generator:0 };
+  const counts = { relay:0, ev:0, battery:0, generator:0, thermostat:0 };
   rows.forEach(r => counts[r.type] = (counts[r.type]||0) + 1);
   // Ungrouped = any asset whose UID isn't in groupMap
   const allAssetUids = [
@@ -10986,6 +11108,7 @@ async function renderMasterAssets() {
     ...evRows.map(c => ({ uid:`ev_${c.station_id||c.asset_id||c.id}`, name:c.name, icon:"🔌" })),
     ...battRows.map(a => ({ uid:`batt_${a.asset_id}`, name:a.name, icon:"🔋" })),
     ...genRows.map(a => ({ uid:`gen_${a.asset_id}`, name:a.name, icon:"⚙️" })),
+    ...thermRows.map(a => ({ uid:`therm_${a.asset_id}`, name:a.name, icon:"🌡️" })),
   ];
   const ungroupedAssets = allAssetUids.filter(a => !(groupMap[a.uid]||[]).length);
 
@@ -10993,6 +11116,8 @@ async function renderMasterAssets() {
   document.getElementById("asset-count-ev").textContent        = counts.ev;
   document.getElementById("asset-count-battery").textContent   = counts.battery;
   document.getElementById("asset-count-generator").textContent = counts.generator;
+  const thermCountEl = document.getElementById("asset-count-thermostat");
+  if (thermCountEl) thermCountEl.textContent = counts.thermostat;
   document.getElementById("asset-count-total").textContent     = rows.length;
   document.getElementById("asset-count-ungrouped").textContent = ungroupedAssets.length;
 
@@ -11010,7 +11135,7 @@ async function renderMasterAssets() {
     return;
   }
 
-  const ORDER = { relay:0, ev:1, battery:2, generator:3 };
+  const ORDER = { relay:0, ev:1, battery:2, generator:3, thermostat:4 };
   rows.sort((a,b) => (ORDER[a.type]||0)-(ORDER[b.type]||0) || (a.name||"").localeCompare(b.name||""));
 
   tbody.innerHTML = rows.map((r, i) => {
@@ -15718,6 +15843,7 @@ async function fireAutopilotEvent(rule, fv) {
     if (dtype === "battery")   { if (typeof dispatchBatteryDR   === "function") await dispatchBatteryDR(rule);   return; }
     if (dtype === "generator") { if (typeof dispatchGeneratorDR  === "function") await dispatchGeneratorDR(rule);  return; }
     if (dtype === "ev")        { if (typeof dispatchEVChargersDR === "function") await dispatchEVChargersDR(parseFloat(rule?.signal_level||"0.75")); return; }
+    if (dtype === "thermostat"){ if (typeof dispatchThermostatDR === "function") await dispatchThermostatDR(rule?.therm_action || "high"); return; }
     await sendLCToDevice(d.uid, hex);
   }
 
@@ -15768,6 +15894,10 @@ async function fireAutopilotEvent(rule, fv) {
 
   } else if (evType === "generator") {
     if (typeof dispatchGeneratorDR === "function") await dispatchGeneratorDR(rule);
+
+  } else if (evType === "thermostat") {
+    const action = rule.relay_action || rule.therm_action || "high";
+    if (typeof dispatchThermostatDR === "function") await dispatchThermostatDR(action);
 
   } else if (evType === "openADR") {
     if (typeof dispatchOpenADREvent === "function") await dispatchOpenADREvent(rule);
@@ -26006,6 +26136,13 @@ function populateEventTypeTargets(type) {
     if (sel)    sel.innerHTML = `<option value="" disabled selected>— Choose One —</option>`;
   }
 
+  if (type === "thermostat") {
+    const typeEl = document.getElementById("sf-therm-target-type");
+    const sel    = document.getElementById("sf-therm-target");
+    if (typeEl) typeEl.value = "";
+    if (sel)    sel.innerHTML = `<option value="" disabled selected>— Choose One —</option>`;
+  }
+
   if (type === "bas_di") {
     // Populate BAS target selectors same as switch
     const typeEl = document.getElementById("sf-bas-target-type");
@@ -28091,6 +28228,7 @@ function populateAssetTarget(typeId, targetId, assetType) {
 function onEvTargetTypeChange()   { populateAssetTarget("sf-ev-target-type",   "sf-ev-target",   "ev");        }
 function onBattTargetTypeChange() { populateAssetTarget("sf-batt-target-type", "sf-batt-target", "battery");   }
 function onGenTargetTypeChange()  { populateAssetTarget("sf-gen-target-type",  "sf-gen-target",  "generator"); }
+function onThermTargetTypeChange(){ populateAssetTarget("sf-therm-target-type","sf-therm-target","thermostat"); }
 // ── End Asset Target Selectors ────────────────────────────────────────────────
 
 
