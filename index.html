@@ -565,6 +565,22 @@
   .batt-integ-opt { padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;transition:all .15s; }
   .batt-integ-opt:hover { border-color:var(--text-primary); }
 
+  /* ── Thermostats ── */
+  .therm-card { border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:14px;background:var(--surface);margin-bottom:8px; }
+  .therm-integ-opt { padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;transition:all .15s;background:var(--surface); }
+  .therm-integ-opt:hover { border-color:var(--text-primary); }
+  .therm-integ-panel { display:none; }
+  .therm-temp-bar { height:6px;border-radius:3px;background:var(--surface2);overflow:hidden;margin-top:4px; }
+  .therm-temp-fill { height:100%;border-radius:3px;background:var(--blue-dark);transition:width .8s; }
+  .therm-temp-fill.warm { background:var(--amber); }
+  .therm-temp-fill.hot  { background:var(--red); }
+  .therm-mode-badge { display:inline-block;padding:3px 10px;border-radius:10px;font-size:10px;font-weight:700;font-family:monospace; }
+  .therm-mode-badge.cool     { background:var(--blue-bg);color:var(--blue-dark); }
+  .therm-mode-badge.heat     { background:var(--amber-bg);color:var(--amber); }
+  .therm-mode-badge.auto     { background:var(--green-bg);color:var(--green-dark); }
+  .therm-mode-badge.off      { background:var(--surface2);color:var(--text-hint); }
+  .therm-mode-badge.setback  { background:var(--red-lt,#fef2f2);color:var(--red); }
+
   /* ── Generators ── */
   .gen-card { border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:14px;background:var(--surface);margin-bottom:8px; }
   .gen-status-dot { width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:3px; }
@@ -754,6 +770,7 @@
     <button class="sub-tab-btn" id="sub-ev-chargers" onclick="switchSub('devices','ev-chargers',this)">&#128268; EV Chargers</button>
     <button class="sub-tab-btn" id="sub-battery" onclick="switchSub('devices','battery',this)">&#128267; Battery Systems</button>
     <button class="sub-tab-btn" id="sub-generators" onclick="switchSub('devices','generators',this)">&#9889; Generators</button>
+    <button class="sub-tab-btn" id="sub-thermostats" onclick="switchSub('devices','thermostats',this)">🌡️ Thermostats</button>
     <button class="sub-tab-btn" id="sub-pelican" onclick="switchSub('devices','pelican',this)">🌡️ Pelican Sites</button>
     <button class="sub-tab-btn" id="sub-derapi" onclick="switchSub('devices','derapi',this)">⚡ DERapi Assets</button>
   </div>
@@ -6114,6 +6131,353 @@
   </div>
 </div>
 
+<!-- ── THERMOSTATS DEVICE TAB ── -->
+<div class="tab-pane" id="tab-thermostats">
+  <div class="scroll-content">
+    <div style="max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <!-- Fleet Overview -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">🌡️ Thermostat Assets</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span id="therm-status-badge" style="font-size:11px;font-family:monospace;padding:2px 8px;border-radius:10px;background:var(--surface2);color:var(--text-hint);">Loading...</span>
+            <button class="queue-refresh" onclick="refreshThermostatAssets()">Refresh</button>
+            <button onclick="toggleThermostatEnrollForm()" style="padding:6px 14px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">+ Add Thermostat</button>
+          </div>
+        </div>
+
+        <!-- Fleet stats -->
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:14px;">
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="therm-stat-total">—</div><div class="ev-meter-lbl">Total</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="therm-stat-online" style="color:var(--green-dark);">—</div><div class="ev-meter-lbl">Online</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="therm-stat-setback" style="color:var(--amber);">—</div><div class="ev-meter-lbl">In Setback</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="therm-stat-avg-temp">—</div><div class="ev-meter-lbl">Avg Temp</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="therm-stat-dr">—</div><div class="ev-meter-lbl">DR Enrolled</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="therm-stat-dr-active" style="color:var(--red);">—</div><div class="ev-meter-lbl">DR Active</div></div>
+        </div>
+
+        <!-- Enroll / Add form -->
+        <div id="therm-enroll-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:16px;margin-bottom:14px;border:0.5px solid var(--border-md);">
+          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;font-family:monospace;" id="therm-form-title">Add Thermostat Asset</div>
+
+          <!-- Integration type selector -->
+          <div style="margin-bottom:14px;">
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em;">Brand / Integration Type</label>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;">
+              <div class="therm-integ-opt" data-integ="ecobee" onclick="selectThermInteg('ecobee',this)">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Ecobee</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">REST API — setpoint + hold control</div>
+              </div>
+              <div class="therm-integ-opt" data-integ="nest" onclick="selectThermInteg('nest',this)">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Google Nest</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Smart Device Management API</div>
+              </div>
+              <div class="therm-integ-opt" data-integ="honeywell" onclick="selectThermInteg('honeywell',this)">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Honeywell Home</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Resideo API — T6 Pro, T9, T10</div>
+              </div>
+              <div class="therm-integ-opt" data-integ="sensi" onclick="selectThermInteg('sensi',this)">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Sensi (Emerson)</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Cloud API — ST55, UP500 series</div>
+              </div>
+              <div class="therm-integ-opt" data-integ="venstar" onclick="selectThermInteg('venstar',this)">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Venstar</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Local REST API — ColorTouch series</div>
+              </div>
+              <div class="therm-integ-opt" data-integ="bryant" onclick="selectThermInteg('bryant',this)">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Bryant / Carrier</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Côr / Infinity — REST API</div>
+              </div>
+              <div class="therm-integ-opt" data-integ="pelican" onclick="selectThermInteg('pelican',this)">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Pelican Wireless</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Commercial — setback via DR level</div>
+              </div>
+              <div class="therm-integ-opt" data-integ="relay" onclick="selectThermInteg('relay',this)">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Relay Fallback</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">No API — cut power via Notecard</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Common fields -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Asset ID / Name</label>
+              <input type="text" id="therm-asset-id" placeholder="e.g. THERM-BLDG-A-01" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;font-family:monospace;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Display Name</label>
+              <input type="text" id="therm-name" placeholder="e.g. Office — Zone 1" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Location / Site</label>
+              <input type="text" id="therm-location" placeholder="e.g. Building A, Floor 2" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Setback Temp (°F)</label>
+              <input type="number" id="therm-setback-temp" value="78" min="60" max="90" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Normal Cool Setpoint</label>
+              <input type="number" id="therm-normal-cool" value="72" min="60" max="85" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Normal Heat Setpoint</label>
+              <input type="number" id="therm-normal-heat" value="68" min="55" max="80" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"/>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">DR Enrolled</label>
+              <select id="therm-dr" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="true">Yes</option>
+                <option value="false">No</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Integration-specific panels -->
+
+          <!-- Ecobee -->
+          <div id="therm-integ-ecobee" style="display:none;" class="therm-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px 14px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Ecobee API Credentials</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">API Key</label>
+                  <input type="text" id="therm-ecobee-api-key" placeholder="ecobee developer API key" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Refresh Token</label>
+                  <input type="password" id="therm-ecobee-refresh-token" placeholder="OAuth refresh token" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Thermostat Identifier</label>
+                <input type="text" id="therm-ecobee-thermostat-id" placeholder="e.g. 123456789012" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+              </div>
+              <div style="font-size:11px;color:var(--text-hint);margin-top:8px;">Obtain API Key from Ecobee developer portal. A PIN-based auth flow is required to generate the refresh token.</div>
+            </div>
+          </div>
+
+          <!-- Google Nest -->
+          <div id="therm-integ-nest" style="display:none;" class="therm-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px 14px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Google Nest — SDM API</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Project ID</label>
+                  <input type="text" id="therm-nest-project-id" placeholder="Google Cloud SDM project ID" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">OAuth Client ID</label>
+                  <input type="text" id="therm-nest-client-id" placeholder="GCP OAuth2 client ID" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Client Secret</label>
+                  <input type="password" id="therm-nest-client-secret" placeholder="OAuth client secret" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Refresh Token</label>
+                  <input type="password" id="therm-nest-refresh-token" placeholder="OAuth refresh token" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Device Name (resource path)</label>
+                <input type="text" id="therm-nest-device-name" placeholder="enterprises/{project}/devices/{id}" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+              </div>
+              <div style="font-size:11px;color:var(--text-hint);margin-top:8px;">Requires enabling the Smart Device Management API in Google Cloud Console and enrolling the Nest device in the SDM partner program.</div>
+            </div>
+          </div>
+
+          <!-- Honeywell Home / Resideo -->
+          <div id="therm-integ-honeywell" style="display:none;" class="therm-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px 14px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Honeywell Home — Resideo API</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Consumer Key (API Key)</label>
+                  <input type="text" id="therm-honeywell-api-key" placeholder="Resideo developer consumer key" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Access Token</label>
+                  <input type="password" id="therm-honeywell-access-token" placeholder="OAuth2 access token" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Location ID</label>
+                  <input type="text" id="therm-honeywell-location-id" placeholder="Resideo location ID" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Device ID</label>
+                  <input type="text" id="therm-honeywell-device-id" placeholder="Thermostat device ID" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+              </div>
+              <div style="font-size:11px;color:var(--text-hint);margin-top:8px;">Register at developer.resideo.com. Supports T6 Pro, T9, T10 Pro, and other Wi-Fi enabled Honeywell Home thermostats.</div>
+            </div>
+          </div>
+
+          <!-- Sensi -->
+          <div id="therm-integ-sensi" style="display:none;" class="therm-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px 14px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Sensi (Emerson) API</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Username / Email</label>
+                  <input type="text" id="therm-sensi-username" placeholder="Sensi account email" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Password</label>
+                  <input type="password" id="therm-sensi-password" placeholder="Sensi account password" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+                </div>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">ICD (Device Serial Number)</label>
+                <input type="text" id="therm-sensi-icd" placeholder="e.g. AB1C23456789" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+              </div>
+              <div style="font-size:11px;color:var(--text-hint);margin-top:8px;">Uses Sensi's unofficial API over STOMP/WebSocket. Supports ST55, UP500, and smart thermostats. Contact Emerson for commercial API access.</div>
+            </div>
+          </div>
+
+          <!-- Venstar -->
+          <div id="therm-integ-venstar" style="display:none;" class="therm-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px 14px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Venstar — Local REST API</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Thermostat IP Address</label>
+                  <input type="text" id="therm-venstar-ip" placeholder="e.g. 192.168.1.45" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">PIN (if set)</label>
+                  <input type="password" id="therm-venstar-pin" placeholder="Local access PIN" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+                </div>
+              </div>
+              <div style="font-size:11px;color:var(--text-hint);margin-top:8px;">Requires the thermostat to be on the local network. Supports ColorTouch T7900 and compatible models. Thermostat must have Local API enabled in settings.</div>
+            </div>
+          </div>
+
+          <!-- Bryant / Carrier -->
+          <div id="therm-integ-bryant" style="display:none;" class="therm-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px 14px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Bryant / Carrier — Côr &amp; Infinity API</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Username / Email</label>
+                  <input type="text" id="therm-bryant-username" placeholder="Côr / Infinity account email" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Password</label>
+                  <input type="password" id="therm-bryant-password" placeholder="Account password" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+                </div>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">System Serial Number</label>
+                <input type="text" id="therm-bryant-serial" placeholder="e.g. 2315A12345" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+              </div>
+              <div style="font-size:11px;color:var(--text-hint);margin-top:8px;">Uses Carrier/Bryant cloud API. Supports Côr WiFi 7-day, Infinity Touch, and compatible thermostats registered to a cloud account.</div>
+            </div>
+          </div>
+
+          <!-- Pelican -->
+          <div id="therm-integ-pelican" style="display:none;" class="therm-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px 14px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Pelican Wireless — Commercial DR</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Site Hostname</label>
+                  <input type="text" id="therm-pelican-hostname" placeholder="yoursite.officeclimatecontrol.net" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Username</label>
+                  <input type="text" id="therm-pelican-username" placeholder="Pelican site username" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Password</label>
+                  <input type="password" id="therm-pelican-password" placeholder="Pelican site password" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"/>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">DR Level on Event</label>
+                  <select id="therm-pelican-dr-level" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                    <option value="1">1 — Moderate</option>
+                    <option value="2" selected>2 — High</option>
+                    <option value="3">3 — Special / Emergency</option>
+                  </select>
+                </div>
+              </div>
+              <div style="font-size:11px;color:var(--text-hint);margin-top:8px;">Links individual thermostats within an existing Pelican site. DR setback level and duration are controlled per event dispatch.</div>
+            </div>
+          </div>
+
+          <!-- Relay fallback -->
+          <div id="therm-integ-relay" style="display:none;" class="therm-integ-panel">
+            <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px 14px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Relay Fallback — Notecard Circuit Control</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Notecard Device</label>
+                  <select id="therm-relay-device" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                    <option value="">-- Select relay device --</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Relay Number</label>
+                  <select id="therm-relay-num" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                    <option value="1">Relay 1</option><option value="2">Relay 2</option>
+                    <option value="3">Relay 3</option><option value="4">Relay 4</option>
+                  </select>
+                </div>
+              </div>
+              <div style="font-size:11px;color:var(--text-hint);margin-top:6px;">Cuts the thermostat circuit or Y1 cooling call. Use API integration where possible for setpoint-level control.</div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+            <button onclick="toggleThermostatEnrollForm()" style="padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-secondary);">Cancel</button>
+            <button onclick="saveThermostatAsset()" id="therm-save-btn" style="padding:7px 24px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save Thermostat Asset</button>
+          </div>
+        </div>
+
+        <!-- Thermostat asset list -->
+        <div id="therm-asset-list"><div class="sched-empty">No thermostat assets registered. Click + Add Thermostat to begin.</div></div>
+      </div>
+
+      <!-- DR Control Panel -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">⚡ Demand Response — Thermostat Fleet</div>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:12px;">Thermostat DR adjusts cooling setpoints upward (or heating setpoints downward) to reduce HVAC load during demand events. All DR-enrolled thermostats respond simultaneously.</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px;">
+          <button onclick="dispatchThermostatDR('emergency')" style="padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--red);background:var(--red-lt,#fef2f2);color:var(--red);font-size:13px;font-weight:700;cursor:pointer;">🔴 Emergency<br/><span style="font-size:10px;font-weight:400;">Max setback — shed immediately</span></button>
+          <button onclick="dispatchThermostatDR('high')" style="padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--amber);background:var(--amber-bg);color:var(--amber);font-size:13px;font-weight:700;cursor:pointer;">🟠 High Shed<br/><span style="font-size:10px;font-weight:400;">+4°F from setpoint</span></button>
+          <button onclick="dispatchThermostatDR('moderate')" style="padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--blue-dark);background:var(--blue-lt,#eff6ff);color:var(--blue-dark);font-size:13px;font-weight:700;cursor:pointer;">🟡 Moderate<br/><span style="font-size:10px;font-weight:400;">+2°F from setpoint</span></button>
+          <button onclick="restoreThermostatDR()" style="padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--green);background:var(--green-bg);color:var(--green-dark);font-size:13px;font-weight:700;cursor:pointer;">✅ Restore<br/><span style="font-size:10px;font-weight:400;">Return to normal schedule</span></button>
+        </div>
+        <div id="therm-dr-log" style="font-size:11px;color:var(--text-hint);padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);">No DR events dispatched this session.</div>
+      </div>
+
+      <!-- Status & History -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">📋 Thermostat Event Log</div>
+          <button class="queue-refresh" onclick="loadThermostatLog()">Refresh</button>
+        </div>
+        <div id="therm-log-list"><div class="sched-empty">No thermostat events recorded.</div></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
 <!-- ── DRILL DOWN SIDE PANEL ── -->
 <div id="fh-drill-panel" style="position:fixed;top:0;right:-480px;width:480px;height:100vh;background:var(--surface);border-left:0.5px solid var(--border-md);z-index:1000;transition:right 0.3s ease;display:flex;flex-direction:column;box-shadow:-4px 0 20px rgba(0,0,0,0.15);">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:0.5px solid var(--border-md);">
@@ -6431,6 +6795,7 @@ function runTabInit(name) {
   if (name === "ev-chargers")      { initEVDevicesTab(); }
   if (name === "battery")          { initBatteryTab(); }
   if (name === "generators")       { initGeneratorsTab(); }
+  if (name === "thermostats")      { initThermostatsTab(); }
   if (name === "vp")               { initVPTab(); }
 }
 
@@ -22537,6 +22902,13 @@ let battSelectedInteg  = null;
 let battRefreshTimer   = null;
 const BATT_STORAGE_KEY = "lcp_battery_assets_v1";
 
+let thermostatAssets     = [];
+let thermostatLiveData   = {};
+let thermEditingId       = null;
+let thermSelectedInteg   = null;
+let thermRefreshTimer    = null;
+const THERM_STORAGE_KEY  = "lcp_thermostat_assets_v1";
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function initBatteryTab() {
   // Populate relay device dropdown
@@ -23751,6 +24123,493 @@ async function loadGeneratorLog() {
 
 
 
+
+// ── Thermostat Assets ─────────────────────────────────────────────────────────
+
+async function initThermostatsTab() {
+  const relayDev = document.getElementById("therm-relay-device");
+  if (relayDev) {
+    relayDev.innerHTML = '<option value="">-- Select relay device --</option>' +
+      (DEVICES || []).filter(d => d.type !== "ev" && !d.uid.includes("PLACEHOLDER"))
+        .map(d => `<option value="${d.uid}">${d.name}</option>`).join("");
+  }
+  await refreshThermostatAssets();
+  await loadThermostatLog();
+  if (!thermRefreshTimer) {
+    thermRefreshTimer = setInterval(() => refreshThermostatAssets(), 60000);
+  }
+}
+
+// ── Form UI ───────────────────────────────────────────────────────────────────
+function toggleThermostatEnrollForm() {
+  const form = document.getElementById("therm-enroll-form");
+  if (!form) return;
+  const isOpen = form.style.display !== "none";
+  form.style.display = isOpen ? "none" : "block";
+  if (!isOpen) {
+    thermEditingId   = null;
+    thermSelectedInteg = null;
+    const tEl = document.getElementById("therm-form-title");
+    if (tEl) tEl.textContent = "Add Thermostat Asset";
+    const bEl = document.getElementById("therm-save-btn");
+    if (bEl) bEl.textContent = "Save Thermostat Asset";
+    document.querySelectorAll(".therm-integ-opt").forEach(b => {
+      b.style.borderColor = "var(--border-md)";
+      b.style.background  = "var(--surface)";
+    });
+    document.querySelectorAll(".therm-integ-panel").forEach(p => p.style.display = "none");
+    ["therm-asset-id","therm-name","therm-location",
+     "therm-ecobee-api-key","therm-ecobee-refresh-token","therm-ecobee-thermostat-id",
+     "therm-nest-project-id","therm-nest-client-id","therm-nest-client-secret",
+     "therm-nest-refresh-token","therm-nest-device-name",
+     "therm-honeywell-api-key","therm-honeywell-access-token",
+     "therm-honeywell-location-id","therm-honeywell-device-id",
+     "therm-sensi-username","therm-sensi-password","therm-sensi-icd",
+     "therm-venstar-ip","therm-venstar-pin",
+     "therm-bryant-username","therm-bryant-password","therm-bryant-serial",
+     "therm-pelican-hostname","therm-pelican-username","therm-pelican-password"
+    ].forEach(id => { const el = document.getElementById(id); if(el) el.value = ""; });
+    const sb = document.getElementById("therm-setback-temp"); if(sb) sb.value = "78";
+    const nc = document.getElementById("therm-normal-cool");  if(nc) nc.value = "72";
+    const nh = document.getElementById("therm-normal-heat");  if(nh) nh.value = "68";
+  }
+}
+
+function selectThermInteg(integ, el) {
+  thermSelectedInteg = integ;
+  document.querySelectorAll(".therm-integ-opt").forEach(b => {
+    b.style.borderColor = "var(--border-md)";
+    b.style.background  = "var(--surface)";
+  });
+  if (el) { el.style.borderColor = "var(--green)"; el.style.background = "var(--green-bg)"; }
+  document.querySelectorAll(".therm-integ-panel").forEach(p => p.style.display = "none");
+  const panel = document.getElementById(`therm-integ-${integ}`);
+  if (panel) panel.style.display = "block";
+}
+
+// ── Edit ──────────────────────────────────────────────────────────────────────
+function editThermostatAsset(assetId) {
+  const asset = thermostatAssets.find(a => a.asset_id === assetId);
+  if (!asset) return;
+  thermEditingId = assetId;
+
+  const form = document.getElementById("therm-enroll-form");
+  if (form) form.style.display = "block";
+  const title = document.getElementById("therm-form-title");
+  if (title) title.textContent = "Edit Thermostat Asset";
+  const btn = document.getElementById("therm-save-btn");
+  if (btn) btn.textContent = "Update Thermostat Asset";
+
+  document.getElementById("therm-asset-id").value       = asset.asset_id       || "";
+  document.getElementById("therm-name").value            = asset.name           || "";
+  document.getElementById("therm-location").value        = asset.location       || "";
+  document.getElementById("therm-setback-temp").value    = asset.setback_temp   || "78";
+  document.getElementById("therm-normal-cool").value     = asset.normal_cool    || "72";
+  document.getElementById("therm-normal-heat").value     = asset.normal_heat    || "68";
+  document.getElementById("therm-dr").value              = asset.dr_enrolled ? "true" : "false";
+
+  const integ = asset.integ_config?.type || asset.integration;
+  const integEl = document.querySelector(`.therm-integ-opt[data-integ="${integ}"]`);
+  selectThermInteg(integ, integEl);
+
+  const cfg = asset.integ_config || {};
+  if (integ === "ecobee") {
+    document.getElementById("therm-ecobee-api-key").value         = cfg.api_key         || "";
+    document.getElementById("therm-ecobee-refresh-token").value   = cfg.refresh_token   || "";
+    document.getElementById("therm-ecobee-thermostat-id").value   = cfg.thermostat_id   || "";
+  } else if (integ === "nest") {
+    document.getElementById("therm-nest-project-id").value    = cfg.project_id    || "";
+    document.getElementById("therm-nest-client-id").value     = cfg.client_id     || "";
+    document.getElementById("therm-nest-client-secret").value = cfg.client_secret || "";
+    document.getElementById("therm-nest-refresh-token").value  = cfg.refresh_token || "";
+    document.getElementById("therm-nest-device-name").value   = cfg.device_name   || "";
+  } else if (integ === "honeywell") {
+    document.getElementById("therm-honeywell-api-key").value       = cfg.api_key       || "";
+    document.getElementById("therm-honeywell-access-token").value  = cfg.access_token  || "";
+    document.getElementById("therm-honeywell-location-id").value   = cfg.location_id   || "";
+    document.getElementById("therm-honeywell-device-id").value     = cfg.device_id     || "";
+  } else if (integ === "sensi") {
+    document.getElementById("therm-sensi-username").value = cfg.username || "";
+    document.getElementById("therm-sensi-icd").value      = cfg.icd      || "";
+  } else if (integ === "venstar") {
+    document.getElementById("therm-venstar-ip").value  = cfg.ip  || "";
+  } else if (integ === "bryant") {
+    document.getElementById("therm-bryant-username").value = cfg.username || "";
+    document.getElementById("therm-bryant-serial").value   = cfg.serial   || "";
+  } else if (integ === "pelican") {
+    document.getElementById("therm-pelican-hostname").value = cfg.hostname   || "";
+    document.getElementById("therm-pelican-username").value = cfg.username   || "";
+    const dlvl = document.getElementById("therm-pelican-dr-level");
+    if (dlvl) dlvl.value = cfg.dr_level || "2";
+  } else if (integ === "relay") {
+    document.getElementById("therm-relay-device").value = cfg.relay_uid || "";
+    document.getElementById("therm-relay-num").value    = cfg.relay_num || "1";
+  }
+
+  form.scrollIntoView({ behavior:"smooth", block:"start" });
+}
+
+// ── Save ──────────────────────────────────────────────────────────────────────
+async function saveThermostatAsset() {
+  if (!thermSelectedInteg) { setStatus("error", "Select a brand / integration type."); return; }
+  const assetId = document.getElementById("therm-asset-id")?.value?.trim().toUpperCase().replace(/\s+/g,"_");
+  const name    = document.getElementById("therm-name")?.value?.trim();
+  if (!assetId) { setStatus("error", "Asset ID required."); return; }
+  if (!name)    { setStatus("error", "Display name required."); return; }
+
+  const integConfig = { type: thermSelectedInteg };
+
+  if (thermSelectedInteg === "ecobee") {
+    integConfig.api_key       = document.getElementById("therm-ecobee-api-key")?.value?.trim();
+    integConfig.refresh_token = document.getElementById("therm-ecobee-refresh-token")?.value?.trim();
+    integConfig.thermostat_id = document.getElementById("therm-ecobee-thermostat-id")?.value?.trim();
+    if (!integConfig.api_key || !integConfig.thermostat_id) {
+      setStatus("error", "Ecobee API key and thermostat ID required."); return;
+    }
+  } else if (thermSelectedInteg === "nest") {
+    integConfig.project_id    = document.getElementById("therm-nest-project-id")?.value?.trim();
+    integConfig.client_id     = document.getElementById("therm-nest-client-id")?.value?.trim();
+    integConfig.client_secret = document.getElementById("therm-nest-client-secret")?.value?.trim();
+    integConfig.refresh_token = document.getElementById("therm-nest-refresh-token")?.value?.trim();
+    integConfig.device_name   = document.getElementById("therm-nest-device-name")?.value?.trim();
+    if (!integConfig.project_id || !integConfig.device_name) {
+      setStatus("error", "Nest project ID and device name required."); return;
+    }
+  } else if (thermSelectedInteg === "honeywell") {
+    integConfig.api_key       = document.getElementById("therm-honeywell-api-key")?.value?.trim();
+    integConfig.access_token  = document.getElementById("therm-honeywell-access-token")?.value?.trim();
+    integConfig.location_id   = document.getElementById("therm-honeywell-location-id")?.value?.trim();
+    integConfig.device_id     = document.getElementById("therm-honeywell-device-id")?.value?.trim();
+    if (!integConfig.api_key || !integConfig.device_id) {
+      setStatus("error", "Honeywell API key and device ID required."); return;
+    }
+  } else if (thermSelectedInteg === "sensi") {
+    integConfig.username = document.getElementById("therm-sensi-username")?.value?.trim();
+    integConfig.password = document.getElementById("therm-sensi-password")?.value?.trim();
+    integConfig.icd      = document.getElementById("therm-sensi-icd")?.value?.trim();
+    if (!integConfig.username || !integConfig.icd) {
+      setStatus("error", "Sensi username and device ICD required."); return;
+    }
+  } else if (thermSelectedInteg === "venstar") {
+    integConfig.ip  = document.getElementById("therm-venstar-ip")?.value?.trim();
+    integConfig.pin = document.getElementById("therm-venstar-pin")?.value?.trim();
+    if (!integConfig.ip) { setStatus("error", "Venstar IP address required."); return; }
+  } else if (thermSelectedInteg === "bryant") {
+    integConfig.username = document.getElementById("therm-bryant-username")?.value?.trim();
+    integConfig.password = document.getElementById("therm-bryant-password")?.value?.trim();
+    integConfig.serial   = document.getElementById("therm-bryant-serial")?.value?.trim();
+    if (!integConfig.username || !integConfig.serial) {
+      setStatus("error", "Bryant/Carrier username and serial number required."); return;
+    }
+  } else if (thermSelectedInteg === "pelican") {
+    integConfig.hostname = document.getElementById("therm-pelican-hostname")?.value?.trim();
+    integConfig.username = document.getElementById("therm-pelican-username")?.value?.trim();
+    integConfig.password = document.getElementById("therm-pelican-password")?.value?.trim();
+    integConfig.dr_level = parseInt(document.getElementById("therm-pelican-dr-level")?.value || "2");
+    if (!integConfig.hostname || !integConfig.username) {
+      setStatus("error", "Pelican hostname and username required."); return;
+    }
+  } else if (thermSelectedInteg === "relay") {
+    integConfig.relay_uid = document.getElementById("therm-relay-device")?.value;
+    integConfig.relay_num = parseInt(document.getElementById("therm-relay-num")?.value || "1");
+    if (!integConfig.relay_uid) { setStatus("error", "Select a relay device."); return; }
+  }
+
+  const record = {
+    asset_id:     assetId,
+    name,
+    integration:  thermSelectedInteg,
+    location:     document.getElementById("therm-location")?.value?.trim() || null,
+    setback_temp: parseInt(document.getElementById("therm-setback-temp")?.value || "78"),
+    normal_cool:  parseInt(document.getElementById("therm-normal-cool")?.value || "72"),
+    normal_heat:  parseInt(document.getElementById("therm-normal-heat")?.value || "68"),
+    dr_enrolled:  document.getElementById("therm-dr")?.value === "true",
+    integ_config: JSON.stringify(integConfig),
+    status:       "unknown",
+    enabled:      true,
+    enrolled_at:  new Date().toISOString()
+  };
+
+  let saved = false;
+  try {
+    const isEdit = !!thermEditingId;
+    const url    = isEdit
+      ? `${SUPABASE_URL}/rest/v1/thermostat_assets?asset_id=eq.${encodeURIComponent(thermEditingId)}`
+      : `${SUPABASE_URL}/rest/v1/thermostat_assets`;
+    const res = await fetch(url, {
+      method: isEdit ? "PATCH" : "POST",
+      headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+        "Content-Type":"application/json","Prefer":"return=representation"},
+      body: JSON.stringify(record)
+    });
+    if (res.ok) saved = true;
+    else console.warn("Thermostat save Supabase:", res.status, await res.text());
+  } catch(e) { console.warn("Thermostat save:", e.message); }
+
+  if (!saved) {
+    const existing = JSON.parse(localStorage.getItem(THERM_STORAGE_KEY) || "[]");
+    const filtered = existing.filter(a => a.asset_id !== assetId);
+    filtered.push({ ...record, id:Date.now(), integ_config:integConfig });
+    localStorage.setItem(THERM_STORAGE_KEY, JSON.stringify(filtered));
+  }
+
+  await registerAssetAsDevice(assetId, name, "thermostat",
+    document.getElementById("therm-location")?.value?.trim() || null);
+
+  setStatus("ready", `${name} ${thermEditingId ? "updated" : "saved"}.`);
+  thermEditingId = null;
+  const tEl = document.getElementById("therm-form-title");
+  if (tEl) tEl.textContent = "Add Thermostat Asset";
+  const bEl = document.getElementById("therm-save-btn");
+  if (bEl) bEl.textContent = "Save Thermostat Asset";
+  toggleThermostatEnrollForm();
+  await refreshThermostatAssets();
+}
+
+// ── Load & Render ─────────────────────────────────────────────────────────────
+async function refreshThermostatAssets() {
+  let dbRows = [], localRows = [];
+  try {
+    const rows = await supabaseGet("thermostat_assets?enabled=eq.true&order=enrolled_at.asc");
+    if (Array.isArray(rows) && rows.length) dbRows = rows;
+  } catch(e) {}
+  try {
+    const saved = localStorage.getItem(THERM_STORAGE_KEY);
+    if (saved) localRows = JSON.parse(saved);
+  } catch(e) {}
+
+  const dbIds = new Set(dbRows.map(r => r.asset_id));
+  const local = localRows.filter(r => !dbIds.has(r.asset_id));
+  thermostatAssets = [...dbRows, ...local].map(a => ({
+    ...a,
+    integ_config: typeof a.integ_config === "string"
+      ? (() => { try { return JSON.parse(a.integ_config); } catch(e) { return {}; } })()
+      : (a.integ_config || {})
+  }));
+
+  renderThermostatAssets();
+  updateThermostatFleetStats();
+}
+
+function renderThermostatAssets() {
+  const list = document.getElementById("therm-asset-list");
+  if (!list) return;
+  if (!thermostatAssets.length) {
+    list.innerHTML = '<div class="sched-empty">No thermostat assets registered. Click + Add Thermostat to begin.</div>';
+    return;
+  }
+
+  const INTEG_LABELS = {
+    ecobee:"Ecobee", nest:"Google Nest", honeywell:"Honeywell Home",
+    sensi:"Sensi", venstar:"Venstar", bryant:"Bryant/Carrier",
+    pelican:"Pelican", relay:"Relay Fallback"
+  };
+  const INTEG_COLORS = {
+    ecobee:"#0f5fad", nest:"#4a90d9", honeywell:"#c0392b",
+    sensi:"#e67e22", venstar:"#27ae60", bryant:"#1a6ba0",
+    pelican:"#7c3aed", relay:"var(--text-secondary)"
+  };
+
+  list.innerHTML = thermostatAssets.map(a => {
+    const integ     = a.integ_config?.type || a.integration;
+    const live      = thermostatLiveData[a.asset_id] || {};
+    const tempActual= live.temp_f != null ? live.temp_f + "°F" : "—";
+    const tempSp    = live.setpoint != null ? live.setpoint + "°F" : "—";
+    const hvacMode  = live.mode || "unknown";
+    const inSetback = live.in_setback || false;
+
+    return `<div class="therm-card${inSetback ? " ev-shed-active" : ""}">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
+        <div class="feed-status-dot ${live.status === "online" ? "live" : "unavailable"}"></div>
+        <span style="font-size:13px;font-weight:600;color:var(--text-primary);">🌡️ ${a.name}</span>
+        <span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;font-family:monospace;border:0.5px solid ${INTEG_COLORS[integ]||"var(--border-md)"};color:${INTEG_COLORS[integ]||"var(--text-hint)"};background:${INTEG_COLORS[integ]||"var(--border-md)"}18;">${INTEG_LABELS[integ]||integ}</span>
+        <span class="therm-mode-badge ${hvacMode}">${hvacMode.replace(/_/g," ")}</span>
+        ${inSetback ? '<span style="font-size:10px;font-weight:700;color:var(--red);background:var(--red-lt,#fef2f2);padding:2px 8px;border-radius:10px;border:0.5px solid var(--red);">DR SETBACK</span>' : ""}
+        ${a.dr_enrolled && !inSetback ? '<span style="font-size:10px;font-weight:700;color:var(--green-dark);background:var(--green-bg);padding:2px 8px;border-radius:10px;">DR</span>' : ""}
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">
+        <div class="ev-meter-tile">
+          <div class="ev-meter-val" style="color:${live.temp_f==null?"var(--text-hint)":live.temp_f>80?"var(--red)":live.temp_f>75?"var(--amber)":"var(--blue-dark)"};">${tempActual}</div>
+          <div class="ev-meter-lbl">Current Temp</div>
+        </div>
+        <div class="ev-meter-tile">
+          <div class="ev-meter-val" style="color:var(--text-primary);">${tempSp}</div>
+          <div class="ev-meter-lbl">Setpoint</div>
+        </div>
+        <div class="ev-meter-tile">
+          <div class="ev-meter-val" style="color:var(--text-primary);">${a.setback_temp}°F</div>
+          <div class="ev-meter-lbl">DR Setback</div>
+        </div>
+        <div class="ev-meter-tile">
+          <div class="ev-meter-val" style="color:var(--text-hint);">${a.location || "—"}</div>
+          <div class="ev-meter-lbl">Location</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px;flex-wrap:wrap;">
+        <div style="font-size:10px;color:var(--text-hint);flex:1;align-self:center;">Cool: ${a.normal_cool}°F &bull; Heat: ${a.normal_heat}°F</div>
+        ${a.dr_enrolled ? `
+        <button onclick="dispatchThermostatDRSingle('${a.asset_id}','high')" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--amber);background:var(--amber-bg);color:var(--amber);font-size:10px;font-weight:600;cursor:pointer;">Setback</button>
+        <button onclick="restoreThermostatSingle('${a.asset_id}')" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--green);background:var(--green-bg);color:var(--green-dark);font-size:10px;cursor:pointer;">Restore</button>` : ""}
+        <button onclick="editThermostatAsset('${a.asset_id}')" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--blue-dark);background:var(--blue-lt,#eff6ff);color:var(--blue-dark);font-size:10px;cursor:pointer;">Edit</button>
+        <button onclick="removeThermostatAsset('${a.asset_id}')" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">Remove</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function updateThermostatFleetStats() {
+  const total   = thermostatAssets.length;
+  const online  = thermostatAssets.filter(a => thermostatLiveData[a.asset_id]?.status === "online").length;
+  const setback = thermostatAssets.filter(a => thermostatLiveData[a.asset_id]?.in_setback).length;
+  const temps   = thermostatAssets.map(a => thermostatLiveData[a.asset_id]?.temp_f).filter(t => t != null);
+  const avgTemp = temps.length ? Math.round(temps.reduce((s,t)=>s+t,0)/temps.length) : null;
+  const drCount = thermostatAssets.filter(a => a.dr_enrolled).length;
+  const drActive= thermostatAssets.filter(a => thermostatLiveData[a.asset_id]?.in_setback).length;
+
+  const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+  set("therm-stat-total",     total);
+  set("therm-stat-online",    online);
+  set("therm-stat-setback",   setback);
+  set("therm-stat-avg-temp",  avgTemp != null ? avgTemp + "°F" : "—");
+  set("therm-stat-dr",        drCount);
+  set("therm-stat-dr-active", drActive);
+
+  const statusEl = document.getElementById("therm-status-badge");
+  if (statusEl) {
+    statusEl.textContent  = online > 0 ? `${online}/${total} online` : total > 0 ? "All offline" : "No assets";
+    statusEl.style.background = online > 0 ? "var(--green-bg)" : "var(--surface2)";
+    statusEl.style.color      = online > 0 ? "var(--green-dark)" : "var(--text-hint)";
+  }
+}
+
+// ── DR dispatch ───────────────────────────────────────────────────────────────
+async function dispatchThermostatDR(level) {
+  const enrolled = thermostatAssets.filter(a => a.dr_enrolled);
+  if (!enrolled.length) { setStatus("error", "No DR-enrolled thermostats."); return; }
+  const offsetMap = { emergency: 6, high: 4, moderate: 2 };
+  const offset = offsetMap[level] || 4;
+  const logEl  = document.getElementById("therm-dr-log");
+  if (logEl) logEl.textContent = `Dispatching ${level} setback (+${offset}°F) to ${enrolled.length} thermostat(s)…`;
+
+  let success = 0;
+  for (const a of enrolled) {
+    await dispatchThermostatDRSingle(a.asset_id, level, true).catch(() => {});
+    thermostatLiveData[a.asset_id] = { ...thermostatLiveData[a.asset_id], in_setback: true, setpoint: (a.normal_cool || 72) + offset };
+    success++;
+  }
+  if (logEl) logEl.textContent = `${level.toUpperCase()} setback dispatched to ${success}/${enrolled.length} thermostats at ${new Date().toLocaleTimeString()}.`;
+  renderThermostatAssets();
+  updateThermostatFleetStats();
+  await logThermostatEvent("dr_dispatch", { level, offset, count: success });
+}
+
+async function dispatchThermostatDRSingle(assetId, level, silent = false) {
+  const a = thermostatAssets.find(x => x.asset_id === assetId);
+  if (!a) return;
+  const offsetMap = { emergency: 6, high: 4, moderate: 2 };
+  const offset    = offsetMap[level] || 4;
+  const newSp     = (a.normal_cool || 72) + offset;
+  const integ     = a.integ_config?.type || a.integration;
+  const cfg       = a.integ_config || {};
+
+  try {
+    if (integ === "ecobee" || integ === "nest" || integ === "honeywell" ||
+        integ === "sensi"  || integ === "venstar" || integ === "bryant" || integ === "pelican") {
+      // Route through proxy — same pattern as battery/generator DR
+      await fetch(PROXY_URL + `thermostat/${integ}/setback`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ ...cfg, asset_id: assetId, setpoint: newSp, level })
+      });
+    } else if (integ === "relay") {
+      await sendRelayCommand(cfg.relay_uid, cfg.relay_num, false); // open relay = shed load
+    }
+  } catch(e) { if (!silent) console.warn("Thermostat DR dispatch:", e.message); }
+
+  thermostatLiveData[assetId] = { ...thermostatLiveData[assetId], in_setback: true, setpoint: newSp };
+}
+
+async function restoreThermostatDR() {
+  const enrolled = thermostatAssets.filter(a => a.dr_enrolled);
+  const logEl    = document.getElementById("therm-dr-log");
+  if (logEl) logEl.textContent = `Restoring ${enrolled.length} thermostat(s) to normal schedule…`;
+
+  let success = 0;
+  for (const a of enrolled) {
+    await restoreThermostatSingle(a.asset_id, true).catch(() => {});
+    success++;
+  }
+  if (logEl) logEl.textContent = `Restored ${success}/${enrolled.length} thermostats at ${new Date().toLocaleTimeString()}.`;
+  renderThermostatAssets();
+  updateThermostatFleetStats();
+  await logThermostatEvent("dr_restore", { count: success });
+}
+
+async function restoreThermostatSingle(assetId, silent = false) {
+  const a   = thermostatAssets.find(x => x.asset_id === assetId);
+  if (!a) return;
+  const integ = a.integ_config?.type || a.integration;
+  const cfg   = a.integ_config || {};
+
+  try {
+    if (["ecobee","nest","honeywell","sensi","venstar","bryant","pelican"].includes(integ)) {
+      await fetch(PROXY_URL + `thermostat/${integ}/restore`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ ...cfg, asset_id: assetId, cool_setpoint: a.normal_cool, heat_setpoint: a.normal_heat })
+      });
+    } else if (integ === "relay") {
+      await sendRelayCommand(cfg.relay_uid, cfg.relay_num, true); // close relay = restore
+    }
+  } catch(e) { if (!silent) console.warn("Thermostat restore:", e.message); }
+
+  thermostatLiveData[assetId] = { ...thermostatLiveData[assetId], in_setback: false, setpoint: a.normal_cool };
+  if (!silent) { renderThermostatAssets(); updateThermostatFleetStats(); }
+}
+
+async function logThermostatEvent(type, meta) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/thermostat_dr_log`, {
+      method:"POST",
+      headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+        "Content-Type":"application/json","Prefer":"return=minimal"},
+      body: JSON.stringify({ event_type:type, meta:JSON.stringify(meta), created_at:new Date().toISOString() })
+    });
+  } catch(e) {}
+}
+
+async function removeThermostatAsset(assetId) {
+  if (!confirm("Remove this thermostat asset?")) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/thermostat_assets?asset_id=eq.${encodeURIComponent(assetId)}`, {
+      method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${currentSession?.access_token || SUPABASE_KEY}`}
+    });
+  } catch(e) {}
+  const local = JSON.parse(localStorage.getItem(THERM_STORAGE_KEY) || "[]");
+  localStorage.setItem(THERM_STORAGE_KEY, JSON.stringify(local.filter(a => a.asset_id !== assetId)));
+  await unregisterAssetDevice(assetId, "thermostat");
+  await refreshThermostatAssets();
+}
+
+async function loadThermostatLog() {
+  const list = document.getElementById("therm-log-list");
+  if (!list) return;
+  try {
+    const rows = await supabaseGet("thermostat_dr_log?order=created_at.desc&limit=50");
+    if (!Array.isArray(rows) || !rows.length) {
+      list.innerHTML = '<div class="sched-empty">No thermostat events recorded.</div>'; return;
+    }
+    list.innerHTML = `<table><thead><tr><th>Time</th><th>Event</th><th>Detail</th></tr></thead><tbody>
+      ${rows.map(r => `<tr>
+        <td>${new Date(r.created_at).toLocaleString()}</td>
+        <td>${r.event_type||"—"}</td>
+        <td style="font-family:monospace;font-size:10px;">${r.meta||""}</td>
+      </tr>`).join("")}
+    </tbody></table>`;
+  } catch(e) {
+    list.innerHTML = '<div class="sched-empty">Run SQL to create thermostat_dr_log table to see logs.</div>';
+  }
+}
 
 // ── Pelican Wireless ─────────────────────────────────────────────────────────
 
