@@ -10933,7 +10933,7 @@ let fleetThresholds  = {
 // in group assignments and event dispatch exactly like relay devices.
 async function registerAssetAsDevice(assetId, name, type, location) {
   // Use same UID prefix as injectXxxIntoDevices functions
-  const prefix = type === "battery" ? "batt" : type === "generator" ? "gen" : "ev";
+  const prefix = type === "battery" ? "batt" : type === "generator" ? "gen" : type === "thermostat" ? "therm" : "ev";
   const uid = `${prefix}_${assetId}`;
 
   // 1. Write to Supabase devices table
@@ -10960,7 +10960,7 @@ async function registerAssetAsDevice(assetId, name, type, location) {
 }
 
 async function unregisterAssetDevice(assetId, type) {
-  const prefix = type === "battery" ? "batt" : type === "generator" ? "gen" : "ev";
+  const prefix = type === "battery" ? "batt" : type === "generator" ? "gen" : type === "thermostat" ? "therm" : "ev";
   const uid = `${prefix}_${assetId}`;
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/devices?uid=eq.${encodeURIComponent(uid)}`, {
@@ -13853,6 +13853,19 @@ function renderGroups() {
                   <div>
                     <div class="group-device-label">&#9889; ${d.name}</div>
                     <div class="group-device-uid">${d.genAsset?.make||"Generator"} &bull; ${d.genAsset?.rated_kw||""}kW &bull; ${(d.genAsset?.integration||"relay").replace(/_/g," ")}</div>
+                  </div>
+                </label>`).join("");
+            }
+            const thermDevs = DEVICES.filter(d => d.type === "thermostat");
+            if (thermDevs.length) {
+              html += `<div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;padding:8px 0 4px;font-family:monospace;border-top:0.5px solid var(--border);margin-top:6px;">Thermostats</div>`;
+              html += thermDevs.map(d => `
+                <label class="group-device-row ${(groupAssignments[d.uid] || []).includes(gn) ? "group-member" : ""}">
+                  <input type="checkbox" ${(groupAssignments[d.uid] || []).includes(gn) ? "checked" : ""}
+                    onchange="assignDevice('${d.uid}', ${gn}, this.checked)" />
+                  <div>
+                    <div class="group-device-label">🌡️ ${d.name}</div>
+                    <div class="group-device-uid">${d.thermAsset?.integration||"thermostat"} &bull; Cool: ${d.thermAsset?.normal_cool||"?"}°F / Setback: ${d.thermAsset?.setback_temp||"?"}°F</div>
                   </div>
                 </label>`).join("");
             }
@@ -23517,6 +23530,29 @@ function injectBatteriesIntoDevices() {
   if (typeof populateTargetSelector === "function") populateTargetSelector();
 }
 
+// ── Inject thermostats into DEVICES for group + scheduler targeting ────────────
+function injectThermostatsIntoDevices() {
+  DEVICES = DEVICES.filter(d => d.type !== "thermostat");
+  thermostatAssets.forEach(a => {
+    DEVICES.push({
+      id:         `therm_${a.asset_id}`,
+      uid:        `therm_${a.asset_id}`,
+      name:       a.name,
+      type:       "thermostat",
+      thermAsset: a
+    });
+    if (!relayState[`therm_${a.asset_id}`]) {
+      relayState[`therm_${a.asset_id}`] = { 1:false, 2:false, 3:false, 4:false, all:false };
+    }
+  });
+  if (typeof refreshGroupSelectors === "function") refreshGroupSelectors();
+  if (typeof populateTargetSelector === "function") populateTargetSelector();
+  if (typeof renderGroups === "function") {
+    const container = document.getElementById("groups-container");
+    if (container && container.innerHTML.trim()) renderGroups();
+  }
+}
+
 // ── DR Dispatch ───────────────────────────────────────────────────────────────
 async function dispatchBatteryDR(action) {
   const enrolled = batteryAssets.filter(a => a.dr_enrolled);
@@ -24519,6 +24555,7 @@ async function refreshThermostatAssets() {
 
   renderThermostatAssets();
   updateThermostatFleetStats();
+  injectThermostatsIntoDevices();
 }
 
 function renderThermostatAssets() {
