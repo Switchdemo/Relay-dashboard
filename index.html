@@ -4440,8 +4440,8 @@
           <div style="margin-bottom:12px;">
             <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Schedule Mode</label>
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;">
-              <div class="rm-mode-tile" data-mode="cron" onclick="selectRmMode('cron',this)">
-                <div style="font-size:12px;font-weight:700;">📆 Cron Window</div>
+              <div class="rm-mode-tile" data-mode="daytime" onclick="selectRmMode('daytime',this)">
+                <div style="font-size:12px;font-weight:700;">🕐 Day / Time</div>
                 <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Specific days &amp; hours</div>
               </div>
               <div class="rm-mode-tile" data-mode="dr_summer" onclick="selectRmMode('dr_summer',this)">
@@ -4459,8 +4459,8 @@
             </div>
           </div>
 
-          <!-- Cron panel -->
-          <div id="rm-mode-panel-cron" class="rm-mode-panel" style="display:none;background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px;">
+          <!-- Day/Time panel -->
+          <div id="rm-mode-panel-daytime" class="rm-mode-panel" style="display:none;background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px;">
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:10px;">
               <div>
                 <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;">Activate Time (local)</label>
@@ -4484,11 +4484,14 @@
             </div>
             <div>
               <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:6px;">Days of Week</label>
-              <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                ${["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((d,i) => `
-                  <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;">
-                    <input type="checkbox" class="rm-cron-day" value="${i+1}" ${i<5?"checked":""} style="accent-color:var(--blue-dark);" /> ${d}
-                  </label>`).join("")}
+              <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;"><input type="checkbox" class="rm-cron-day" value="1" checked style="accent-color:var(--blue-dark);" /> Mon</label>
+                <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;"><input type="checkbox" class="rm-cron-day" value="2" checked style="accent-color:var(--blue-dark);" /> Tue</label>
+                <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;"><input type="checkbox" class="rm-cron-day" value="3" checked style="accent-color:var(--blue-dark);" /> Wed</label>
+                <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;"><input type="checkbox" class="rm-cron-day" value="4" checked style="accent-color:var(--blue-dark);" /> Thu</label>
+                <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;"><input type="checkbox" class="rm-cron-day" value="5" checked style="accent-color:var(--blue-dark);" /> Fri</label>
+                <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;"><input type="checkbox" class="rm-cron-day" value="6" style="accent-color:var(--blue-dark);" /> Sat</label>
+                <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;"><input type="checkbox" class="rm-cron-day" value="7" style="accent-color:var(--blue-dark);" /> Sun</label>
               </div>
             </div>
           </div>
@@ -4499,13 +4502,19 @@
               <div>
                 <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;">Season Start Month</label>
                 <select id="rm-summer-start-month" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
-                  ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m,i)=>`<option value="${i+1}" ${i===4?"selected":""}>${m}</option>`).join("")}
+                  <option value="1">Jan</option><option value="2">Feb</option><option value="3">Mar</option>
+                  <option value="4">Apr</option><option value="5" selected>May</option><option value="6">Jun</option>
+                  <option value="7">Jul</option><option value="8">Aug</option><option value="9">Sep</option>
+                  <option value="10">Oct</option><option value="11">Nov</option><option value="12">Dec</option>
                 </select>
               </div>
               <div>
                 <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;">Season End Month</label>
                 <select id="rm-summer-end-month" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
-                  ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m,i)=>`<option value="${i+1}" ${i===8?"selected":""}>${m}</option>`).join("")}
+                  <option value="1">Jan</option><option value="2">Feb</option><option value="3">Mar</option>
+                  <option value="4">Apr</option><option value="5">May</option><option value="6">Jun</option>
+                  <option value="7">Jul</option><option value="8">Aug</option><option value="9" selected>Sep</option>
+                  <option value="10">Oct</option><option value="11">Nov</option><option value="12">Dec</option>
                 </select>
               </div>
               <div>
@@ -4527,13 +4536,19 @@
               <div>
                 <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;">Season Start Month</label>
                 <select id="rm-winter-start-month" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
-                  ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m,i)=>`<option value="${i+1}" ${i===10?"selected":""}>${m}</option>`).join("")}
+                  <option value="1">Jan</option><option value="2">Feb</option><option value="3">Mar</option>
+                  <option value="4">Apr</option><option value="5">May</option><option value="6">Jun</option>
+                  <option value="7">Jul</option><option value="8">Aug</option><option value="9">Sep</option>
+                  <option value="10">Oct</option><option value="11" selected>Nov</option><option value="12">Dec</option>
                 </select>
               </div>
               <div>
                 <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;">Season End Month</label>
                 <select id="rm-winter-end-month" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
-                  ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m,i)=>`<option value="${i+1}" ${i===2?"selected":""}>${m}</option>`).join("")}
+                  <option value="1">Jan</option><option value="2">Feb</option><option value="3" selected>Mar</option>
+                  <option value="4">Apr</option><option value="5">May</option><option value="6">Jun</option>
+                  <option value="7">Jul</option><option value="8">Aug</option><option value="9">Sep</option>
+                  <option value="10">Oct</option><option value="11">Nov</option><option value="12">Dec</option>
                 </select>
               </div>
               <div>
@@ -11703,7 +11718,7 @@ async function saveRmSchedule() {
 
 function buildRmSchedConfig() {
   const c = {};
-  if (rmSelectedMode === "cron") {
+  if (rmSelectedMode === "daytime") {
     c.start_time  = document.getElementById("rm-cron-start")?.value || "08:00";
     c.end_time    = document.getElementById("rm-cron-end")?.value   || "18:00";
     c.timezone    = document.getElementById("rm-cron-tz")?.value    || "America/Chicago";
@@ -11736,11 +11751,11 @@ function renderRmSchedules() {
   const list = document.getElementById("rm-schedule-list");
   if (!list) return;
   if (!rmSchedules.length) { list.innerHTML = '<div class="sched-empty">No monitoring schedules configured.</div>'; return; }
-  const MODE_LABELS = { cron:"📆 Cron Window", dr_summer:"☀️ Summer DR", dr_winter:"❄️ Winter DR", onpeak:"⏰ On-Peak" };
+  const MODE_LABELS = { daytime:"🕐 Day / Time", dr_summer:"☀️ Summer DR", dr_winter:"❄️ Winter DR", onpeak:"⏰ On-Peak" };
   list.innerHTML = rmSchedules.map(s => {
     const cfg   = s.config || {};
     let detail  = "";
-    if (s.mode === "cron")      detail = `${cfg.start_time||"?"}–${cfg.end_time||"?"} • Days: ${(cfg.days||[]).join(",")} • ${cfg.timezone||""}`;
+    if (s.mode === "daytime")    detail = `${cfg.start_time||"?"}–${cfg.end_time||"?"} • Days: ${(cfg.days||[]).join(",")} • ${cfg.timezone||""}`;
     if (s.mode === "dr_summer") detail = `Months ${cfg.start_month}–${cfg.end_month} • ${cfg.sub_mode||"always"}`;
     if (s.mode === "dr_winter") detail = `Months ${cfg.start_month}–${cfg.end_month} • ${cfg.sub_mode||"always"}`;
     if (s.mode === "onpeak")    detail = "Follows TOU peak window";
@@ -11782,7 +11797,7 @@ async function tickRmSchedules() {
     const targets = resolveRmTargets(s.target_type, s.target_id);
     let shouldBeActive = false;
 
-    if (s.mode === "cron") {
+    if (s.mode === "daytime") {
       const tz  = cfg.timezone || "America/Chicago";
       const loc = new Date(now.toLocaleString("en-US", { timeZone: tz }));
       const day = loc.getDay() || 7; // 1=Mon..7=Sun
