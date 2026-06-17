@@ -565,6 +565,17 @@
   .batt-integ-opt { padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;transition:all .15s; }
   .batt-integ-opt:hover { border-color:var(--text-primary); }
 
+  /* ── Runtime Monitor ── */
+  .rm-mode-tile { padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;transition:all .15s;background:var(--surface); }
+  .rm-mode-tile:hover { border-color:var(--blue-dark); }
+  .rm-mode-tile.selected { border-color:var(--blue-dark);background:var(--blue-lt,#eff6ff); }
+  .rm-mode-panel { display:none; }
+  .rm-session-row { display:grid;grid-template-columns:130px 130px 70px 80px 80px 1fr;gap:8px;padding:7px 10px;border-radius:var(--radius-sm);border-bottom:0.5px solid var(--border);font-size:11px;align-items:center; }
+  .rm-session-row:hover { background:var(--surface2); }
+  .rm-session-header { font-weight:700;color:var(--text-hint);font-size:10px;text-transform:uppercase;letter-spacing:.04em; }
+  .rm-trigger-card { border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px;background:var(--surface);margin-bottom:8px;display:flex;align-items:center;gap:12px; }
+  .rm-sched-card  { border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px;background:var(--surface);margin-bottom:8px;display:flex;align-items:center;gap:12px; }
+
   /* ── Thermostats ── */
   .therm-card { border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:14px;background:var(--surface);margin-bottom:8px; }
   .therm-integ-opt { padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);cursor:pointer;transition:all .15s;background:var(--surface); }
@@ -738,6 +749,7 @@
   <div class="sub-tabs" id="sub-tabs-monitor" style="display:none;">
     <button class="sub-tab-btn active" id="sub-monitor-triggers" onclick="switchSub('monitor','monitor-triggers',this)">Triggers</button>
     <button class="sub-tab-btn" id="sub-monitor-device" onclick="switchSub('monitor','monitor-device',this)">Device Monitoring</button>
+    <button class="sub-tab-btn" id="sub-monitor-runtime" onclick="switchSub('monitor','monitor-runtime',this)">⏱️ Runtime Monitor</button>
     <button class="sub-tab-btn" id="sub-monitor-energy" onclick="switchSub('monitor','monitor-energy',this)">Energy Monitor</button>
     <button class="sub-tab-btn" id="sub-monitor-feeds" onclick="switchSub('monitor','monitor-feeds',this)">Data Feeds</button>
     <button class="sub-tab-btn" id="sub-monitor-outage" onclick="switchSub('monitor','monitor-outage',this)">&#9889; Outage Tracker</button>
@@ -4307,6 +4319,441 @@
   <div id="monitor-device-proxy"></div>
 </div>
 
+<!-- ── RUNTIME MONITOR TAB ── -->
+<div class="tab-pane" id="tab-monitor-runtime">
+  <div class="scroll-content">
+    <div style="max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <!-- ── SECTION 1: Firmware Command Settings ── -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">⚙️ Runtime Monitor — Firmware Command Settings</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span id="rm-settings-saved-badge" style="display:none;font-size:10px;font-family:monospace;padding:2px 8px;border-radius:10px;background:var(--green-bg);color:var(--green-dark);">Saved</span>
+            <button onclick="saveRuntimeSettings()" style="padding:6px 14px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Save Settings</button>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:14px;line-height:1.6;">
+          Configure the firmware commands that activate and deactivate current-change bubble-up on devices. These commands are sent via <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;">note.add</code> to the device's inbound queue. Enter the exact command strings provided by your firmware team. This settings panel is the single place to update commands for future firmware enhancements.
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Activate Command (bubble-up ON)</label>
+            <input type="text" id="rm-cmd-activate" placeholder="e.g. runtime_monitor_on  (pending firmware spec)"
+              style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;" />
+            <div style="font-size:10px;color:var(--text-hint);margin-top:3px;">Sent when a monitoring session starts. Device begins emitting a bubble-up on every current transition.</div>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Deactivate Command (bubble-up OFF)</label>
+            <input type="text" id="rm-cmd-deactivate" placeholder="e.g. runtime_monitor_off  (pending firmware spec)"
+              style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;" />
+            <div style="font-size:10px;color:var(--text-hint);margin-top:3px;">Sent when a session ends. Device returns to normal reporting interval.</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Current ON Threshold (A)</label>
+            <input type="number" id="rm-current-on-threshold" value="0.5" min="0" step="0.1"
+              style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+            <div style="font-size:10px;color:var(--text-hint);margin-top:3px;">Minimum current (A) to treat as equipment ON. Below this = OFF.</div>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Correlated Feed</label>
+            <select id="rm-feed-key" style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="">-- Select feed to correlate --</option>
+            </select>
+            <div style="font-size:10px;color:var(--text-hint);margin-top:3px;">Feed value (temperature, humidity, LMP, etc.) snapshotted at each session start/end and averaged over duration.</div>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Note File Name</label>
+            <input type="text" id="rm-note-file" value="data.qi"
+              style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;" />
+            <div style="font-size:10px;color:var(--text-hint);margin-top:3px;">Notehub inbound note file for commands (typically data.qi).</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SECTION 2: Manual Dispatch ── -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">📡 Manual Session Control</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:12px;">
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Target Type</label>
+            <select id="rm-manual-target-type" onchange="onRmTargetTypeChange()" style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="" disabled selected>— Select —</option>
+              <option value="device">Individual Device</option>
+              <option value="group">Group</option>
+              <option value="all">All Devices</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Target</label>
+            <select id="rm-manual-target" style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="" disabled selected>— Choose —</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-end;padding-bottom:2px;">
+            <button onclick="sendRuntimeCommand('activate')" style="flex:1;padding:9px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:700;cursor:pointer;">▶ Activate</button>
+            <button onclick="sendRuntimeCommand('deactivate')" style="flex:1;padding:9px;border-radius:var(--radius-sm);border:1.5px solid var(--red);background:none;color:var(--red);font-size:12px;font-weight:700;cursor:pointer;">⏹ Deactivate</button>
+          </div>
+        </div>
+        <div id="rm-manual-log" style="font-size:11px;color:var(--text-hint);font-family:monospace;padding:6px 10px;background:var(--surface2);border-radius:var(--radius-sm);min-height:24px;">Ready.</div>
+      </div>
+
+      <!-- ── SECTION 3: Scheduler ── -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">📅 Runtime Monitor Scheduler</div>
+          <button onclick="toggleRmScheduleForm()" style="padding:6px 14px;border-radius:var(--radius-sm);border:none;background:var(--blue-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">+ Add Schedule</button>
+        </div>
+
+        <div id="rm-schedule-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:16px;margin-bottom:14px;border:0.5px solid var(--border-md);">
+          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;" id="rm-sched-form-title">New Monitoring Schedule</div>
+
+          <!-- Schedule name + target -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Schedule Name</label>
+              <input type="text" id="rm-sched-name" placeholder="e.g. Weekday AC Runtime"
+                style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;" />
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Target Type</label>
+              <select id="rm-sched-target-type" onchange="onRmSchedTargetTypeChange()" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="" disabled selected>— Select —</option>
+                <option value="device">Individual Device</option>
+                <option value="group">Group</option>
+                <option value="all">All Devices</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Target</label>
+              <select id="rm-sched-target" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="" disabled selected>— Choose —</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Schedule mode tiles -->
+          <div style="margin-bottom:12px;">
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Schedule Mode</label>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;">
+              <div class="rm-mode-tile" data-mode="cron" onclick="selectRmMode('cron',this)">
+                <div style="font-size:12px;font-weight:700;">📆 Cron Window</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Specific days &amp; hours</div>
+              </div>
+              <div class="rm-mode-tile" data-mode="dr_summer" onclick="selectRmMode('dr_summer',this)">
+                <div style="font-size:12px;font-weight:700;">☀️ Summer DR Season</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">All times, summer months</div>
+              </div>
+              <div class="rm-mode-tile" data-mode="dr_winter" onclick="selectRmMode('dr_winter',this)">
+                <div style="font-size:12px;font-weight:700;">❄️ Winter DR Season</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">All times, winter months</div>
+              </div>
+              <div class="rm-mode-tile" data-mode="onpeak" onclick="selectRmMode('onpeak',this)">
+                <div style="font-size:12px;font-weight:700;">⏰ On-Peak Only</div>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Follow TOU peak window</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cron panel -->
+          <div id="rm-mode-panel-cron" class="rm-mode-panel" style="display:none;background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:10px;">
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;">Activate Time (local)</label>
+                <input type="time" id="rm-cron-start" value="08:00" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;">Deactivate Time (local)</label>
+                <input type="time" id="rm-cron-end" value="18:00" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;">Timezone</label>
+                <select id="rm-cron-tz" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                  <option value="America/Chicago" selected>Central (CST/CDT)</option>
+                  <option value="America/New_York">Eastern (EST/EDT)</option>
+                  <option value="America/Denver">Mountain (MST/MDT)</option>
+                  <option value="America/Los_Angeles">Pacific (PST/PDT)</option>
+                  <option value="America/Phoenix">Arizona (MST no DST)</option>
+                  <option value="UTC">UTC</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:6px;">Days of Week</label>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                ${["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((d,i) => `
+                  <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;">
+                    <input type="checkbox" class="rm-cron-day" value="${i+1}" ${i<5?"checked":""} style="accent-color:var(--blue-dark);" /> ${d}
+                  </label>`).join("")}
+              </div>
+            </div>
+          </div>
+
+          <!-- Summer DR panel -->
+          <div id="rm-mode-panel-dr_summer" class="rm-mode-panel" style="display:none;background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;">Season Start Month</label>
+                <select id="rm-summer-start-month" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                  ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m,i)=>`<option value="${i+1}" ${i===4?"selected":""}>${m}</option>`).join("")}
+                </select>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;">Season End Month</label>
+                <select id="rm-summer-end-month" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                  ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m,i)=>`<option value="${i+1}" ${i===8?"selected":""}>${m}</option>`).join("")}
+                </select>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;">Mode</label>
+                <select id="rm-summer-mode" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                  <option value="always">Always On (24/7 in season)</option>
+                  <option value="onpeak">On-Peak Hours Only</option>
+                </select>
+              </div>
+              <div style="display:flex;align-items:flex-end;">
+                <div style="font-size:11px;color:var(--text-hint);">Monitor runs continuously or on-peak only during the DR summer season window.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Winter DR panel -->
+          <div id="rm-mode-panel-dr_winter" class="rm-mode-panel" style="display:none;background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;">Season Start Month</label>
+                <select id="rm-winter-start-month" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                  ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m,i)=>`<option value="${i+1}" ${i===10?"selected":""}>${m}</option>`).join("")}
+                </select>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;">Season End Month</label>
+                <select id="rm-winter-end-month" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                  ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m,i)=>`<option value="${i+1}" ${i===2?"selected":""}>${m}</option>`).join("")}
+                </select>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;">Mode</label>
+                <select id="rm-winter-mode" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                  <option value="always">Always On (24/7 in season)</option>
+                  <option value="onpeak">On-Peak Hours Only</option>
+                </select>
+              </div>
+              <div style="display:flex;align-items:flex-end;">
+                <div style="font-size:11px;color:var(--text-hint);">Monitor runs continuously or on-peak only during the DR winter season window.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- On-Peak panel -->
+          <div id="rm-mode-panel-onpeak" class="rm-mode-panel" style="display:none;background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px;">
+            <div style="font-size:11px;color:var(--text-hint);">Monitoring will activate at the start of the TOU on-peak window and deactivate at the end each day. Peak window is defined in Program Settings → TOU configuration.</div>
+          </div>
+
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;">
+            <button onclick="toggleRmScheduleForm()" style="padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-secondary);">Cancel</button>
+            <button onclick="saveRmSchedule()" style="padding:7px 22px;border-radius:var(--radius-sm);border:none;background:var(--blue-dark);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save Schedule</button>
+          </div>
+        </div>
+
+        <div id="rm-schedule-list"><div class="sched-empty">No monitoring schedules configured.</div></div>
+      </div>
+
+      <!-- ── SECTION 4: Feed Trigger Engine ── -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">🌡️ Feed-Based Trigger Engine</div>
+          <button onclick="toggleRmTriggerForm()" style="padding:6px 14px;border-radius:var(--radius-sm);border:none;background:var(--amber);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">+ Add Trigger</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Automatically activate/deactivate runtime monitoring when a data feed crosses a threshold — for example, start monitoring when outdoor temperature rises above 90°F (Summer) or falls below 35°F (Winter).</div>
+
+        <div id="rm-trigger-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:16px;margin-bottom:14px;border:0.5px solid var(--border-md);">
+          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;" id="rm-trigger-form-title">New Feed Trigger</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Trigger Name</label>
+              <input type="text" id="rm-trig-name" placeholder="e.g. Summer AC Trigger"
+                style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;" />
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Target Type</label>
+              <select id="rm-trig-target-type" onchange="onRmTrigTargetTypeChange()" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="" disabled selected>— Select —</option>
+                <option value="device">Individual Device</option>
+                <option value="group">Group</option>
+                <option value="all">All Devices</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Target</label>
+              <select id="rm-trig-target" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="" disabled selected>— Choose —</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px;">
+            <div style="font-size:10px;font-weight:600;color:var(--green-dark);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">▶ ACTIVATE when feed condition is met</div>
+            <div style="display:grid;grid-template-columns:1fr auto 1fr 1fr;gap:10px;align-items:end;">
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Feed</label>
+                <select id="rm-trig-activate-feed" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                  <option value="">-- Select --</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Op</label>
+                <select id="rm-trig-activate-op" style="padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                  <option value="gt">&gt;</option>
+                  <option value="gte">≥</option>
+                  <option value="lt">&lt;</option>
+                  <option value="lte">≤</option>
+                  <option value="eq">=</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Threshold</label>
+                <input type="number" id="rm-trig-activate-threshold" placeholder="e.g. 90"
+                  style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+              </div>
+              <div style="font-size:10px;color:var(--text-hint);padding-bottom:4px;" id="rm-trig-activate-unit"></div>
+            </div>
+          </div>
+
+          <div style="background:var(--surface);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px;">
+            <div style="font-size:10px;font-weight:600;color:var(--red);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">⏹ DEACTIVATE when feed condition is met</div>
+            <div style="display:grid;grid-template-columns:1fr auto 1fr 1fr;gap:10px;align-items:end;">
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Feed</label>
+                <select id="rm-trig-deactivate-feed" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                  <option value="">-- Same as activate --</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Op</label>
+                <select id="rm-trig-deactivate-op" style="padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                  <option value="lt">&lt;</option>
+                  <option value="lte">≤</option>
+                  <option value="gt">&gt;</option>
+                  <option value="gte">≥</option>
+                  <option value="eq">=</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Threshold</label>
+                <input type="number" id="rm-trig-deactivate-threshold" placeholder="e.g. 85"
+                  style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+              </div>
+              <div style="font-size:10px;color:var(--text-hint);padding-bottom:4px;">Leave blank to deactivate manually or via schedule.</div>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Season Guard (optional)</label>
+              <select id="rm-trig-season" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="">No season restriction</option>
+                <option value="summer">Summer only (May–Sep)</option>
+                <option value="winter">Winter only (Nov–Mar)</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Min rest between triggers (min)</label>
+              <input type="number" id="rm-trig-min-rest" value="30" min="0" step="5"
+                style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;" />
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button onclick="toggleRmTriggerForm()" style="padding:7px 16px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-secondary);">Cancel</button>
+            <button onclick="saveRmTrigger()" style="padding:7px 22px;border-radius:var(--radius-sm);border:none;background:var(--amber);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save Trigger</button>
+          </div>
+        </div>
+
+        <div id="rm-trigger-list"><div class="sched-empty">No feed triggers configured.</div></div>
+      </div>
+
+      <!-- ── SECTION 5: Runtime Analytics ── -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">📊 Runtime Analytics</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select id="rm-analytics-device" style="padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="">All Devices</option>
+            </select>
+            <select id="rm-analytics-range" style="padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="1">Today</option>
+              <option value="7" selected>Last 7 days</option>
+              <option value="30">Last 30 days</option>
+              <option value="90">Last 90 days</option>
+            </select>
+            <button class="queue-refresh" onclick="loadRuntimeAnalytics()">Refresh</button>
+            <button onclick="exportRuntimeCSV()" style="padding:5px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:11px;cursor:pointer;">⬇ CSV</button>
+          </div>
+        </div>
+
+        <!-- KPI tiles -->
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:14px;">
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="rm-kpi-sessions">—</div><div class="ev-meter-lbl">Sessions</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="rm-kpi-total-hrs" style="color:var(--blue-dark);">—</div><div class="ev-meter-lbl">Total Hrs</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="rm-kpi-avg-dur" style="color:var(--green-dark);">—</div><div class="ev-meter-lbl">Avg Duration</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="rm-kpi-longest" style="color:var(--amber);">—</div><div class="ev-meter-lbl">Longest Run</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="rm-kpi-feed-avg" style="color:var(--red);">—</div><div class="ev-meter-lbl">Avg Feed Val</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="rm-kpi-devices">—</div><div class="ev-meter-lbl">Devices</div></div>
+        </div>
+
+        <!-- Chart -->
+        <div style="position:relative;height:260px;width:100%;margin-bottom:14px;">
+          <canvas id="rm-runtime-chart"></canvas>
+        </div>
+
+        <!-- Session table -->
+        <div id="rm-sessions-table"><div class="sched-empty">Load analytics to see session history.</div></div>
+      </div>
+
+      <!-- ── SECTION 6: Backfill ── -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">🔄 Historical Backfill</div>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:12px;line-height:1.6;">
+          Scan historical <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;">device_readings</code> records and reconstruct equipment runtime sessions from current transitions (0→non-zero = start, non-zero→0 = stop). Results are written to <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;">equipment_runtime_sessions</code>. Existing sessions for the selected device/range are replaced to avoid duplicates.
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Device</label>
+            <select id="rm-backfill-device" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="">All Devices</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">From Date</label>
+            <input type="date" id="rm-backfill-from" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">To Date</label>
+            <input type="date" id="rm-backfill-to" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
+          </div>
+          <div style="display:flex;align-items:flex-end;">
+            <button onclick="runRuntimeBackfill()" style="width:100%;padding:9px;border-radius:var(--radius-sm);border:none;background:var(--blue-dark);color:#fff;font-size:12px;font-weight:700;cursor:pointer;">▶ Run Backfill</button>
+          </div>
+        </div>
+        <div id="rm-backfill-progress" style="display:none;margin-bottom:8px;">
+          <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;" id="rm-backfill-status">Scanning readings...</div>
+          <div style="height:6px;border-radius:3px;background:var(--surface2);overflow:hidden;">
+            <div id="rm-backfill-bar" style="height:100%;border-radius:3px;background:var(--blue-dark);width:0%;transition:width .3s;"></div>
+          </div>
+        </div>
+        <div id="rm-backfill-result" style="font-size:11px;color:var(--text-hint);font-family:monospace;padding:6px 10px;background:var(--surface2);border-radius:var(--radius-sm);min-height:24px;">Ready to scan.</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- ── MONITOR ENERGY TAB (alias) ── -->
 <div class="tab-pane" id="tab-monitor-energy">
   <div id="monitor-energy-proxy"></div>
@@ -6857,6 +7304,7 @@ function runTabInit(name) {
   if (name === "monitor-device")   { injectDeviceMonitoring(); }
   if (name === "monitor-energy")   { injectEnergyMonitor(); }
   if (name === "monitor-feeds")    { initFeedCharts(); }
+  if (name === "monitor-runtime")  { initRuntimeMonitor(); }
   if (name === "monitor-outage")   { initOutageTracker(); }
   if (name === "monitor-scada")    { initSCADA(); }
   if (name === "monitor-ev")       { initEVCharging(); }
@@ -10971,7 +11419,858 @@ async function unregisterAssetDevice(assetId, type) {
   const idx = DEVICES.findIndex(d => d.uid === uid);
   if (idx >= 0) DEVICES.splice(idx, 1);
 }
-// ── End Register Asset ────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// RUNTIME MONITOR — Equipment Runtime Tracking
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function initRuntimeMonitor() {
+  logRmDdlHint();
+  await loadRmSettings();
+  populateRmFeedSelects();
+  populateRmDeviceSelects();
+  await loadRmSchedules();
+  await loadRmTriggers();
+  await loadRuntimeAnalytics();
+  // Set backfill date defaults: last 30 days
+  const today = new Date();
+  const prior = new Date(today); prior.setDate(prior.getDate() - 30);
+  const fmt = d => d.toISOString().split("T")[0];
+  const fromEl = document.getElementById("rm-backfill-from");
+  const toEl   = document.getElementById("rm-backfill-to");
+  if (fromEl && !fromEl.value) fromEl.value = fmt(prior);
+  if (toEl   && !toEl.value)   toEl.value   = fmt(today);
+  // Start pollers
+  if (!rmSchedulePoller) rmSchedulePoller = setInterval(tickRmSchedules, 60000);
+  if (!rmTriggerPoller)  rmTriggerPoller  = setInterval(tickRmTriggers,  60000);
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+async function loadRmSettings() {
+  try {
+    const rows = await supabaseGet("program_settings?setting_key=like.rm_%25");
+    if (Array.isArray(rows)) {
+      rows.forEach(r => { rmSettings[r.setting_key.replace("rm_","")] = r.setting_value; });
+    }
+  } catch(e) {}
+  const set = (id, key) => { const el = document.getElementById(id); if (el && rmSettings[key]) el.value = rmSettings[key]; };
+  set("rm-cmd-activate",          "cmd_activate");
+  set("rm-cmd-deactivate",        "cmd_deactivate");
+  set("rm-current-on-threshold",  "current_on_threshold");
+  set("rm-feed-key",              "feed_key");
+  set("rm-note-file",             "note_file");
+}
+
+async function saveRuntimeSettings() {
+  const pairs = [
+    ["rm_cmd_activate",         document.getElementById("rm-cmd-activate")?.value?.trim()         || ""],
+    ["rm_cmd_deactivate",       document.getElementById("rm-cmd-deactivate")?.value?.trim()       || ""],
+    ["rm_current_on_threshold", document.getElementById("rm-current-on-threshold")?.value?.trim() || "0.5"],
+    ["rm_feed_key",             document.getElementById("rm-feed-key")?.value                     || ""],
+    ["rm_note_file",            document.getElementById("rm-note-file")?.value?.trim()            || "data.qi"],
+  ];
+  for (const [key, val] of pairs) {
+    rmSettings[key.replace("rm_","")] = val;
+    try {
+      await supabaseUpsert("program_settings",
+        { setting_key: key, setting_value: val, updated_at: new Date().toISOString() },
+        "setting_key");
+    } catch(e) { console.warn("rm settings save:", e.message); }
+  }
+  const badge = document.getElementById("rm-settings-saved-badge");
+  if (badge) { badge.style.display = "inline-block"; setTimeout(() => badge.style.display = "none", 2500); }
+  setStatus("ready", "Runtime monitor settings saved.");
+  populateRmFeedSelects();
+}
+
+// ── Feed select population ─────────────────────────────────────────────────────
+function populateRmFeedSelects() {
+  const feedKeys = Object.keys(FEED_DEFS || {});
+  const activeFeedKeys = (monitorFeeds || []).map(f => f.feed_key);
+  const allKeys = [...new Set([...activeFeedKeys, ...feedKeys])];
+  const opts = allKeys.map(k => {
+    const def = (FEED_DEFS || {})[k] || { label: k, unit: "" };
+    return `<option value="${k}">${def.icon||""} ${def.label} (${def.unit})</option>`;
+  }).join("");
+
+  ["rm-feed-key","rm-trig-activate-feed","rm-trig-deactivate-feed"].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const prev = el.value;
+    const placeholder = id === "rm-trig-deactivate-feed"
+      ? '<option value="">-- Same as activate --</option>'
+      : '<option value="">-- Select feed --</option>';
+    el.innerHTML = placeholder + opts;
+    if (prev) el.value = prev;
+  });
+
+  // Update unit hint on activate feed change
+  const af = document.getElementById("rm-trig-activate-feed");
+  if (af) af.onchange = () => {
+    const def = (FEED_DEFS || {})[af.value] || {};
+    const u = document.getElementById("rm-trig-activate-unit");
+    if (u) u.textContent = def.unit || "";
+  };
+
+  // Load saved feed key into settings dropdown
+  const rmFeedEl = document.getElementById("rm-feed-key");
+  if (rmFeedEl && rmSettings.feed_key) rmFeedEl.value = rmSettings.feed_key;
+}
+
+// ── Device select population ───────────────────────────────────────────────────
+function populateRmDeviceSelects() {
+  const relayDevs = (DEVICES || []).filter(d => !d.type || d.type === "relay");
+  const deviceOpts = relayDevs.map(d => `<option value="${d.uid}">${d.name}</option>`).join("");
+  const groupOpts  = Object.entries(groupNames || {})
+    .sort(([a],[b]) => parseInt(a)-parseInt(b))
+    .map(([n,name]) => `<option value="group_${n}">Group ${n}: ${name}</option>`).join("");
+
+  ["rm-manual-target-type","rm-sched-target-type","rm-trig-target-type"].forEach(ttId => {
+    // onchange handlers are inline; just ensure they exist
+  });
+
+  // Analytics device selector
+  const aDevEl = document.getElementById("rm-analytics-device");
+  if (aDevEl) {
+    aDevEl.innerHTML = `<option value="">All Devices</option>` + deviceOpts;
+  }
+  // Backfill device selector
+  const bDevEl = document.getElementById("rm-backfill-device");
+  if (bDevEl) {
+    bDevEl.innerHTML = `<option value="">All Devices</option>` + deviceOpts;
+  }
+}
+
+function buildRmTargetOptions(targetType) {
+  const relayDevs = (DEVICES || []).filter(d => !d.type || d.type === "relay");
+  if (targetType === "device") {
+    return relayDevs.map(d => `<option value="${d.uid}">${d.name}</option>`).join("");
+  } else if (targetType === "group") {
+    return Object.entries(groupNames || {})
+      .sort(([a],[b]) => parseInt(a)-parseInt(b))
+      .map(([n,name]) => `<option value="group_${n}">Group ${n}: ${name}</option>`).join("");
+  }
+  return "";
+}
+
+function onRmTargetTypeChange() {
+  const tt  = document.getElementById("rm-manual-target-type")?.value;
+  const sel = document.getElementById("rm-manual-target");
+  if (!sel) return;
+  if (tt === "all") { sel.innerHTML = `<option value="all">All Devices</option>`; sel.value = "all"; return; }
+  sel.innerHTML = `<option value="" disabled selected>— Choose —</option>` + buildRmTargetOptions(tt);
+}
+function onRmSchedTargetTypeChange() {
+  const tt  = document.getElementById("rm-sched-target-type")?.value;
+  const sel = document.getElementById("rm-sched-target");
+  if (!sel) return;
+  if (tt === "all") { sel.innerHTML = `<option value="all">All Devices</option>`; sel.value = "all"; return; }
+  sel.innerHTML = `<option value="" disabled selected>— Choose —</option>` + buildRmTargetOptions(tt);
+}
+function onRmTrigTargetTypeChange() {
+  const tt  = document.getElementById("rm-trig-target-type")?.value;
+  const sel = document.getElementById("rm-trig-target");
+  if (!sel) return;
+  if (tt === "all") { sel.innerHTML = `<option value="all">All Devices</option>`; sel.value = "all"; return; }
+  sel.innerHTML = `<option value="" disabled selected>— Choose —</option>` + buildRmTargetOptions(tt);
+}
+
+// ── Mode tile selector ─────────────────────────────────────────────────────────
+function selectRmMode(mode, el) {
+  rmSelectedMode = mode;
+  document.querySelectorAll(".rm-mode-tile").forEach(t => t.classList.remove("selected"));
+  if (el) el.classList.add("selected");
+  document.querySelectorAll(".rm-mode-panel").forEach(p => p.style.display = "none");
+  const panel = document.getElementById(`rm-mode-panel-${mode}`);
+  if (panel) panel.style.display = "block";
+}
+
+// ── Form toggles ──────────────────────────────────────────────────────────────
+function toggleRmScheduleForm() {
+  const form = document.getElementById("rm-schedule-form");
+  if (!form) return;
+  const open = form.style.display !== "none";
+  form.style.display = open ? "none" : "block";
+  if (!open) {
+    rmEditingSchedId = null;
+    rmSelectedMode   = null;
+    document.querySelectorAll(".rm-mode-tile").forEach(t => t.classList.remove("selected"));
+    document.querySelectorAll(".rm-mode-panel").forEach(p => p.style.display = "none");
+    document.getElementById("rm-sched-form-title").textContent = "New Monitoring Schedule";
+    ["rm-sched-name"].forEach(id => { const el = document.getElementById(id); if(el) el.value = ""; });
+    document.getElementById("rm-sched-target-type").value = "";
+    document.getElementById("rm-sched-target").innerHTML = `<option value="" disabled selected>— Choose —</option>`;
+  }
+}
+function toggleRmTriggerForm() {
+  const form = document.getElementById("rm-trigger-form");
+  if (!form) return;
+  const open = form.style.display !== "none";
+  form.style.display = open ? "none" : "block";
+  if (!open) {
+    rmEditingTrigId = null;
+    document.getElementById("rm-trigger-form-title").textContent = "New Feed Trigger";
+    ["rm-trig-name","rm-trig-activate-threshold","rm-trig-deactivate-threshold"].forEach(id => {
+      const el = document.getElementById(id); if(el) el.value = "";
+    });
+    document.getElementById("rm-trig-target-type").value = "";
+    document.getElementById("rm-trig-target").innerHTML = `<option value="" disabled selected>— Choose —</option>`;
+    populateRmFeedSelects();
+  }
+}
+
+// ── Manual command dispatch ───────────────────────────────────────────────────
+async function sendRuntimeCommand(action) {
+  const cmdKey  = action === "activate" ? "cmd_activate" : "cmd_deactivate";
+  const cmd     = rmSettings[cmdKey];
+  const logEl   = document.getElementById("rm-manual-log");
+
+  if (!cmd) {
+    if (logEl) logEl.textContent = `⚠ No ${action} command configured. Save command strings in Firmware Command Settings first.`;
+    return;
+  }
+
+  const targetType = document.getElementById("rm-manual-target-type")?.value;
+  const targetVal  = document.getElementById("rm-manual-target")?.value;
+  if (!targetType) { if (logEl) logEl.textContent = "⚠ Select a target type first."; return; }
+
+  const noteFile = rmSettings.note_file || "data.qi";
+  const targets  = resolveRmTargets(targetType, targetVal);
+  if (!targets.length) { if (logEl) logEl.textContent = "⚠ No devices matched target."; return; }
+
+  if (logEl) logEl.textContent = `Sending ${action} to ${targets.length} device(s)…`;
+  let sent = 0;
+  for (const uid of targets) {
+    try {
+      await fetch(PROXY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Device-UID": uid },
+        body: JSON.stringify({ body: { cmd }, req: "note.add", file: noteFile, sync: true })
+      });
+      sent++;
+    } catch(e) { console.warn("rm dispatch", uid, e.message); }
+  }
+  if (logEl) logEl.textContent = `✓ ${action.toUpperCase()} sent to ${sent}/${targets.length} devices at ${new Date().toLocaleTimeString()}.`;
+
+  // Log to runtime_monitor_log
+  try {
+    await supabasePost("runtime_monitor_log", {
+      action, target_type: targetType, target_id: targetVal,
+      device_count: sent, trigger_source: "manual",
+      fired_at: new Date().toISOString()
+    });
+  } catch(e) {}
+}
+
+function resolveRmTargets(targetType, targetVal) {
+  if (targetType === "all") return (DEVICES || []).filter(d => !d.type || d.type === "relay").map(d => d.uid);
+  if (targetType === "group") {
+    const gNum = parseInt((targetVal || "").replace("group_",""));
+    return (DEVICES || []).filter(d => (groupAssignments[d.uid]||[]).includes(gNum)).map(d => d.uid);
+  }
+  if (targetType === "device" && targetVal) return [targetVal];
+  return [];
+}
+
+// ── Schedules ─────────────────────────────────────────────────────────────────
+async function saveRmSchedule() {
+  if (!rmSelectedMode) { setStatus("error", "Select a schedule mode."); return; }
+  const name = document.getElementById("rm-sched-name")?.value?.trim();
+  if (!name)  { setStatus("error", "Schedule name required."); return; }
+  const targetType = document.getElementById("rm-sched-target-type")?.value;
+  const targetVal  = document.getElementById("rm-sched-target")?.value;
+  if (!targetType) { setStatus("error", "Select a target type."); return; }
+
+  const config = buildRmSchedConfig();
+  const record = {
+    name, mode: rmSelectedMode, target_type: targetType, target_id: targetVal || "all",
+    config: JSON.stringify(config), enabled: true,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+  };
+
+  try {
+    if (rmEditingSchedId) {
+      await supabasePatch(`runtime_monitor_schedules?id=eq.${rmEditingSchedId}`, { ...record, updated_at: new Date().toISOString() });
+    } else {
+      await supabasePost("runtime_monitor_schedules", record);
+    }
+  } catch(e) { console.warn("rm schedule save:", e.message); }
+
+  toggleRmScheduleForm();
+  await loadRmSchedules();
+  setStatus("ready", `Schedule "${name}" saved.`);
+}
+
+function buildRmSchedConfig() {
+  const c = {};
+  if (rmSelectedMode === "cron") {
+    c.start_time  = document.getElementById("rm-cron-start")?.value || "08:00";
+    c.end_time    = document.getElementById("rm-cron-end")?.value   || "18:00";
+    c.timezone    = document.getElementById("rm-cron-tz")?.value    || "America/Chicago";
+    c.days        = Array.from(document.querySelectorAll(".rm-cron-day:checked")).map(cb => parseInt(cb.value));
+  } else if (rmSelectedMode === "dr_summer") {
+    c.start_month = parseInt(document.getElementById("rm-summer-start-month")?.value || "5");
+    c.end_month   = parseInt(document.getElementById("rm-summer-end-month")?.value   || "9");
+    c.sub_mode    = document.getElementById("rm-summer-mode")?.value || "always";
+  } else if (rmSelectedMode === "dr_winter") {
+    c.start_month = parseInt(document.getElementById("rm-winter-start-month")?.value || "11");
+    c.end_month   = parseInt(document.getElementById("rm-winter-end-month")?.value   || "3");
+    c.sub_mode    = document.getElementById("rm-winter-mode")?.value || "always";
+  } else if (rmSelectedMode === "onpeak") {
+    c.follow_tou = true;
+  }
+  return c;
+}
+
+async function loadRmSchedules() {
+  try {
+    const rows = await supabaseGet("runtime_monitor_schedules?order=created_at.asc");
+    rmSchedules = Array.isArray(rows) ? rows.map(r => ({
+      ...r, config: typeof r.config === "string" ? (() => { try { return JSON.parse(r.config); } catch(e) { return {}; } })() : (r.config||{})
+    })) : [];
+  } catch(e) { rmSchedules = []; }
+  renderRmSchedules();
+}
+
+function renderRmSchedules() {
+  const list = document.getElementById("rm-schedule-list");
+  if (!list) return;
+  if (!rmSchedules.length) { list.innerHTML = '<div class="sched-empty">No monitoring schedules configured.</div>'; return; }
+  const MODE_LABELS = { cron:"📆 Cron Window", dr_summer:"☀️ Summer DR", dr_winter:"❄️ Winter DR", onpeak:"⏰ On-Peak" };
+  list.innerHTML = rmSchedules.map(s => {
+    const cfg   = s.config || {};
+    let detail  = "";
+    if (s.mode === "cron")      detail = `${cfg.start_time||"?"}–${cfg.end_time||"?"} • Days: ${(cfg.days||[]).join(",")} • ${cfg.timezone||""}`;
+    if (s.mode === "dr_summer") detail = `Months ${cfg.start_month}–${cfg.end_month} • ${cfg.sub_mode||"always"}`;
+    if (s.mode === "dr_winter") detail = `Months ${cfg.start_month}–${cfg.end_month} • ${cfg.sub_mode||"always"}`;
+    if (s.mode === "onpeak")    detail = "Follows TOU peak window";
+    const targetLabel = s.target_type === "all" ? "All Devices"
+      : s.target_type === "group" ? `Group ${(s.target_id||"").replace("group_","")}: ${groupNames[parseInt((s.target_id||"").replace("group_",""))]||""}`
+      : unitName(s.target_id) || s.target_id;
+    return `<div class="rm-sched-card">
+      <div style="flex:1;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <span style="font-size:12px;font-weight:700;color:var(--text-primary);">${s.name}</span>
+          <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:var(--blue-lt,#eff6ff);color:var(--blue-dark);font-family:monospace;">${MODE_LABELS[s.mode]||s.mode}</span>
+          <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:${s.enabled?"var(--green-bg)":"var(--surface2)"};color:${s.enabled?"var(--green-dark)":"var(--text-hint)"};">${s.enabled?"Enabled":"Disabled"}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);">${targetLabel} • ${detail}</div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button onclick="toggleRmScheduleEnabled(${s.id},${!s.enabled})" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:10px;cursor:pointer;">${s.enabled?"Pause":"Enable"}</button>
+        <button onclick="deleteRmSchedule(${s.id})" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">Remove</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function toggleRmScheduleEnabled(id, enabled) {
+  try { await supabasePatch(`runtime_monitor_schedules?id=eq.${id}`, { enabled, updated_at: new Date().toISOString() }); } catch(e) {}
+  await loadRmSchedules();
+}
+async function deleteRmSchedule(id) {
+  if (!confirm("Remove this monitoring schedule?")) return;
+  try { await supabaseDelete("runtime_monitor_schedules", `id=eq.${id}`); } catch(e) {}
+  await loadRmSchedules();
+}
+
+// ── Schedule tick (called every 60s) ──────────────────────────────────────────
+async function tickRmSchedules() {
+  const now = new Date();
+  for (const s of rmSchedules.filter(s => s.enabled)) {
+    const cfg     = s.config || {};
+    const targets = resolveRmTargets(s.target_type, s.target_id);
+    let shouldBeActive = false;
+
+    if (s.mode === "cron") {
+      const tz  = cfg.timezone || "America/Chicago";
+      const loc = new Date(now.toLocaleString("en-US", { timeZone: tz }));
+      const day = loc.getDay() || 7; // 1=Mon..7=Sun
+      const hm  = `${String(loc.getHours()).padStart(2,"0")}:${String(loc.getMinutes()).padStart(2,"0")}`;
+      shouldBeActive = (cfg.days||[]).includes(day) && hm >= (cfg.start_time||"00:00") && hm < (cfg.end_time||"23:59");
+    } else if (s.mode === "dr_summer" || s.mode === "dr_winter") {
+      const mo = now.getMonth() + 1;
+      const sm = cfg.start_month, em = cfg.end_month;
+      const inSeason = sm <= em ? (mo >= sm && mo <= em) : (mo >= sm || mo <= em);
+      if (inSeason) {
+        shouldBeActive = cfg.sub_mode !== "onpeak" || (feedValues["tou_peak"]?.value === 1);
+      }
+    } else if (s.mode === "onpeak") {
+      shouldBeActive = feedValues["tou_peak"]?.value === 1;
+    }
+
+    const stateKey = `rm_sched_active_${s.id}`;
+    const wasActive = !!window[stateKey];
+    if (shouldBeActive && !wasActive) {
+      window[stateKey] = true;
+      for (const uid of targets) await sendRmCmd("activate", uid, "schedule");
+    } else if (!shouldBeActive && wasActive) {
+      window[stateKey] = false;
+      for (const uid of targets) await sendRmCmd("deactivate", uid, "schedule");
+    }
+  }
+}
+
+// ── Triggers ──────────────────────────────────────────────────────────────────
+async function saveRmTrigger() {
+  const name       = document.getElementById("rm-trig-name")?.value?.trim();
+  const targetType = document.getElementById("rm-trig-target-type")?.value;
+  const targetVal  = document.getElementById("rm-trig-target")?.value;
+  const actFeed    = document.getElementById("rm-trig-activate-feed")?.value;
+  const actOp      = document.getElementById("rm-trig-activate-op")?.value;
+  const actThr     = parseFloat(document.getElementById("rm-trig-activate-threshold")?.value);
+  const deactFeed  = document.getElementById("rm-trig-deactivate-feed")?.value || actFeed;
+  const deactOp    = document.getElementById("rm-trig-deactivate-op")?.value;
+  const deactThr   = parseFloat(document.getElementById("rm-trig-deactivate-threshold")?.value);
+  const season     = document.getElementById("rm-trig-season")?.value || "";
+  const minRest    = parseInt(document.getElementById("rm-trig-min-rest")?.value || "30");
+
+  if (!name)    { setStatus("error", "Trigger name required."); return; }
+  if (!actFeed) { setStatus("error", "Select an activate feed."); return; }
+  if (isNaN(actThr)) { setStatus("error", "Enter an activate threshold."); return; }
+
+  const record = {
+    name, target_type: targetType || "all", target_id: targetVal || "all",
+    activate_feed: actFeed, activate_op: actOp, activate_threshold: actThr,
+    deactivate_feed: deactFeed, deactivate_op: deactOp,
+    deactivate_threshold: isNaN(deactThr) ? null : deactThr,
+    season_guard: season || null, min_rest_minutes: minRest,
+    enabled: true, last_fired_at: null,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+  };
+
+  try {
+    if (rmEditingTrigId) {
+      await supabasePatch(`runtime_monitor_triggers?id=eq.${rmEditingTrigId}`, { ...record });
+    } else {
+      await supabasePost("runtime_monitor_triggers", record);
+    }
+  } catch(e) { console.warn("rm trigger save:", e.message); }
+
+  toggleRmTriggerForm();
+  await loadRmTriggers();
+  setStatus("ready", `Trigger "${name}" saved.`);
+}
+
+async function loadRmTriggers() {
+  try {
+    const rows = await supabaseGet("runtime_monitor_triggers?order=created_at.asc");
+    rmTriggers = Array.isArray(rows) ? rows : [];
+  } catch(e) { rmTriggers = []; }
+  renderRmTriggers();
+}
+
+function renderRmTriggers() {
+  const list = document.getElementById("rm-trigger-list");
+  if (!list) return;
+  if (!rmTriggers.length) { list.innerHTML = '<div class="sched-empty">No feed triggers configured.</div>'; return; }
+  const OP = { gt:">", gte:"≥", lt:"<", lte:"≤", eq:"=" };
+  list.innerHTML = rmTriggers.map(t => {
+    const aFeedDef = (FEED_DEFS||{})[t.activate_feed] || { label: t.activate_feed, unit:"" };
+    const dFeedDef = (FEED_DEFS||{})[t.deactivate_feed] || { label: t.deactivate_feed || "same", unit:"" };
+    const actLabel  = `${aFeedDef.label} ${OP[t.activate_op]||t.activate_op} ${t.activate_threshold} ${aFeedDef.unit}`;
+    const deactLabel = t.deactivate_threshold != null
+      ? `${dFeedDef.label} ${OP[t.deactivate_op]||t.deactivate_op} ${t.deactivate_threshold} ${dFeedDef.unit}`
+      : "Manual/schedule deactivation";
+    const targetLabel = t.target_type === "all" ? "All Devices"
+      : t.target_type === "group" ? `Group: ${groupNames[parseInt((t.target_id||"").replace("group_",""))]||t.target_id}`
+      : unitName(t.target_id) || t.target_id;
+    return `<div class="rm-trigger-card">
+      <div style="flex:1;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <span style="font-size:12px;font-weight:700;">${t.name}</span>
+          <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:${t.enabled?"var(--amber-bg)":"var(--surface2)"};color:${t.enabled?"var(--amber)":"var(--text-hint)"};">${t.enabled?"Active":"Disabled"}</span>
+          ${t.season_guard ? `<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:var(--surface2);color:var(--text-hint);">${t.season_guard} only</span>` : ""}
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:2px;">▶ <span style="color:var(--green-dark);font-weight:600;">ON:</span> ${actLabel}</div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:2px;">⏹ <span style="color:var(--red);font-weight:600;">OFF:</span> ${deactLabel}</div>
+        <div style="font-size:10px;color:var(--text-hint);">Target: ${targetLabel} • Rest: ${t.min_rest_minutes}min${t.last_fired_at ? ` • Last fired: ${new Date(t.last_fired_at).toLocaleString()}` : ""}</div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button onclick="toggleRmTriggerEnabled(${t.id},${!t.enabled})" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:10px;cursor:pointer;">${t.enabled?"Pause":"Enable"}</button>
+        <button onclick="deleteRmTrigger(${t.id})" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">Remove</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function toggleRmTriggerEnabled(id, enabled) {
+  try { await supabasePatch(`runtime_monitor_triggers?id=eq.${id}`, { enabled, updated_at: new Date().toISOString() }); } catch(e) {}
+  await loadRmTriggers();
+}
+async function deleteRmTrigger(id) {
+  if (!confirm("Remove this feed trigger?")) return;
+  try { await supabaseDelete("runtime_monitor_triggers", `id=eq.${id}`); } catch(e) {}
+  await loadRmTriggers();
+}
+
+// ── Trigger tick (called every 60s) ───────────────────────────────────────────
+async function tickRmTriggers() {
+  const now = new Date();
+  const mo  = now.getMonth() + 1;
+  for (const t of rmTriggers.filter(t => t.enabled)) {
+    // Season guard
+    if (t.season_guard === "summer" && !(mo >= 5 && mo <= 9)) continue;
+    if (t.season_guard === "winter" && !((mo >= 11) || (mo <= 3))) continue;
+    // Min rest guard
+    if (t.last_fired_at) {
+      const msSince = now - new Date(t.last_fired_at);
+      if (msSince < (t.min_rest_minutes || 30) * 60000) continue;
+    }
+    const stateKey = `rm_trig_active_${t.id}`;
+    const isActive = !!window[stateKey];
+    const targets  = resolveRmTargets(t.target_type, t.target_id);
+    if (!isActive && checkCondition(t.activate_feed, t.activate_op, t.activate_threshold)) {
+      window[stateKey] = true;
+      for (const uid of targets) await sendRmCmd("activate", uid, "feed_trigger");
+      try {
+        await supabasePatch(`runtime_monitor_triggers?id=eq.${t.id}`, { last_fired_at: now.toISOString() });
+        t.last_fired_at = now.toISOString();
+      } catch(e) {}
+    } else if (isActive && t.deactivate_threshold != null &&
+        checkCondition(t.deactivate_feed || t.activate_feed, t.deactivate_op, t.deactivate_threshold)) {
+      window[stateKey] = false;
+      for (const uid of targets) await sendRmCmd("deactivate", uid, "feed_trigger");
+    }
+  }
+}
+
+// ── Core command send ─────────────────────────────────────────────────────────
+async function sendRmCmd(action, uid, source) {
+  const cmdKey = action === "activate" ? "cmd_activate" : "cmd_deactivate";
+  const cmd    = rmSettings[cmdKey];
+  if (!cmd) return;
+  const noteFile = rmSettings.note_file || "data.qi";
+  try {
+    await fetch(PROXY_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Device-UID": uid },
+      body: JSON.stringify({ body: { cmd }, req: "note.add", file: noteFile, sync: true })
+    });
+    await supabasePost("runtime_monitor_log", {
+      action, device_uid: uid, target_type: "device", target_id: uid,
+      device_count: 1, trigger_source: source, fired_at: new Date().toISOString()
+    });
+  } catch(e) { console.warn("sendRmCmd", uid, e.message); }
+}
+
+// ── Analytics ─────────────────────────────────────────────────────────────────
+async function loadRuntimeAnalytics() {
+  const deviceFilter = document.getElementById("rm-analytics-device")?.value;
+  const rangeDays    = parseInt(document.getElementById("rm-analytics-range")?.value || "7");
+  const since        = new Date(Date.now() - rangeDays * 864e5).toISOString();
+
+  let query = `equipment_runtime_sessions?session_start=gte.${since}&order=session_start.desc&limit=500`;
+  if (deviceFilter) query += `&device_uid=eq.${encodeURIComponent(deviceFilter)}`;
+
+  let sessions = [];
+  try {
+    const rows = await supabaseGet(query);
+    sessions = Array.isArray(rows) ? rows : [];
+  } catch(e) {}
+
+  // KPIs
+  const complete  = sessions.filter(s => s.session_end && s.duration_minutes != null);
+  const totalHrs  = complete.reduce((s,r) => s + (r.duration_minutes||0), 0) / 60;
+  const avgDur    = complete.length ? (complete.reduce((s,r) => s + (r.duration_minutes||0), 0) / complete.length) : 0;
+  const longest   = complete.length ? Math.max(...complete.map(r => r.duration_minutes||0)) : 0;
+  const feedVals  = complete.map(r => r.feed_value_avg).filter(v => v != null);
+  const avgFeed   = feedVals.length ? feedVals.reduce((a,b) => a+b, 0) / feedVals.length : null;
+  const devices   = new Set(sessions.map(s => s.device_uid)).size;
+  const feedLabel = (FEED_DEFS||{})[rmSettings.feed_key]?.label || "Feed";
+  const feedUnit  = (FEED_DEFS||{})[rmSettings.feed_key]?.unit  || "";
+
+  const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+  set("rm-kpi-sessions",   sessions.length);
+  set("rm-kpi-total-hrs",  totalHrs.toFixed(1) + " h");
+  set("rm-kpi-avg-dur",    avgDur < 60 ? Math.round(avgDur) + " min" : (avgDur/60).toFixed(1) + " h");
+  set("rm-kpi-longest",    longest < 60 ? longest + " min" : (longest/60).toFixed(1) + " h");
+  set("rm-kpi-feed-avg",   avgFeed != null ? avgFeed.toFixed(1) + " " + feedUnit : "—");
+  set("rm-kpi-devices",    devices);
+
+  // Chart — daily runtime hours per device
+  await renderRmChart(sessions, rangeDays);
+
+  // Table
+  renderRmSessionTable(sessions, feedLabel, feedUnit);
+}
+
+async function renderRmChart(sessions, rangeDays) {
+  const canvas = document.getElementById("rm-runtime-chart");
+  if (!canvas) return;
+  if (typeof Chart === "undefined") return;
+
+  // Build daily totals
+  const days = [];
+  for (let i = rangeDays - 1; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 864e5);
+    days.push(d.toISOString().split("T")[0]);
+  }
+  const daily = {};
+  days.forEach(d => daily[d] = 0);
+  sessions.forEach(s => {
+    const day = (s.session_start||"").split("T")[0];
+    if (daily[day] !== undefined) daily[day] += (s.duration_minutes||0) / 60;
+  });
+
+  if (rmRuntimeChart) { try { rmRuntimeChart.destroy(); } catch(e) {} rmRuntimeChart = null; }
+  rmRuntimeChart = new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels: days.map(d => { const dt = new Date(d+"T12:00:00"); return dt.toLocaleDateString([],{month:"short",day:"numeric"}); }),
+      datasets: [{
+        label: "Runtime (hrs)",
+        data: days.map(d => parseFloat(daily[d].toFixed(2))),
+        backgroundColor: "rgba(29,158,117,0.6)",
+        borderColor: "#1D9E75",
+        borderWidth: 1,
+        borderRadius: 3,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.parsed.y.toFixed(2)} hrs` } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+        y: { beginAtZero: true, ticks: { font: { size: 10 }, callback: v => v + " h" } }
+      }
+    }
+  });
+}
+
+function renderRmSessionTable(sessions, feedLabel, feedUnit) {
+  const el = document.getElementById("rm-sessions-table");
+  if (!el) return;
+  if (!sessions.length) { el.innerHTML = '<div class="sched-empty">No sessions found for the selected range.</div>'; return; }
+  const fmtDur = m => m == null ? "—" : m < 60 ? `${Math.round(m)} min` : `${(m/60).toFixed(1)} h`;
+  const fmtTs  = ts => ts ? new Date(ts).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) : "—";
+  const fmtFv  = v => v != null ? parseFloat(v).toFixed(1) + " " + feedUnit : "—";
+  el.innerHTML = `
+    <div class="rm-session-row rm-session-header">
+      <span>Device</span><span>Start</span><span>Duration</span><span>${feedLabel} Start</span><span>${feedLabel} Avg</span><span>Source</span>
+    </div>
+    ${sessions.slice(0, 200).map(s => `
+    <div class="rm-session-row">
+      <span style="font-family:monospace;font-size:10px;">${unitName(s.device_uid)||s.device_uid||"—"}</span>
+      <span>${fmtTs(s.session_start)}</span>
+      <span style="font-weight:600;color:${(s.duration_minutes||0)>120?"var(--red)":(s.duration_minutes||0)>60?"var(--amber)":"var(--text-primary)"};">${fmtDur(s.duration_minutes)}</span>
+      <span>${fmtFv(s.feed_value_start)}</span>
+      <span>${fmtFv(s.feed_value_avg)}</span>
+      <span style="font-size:10px;color:var(--text-hint);">${s.trigger_source||"—"}</span>
+    </div>`).join("")}`;
+}
+
+function exportRuntimeCSV() {
+  const rows = document.querySelectorAll(".rm-session-row:not(.rm-session-header)");
+  if (!rows.length) return;
+  const lines = ["Device,Start,End,Duration (min),Feed Start,Feed End,Feed Avg,Source"];
+  // Re-fetch last loaded sessions from DOM labels (simple export)
+  rows.forEach(r => {
+    const cells = r.querySelectorAll("span");
+    lines.push([...cells].map(c => `"${c.textContent.trim()}"`).join(","));
+  });
+  const blob = new Blob([lines.join("\n")], { type:"text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = `runtime_sessions_${new Date().toISOString().split("T")[0]}.csv`; a.click();
+}
+
+// ── Backfill ──────────────────────────────────────────────────────────────────
+async function runRuntimeBackfill() {
+  const deviceFilter = document.getElementById("rm-backfill-device")?.value;
+  const fromDate     = document.getElementById("rm-backfill-from")?.value;
+  const toDate       = document.getElementById("rm-backfill-to")?.value;
+  const progEl       = document.getElementById("rm-backfill-progress");
+  const barEl        = document.getElementById("rm-backfill-bar");
+  const statusEl     = document.getElementById("rm-backfill-status");
+  const resultEl     = document.getElementById("rm-backfill-result");
+
+  if (!fromDate || !toDate) { if(resultEl) resultEl.textContent = "⚠ Select a date range."; return; }
+  if (progEl) progEl.style.display = "block";
+  if (resultEl) resultEl.textContent = "Starting backfill…";
+
+  const onThreshold = parseFloat(rmSettings.current_on_threshold || "0.5");
+  const feedKey     = rmSettings.feed_key || null;
+  const fromISO     = fromDate + "T00:00:00.000Z";
+  const toISO       = toDate   + "T23:59:59.999Z";
+
+  // Determine which devices to process
+  let deviceUids = [];
+  if (deviceFilter) {
+    deviceUids = [deviceFilter];
+  } else {
+    deviceUids = (DEVICES || []).filter(d => !d.type || d.type === "relay").map(d => d.uid);
+  }
+
+  if (!deviceUids.length) { if(resultEl) resultEl.textContent = "⚠ No devices found."; return; }
+
+  let totalSessions = 0;
+  let totalProcessed = 0;
+
+  for (let di = 0; di < deviceUids.length; di++) {
+    const uid = deviceUids[di];
+    const pct = Math.round((di / deviceUids.length) * 100);
+    if (barEl)    barEl.style.width = pct + "%";
+    if (statusEl) statusEl.textContent = `Scanning ${unitName(uid)||uid} (${di+1}/${deviceUids.length})…`;
+
+    // Fetch readings in chronological order for this device in range
+    let readings = [];
+    try {
+      const rows = await supabaseGet(
+        `device_readings?device_uid=eq.${encodeURIComponent(uid)}&recorded_at=gte.${fromISO}&recorded_at=lte.${toISO}&order=recorded_at.asc&limit=5000&select=recorded_at,current`
+      );
+      readings = Array.isArray(rows) ? rows : [];
+    } catch(e) { continue; }
+
+    if (!readings.length) continue;
+
+    // Delete existing sessions for this device in this range to avoid dupes
+    try {
+      await supabaseDelete("equipment_runtime_sessions",
+        `device_uid=eq.${encodeURIComponent(uid)}&session_start=gte.${fromISO}&session_start=lte.${toISO}&trigger_source=eq.backfill`);
+    } catch(e) {}
+
+    // Detect transitions
+    const sessions = [];
+    let sessionStart = null;
+    let prevOn = false;
+
+    for (const row of readings) {
+      const amps  = row.current != null ? row.current / 10 : 0;
+      const isOn  = amps >= onThreshold;
+      if (isOn && !prevOn) {
+        sessionStart = row.recorded_at;
+      } else if (!isOn && prevOn && sessionStart) {
+        sessions.push({ start: sessionStart, end: row.recorded_at });
+        sessionStart = null;
+      }
+      prevOn = isOn;
+    }
+    // If still ON at end of range, close with null end
+    if (prevOn && sessionStart) sessions.push({ start: sessionStart, end: null });
+
+    // Fetch feed correlation if configured
+    let feedReadings = [];
+    if (feedKey) {
+      try {
+        const fr = await supabaseGet(
+          `monitor_feed_readings?feed_key=eq.${encodeURIComponent(feedKey)}&recorded_at=gte.${fromISO}&recorded_at=lte.${toISO}&order=recorded_at.asc&limit=2000&select=recorded_at,value`
+        );
+        feedReadings = Array.isArray(fr) ? fr : [];
+      } catch(e) {}
+    }
+
+    const getFeedAtTime = (ts) => {
+      if (!feedReadings.length || !ts) return null;
+      const target = new Date(ts).getTime();
+      let closest = feedReadings[0];
+      for (const fr of feedReadings) {
+        if (Math.abs(new Date(fr.recorded_at).getTime() - target) < Math.abs(new Date(closest.recorded_at).getTime() - target)) closest = fr;
+      }
+      return closest?.value != null ? parseFloat(closest.value) : null;
+    };
+
+    const getAvgFeed = (startTs, endTs) => {
+      if (!feedReadings.length || !startTs || !endTs) return null;
+      const s = new Date(startTs).getTime(), e = new Date(endTs).getTime();
+      const inRange = feedReadings.filter(fr => { const t = new Date(fr.recorded_at).getTime(); return t >= s && t <= e; });
+      if (!inRange.length) return null;
+      return inRange.reduce((a,fr) => a + parseFloat(fr.value||0), 0) / inRange.length;
+    };
+
+    // Write sessions to Supabase
+    for (const sess of sessions) {
+      const dur = sess.end ? Math.round((new Date(sess.end) - new Date(sess.start)) / 60000) : null;
+      try {
+        await supabasePost("equipment_runtime_sessions", {
+          device_uid:        uid,
+          session_start:     sess.start,
+          session_end:       sess.end,
+          duration_minutes:  dur,
+          feed_key:          feedKey,
+          feed_value_start:  getFeedAtTime(sess.start),
+          feed_value_end:    sess.end ? getFeedAtTime(sess.end) : null,
+          feed_value_avg:    sess.end ? getAvgFeed(sess.start, sess.end) : null,
+          group_number:      null,
+          trigger_source:    "backfill",
+          created_at:        new Date().toISOString()
+        });
+        totalSessions++;
+      } catch(e) { console.warn("backfill insert:", e.message); }
+    }
+    totalProcessed++;
+  }
+
+  if (barEl)    barEl.style.width = "100%";
+  if (statusEl) statusEl.textContent = "Complete.";
+  if (resultEl) resultEl.textContent = `✓ Backfill complete — ${totalSessions} sessions reconstructed across ${totalProcessed} device(s). Refresh Analytics to view.`;
+  setTimeout(() => { if(progEl) progEl.style.display = "none"; }, 3000);
+}
+
+// ── SQL DDL hint for new tables (logged to console on init) ───────────────────
+function logRmDdlHint() {
+  console.info(`[Runtime Monitor] Required Supabase tables:
+
+CREATE TABLE IF NOT EXISTS equipment_runtime_sessions (
+  id                bigserial PRIMARY KEY,
+  device_uid        text NOT NULL,
+  session_start     timestamptz NOT NULL,
+  session_end       timestamptz,
+  duration_minutes  numeric,
+  feed_key          text,
+  feed_value_start  numeric,
+  feed_value_end    numeric,
+  feed_value_avg    numeric,
+  group_number      integer,
+  trigger_source    text,
+  notes             text,
+  created_at        timestamptz DEFAULT now()
+);
+CREATE INDEX ON equipment_runtime_sessions (device_uid, session_start);
+
+CREATE TABLE IF NOT EXISTS runtime_monitor_schedules (
+  id          bigserial PRIMARY KEY,
+  name        text NOT NULL,
+  mode        text NOT NULL,
+  target_type text,
+  target_id   text,
+  config      jsonb,
+  enabled     boolean DEFAULT true,
+  created_at  timestamptz DEFAULT now(),
+  updated_at  timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS runtime_monitor_triggers (
+  id                    bigserial PRIMARY KEY,
+  name                  text NOT NULL,
+  target_type           text,
+  target_id             text,
+  activate_feed         text NOT NULL,
+  activate_op           text NOT NULL,
+  activate_threshold    numeric NOT NULL,
+  deactivate_feed       text,
+  deactivate_op         text,
+  deactivate_threshold  numeric,
+  season_guard          text,
+  min_rest_minutes      integer DEFAULT 30,
+  enabled               boolean DEFAULT true,
+  last_fired_at         timestamptz,
+  created_at            timestamptz DEFAULT now(),
+  updated_at            timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS runtime_monitor_log (
+  id             bigserial PRIMARY KEY,
+  action         text,
+  device_uid     text,
+  target_type    text,
+  target_id      text,
+  device_count   integer,
+  trigger_source text,
+  fired_at       timestamptz DEFAULT now()
+);`);
+}
+
+// ── End Runtime Monitor ───────────────────────────────────────────────────────
 
 // ── Master Assets Inventory ───────────────────────────────────────────────────
 async function renderMasterAssets() {
@@ -23051,6 +24350,18 @@ let thermEditingId       = null;
 let thermSelectedInteg   = null;
 let thermRefreshTimer    = null;
 const THERM_STORAGE_KEY  = "lcp_thermostat_assets_v1";
+
+// ── Runtime Monitor globals ───────────────────────────────────────────────────
+let rmSettings           = {};   // loaded from program_settings
+let rmSchedules          = [];   // loaded from runtime_monitor_schedules
+let rmTriggers           = [];   // loaded from runtime_monitor_triggers
+let rmSchedulePoller     = null;
+let rmTriggerPoller      = null;
+let rmEditingSchedId     = null;
+let rmEditingTrigId      = null;
+let rmSelectedMode       = null;
+let rmRuntimeChart       = null;
+const RM_SETTINGS_PREFIX = "rm_";
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function initBatteryTab() {
