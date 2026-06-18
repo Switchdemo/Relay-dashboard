@@ -11660,10 +11660,9 @@ function toggleRmTriggerForm() {
 
 // ── Manual command dispatch ───────────────────────────────────────────────────
 async function sendRuntimeCommand(action) {
-  const logEl   = document.getElementById("rm-manual-log");
-  const enable  = action === "activate";
-  const lcHex   = buildCurrentChangeFlagHex(enable);
-  const noteFile = rmSettings.note_file || "data.qi";
+  const logEl    = document.getElementById("rm-manual-log");
+  const enable   = action === "activate";
+  const lcHex    = buildCurrentChangeFlagHex(enable);
 
   const targetType = document.getElementById("rm-manual-target-type")?.value;
   const targetVal  = document.getElementById("rm-manual-target")?.value;
@@ -11672,19 +11671,15 @@ async function sendRuntimeCommand(action) {
   const targets = resolveRmTargets(targetType, targetVal);
   if (!targets.length) { if (logEl) logEl.textContent = "⚠ No devices matched target."; return; }
 
-  if (logEl) logEl.textContent = `Sending ${action} (${lcHex.match(/.{1,2}/g).join(" ")}) to ${targets.length} device(s)…`;
+  if (logEl) logEl.textContent = `Sending ${action} [${lcHex.match(/.{1,2}/g).join(" ")}] to ${targets.length} device(s)…`;
+
   let sent = 0;
   for (const uid of targets) {
-    try {
-      await fetch(PROXY_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Device-UID": uid },
-        body: JSON.stringify({ body: { LC: lcHex }, req: "note.add", file: noteFile, sync: true })
-      });
-      sent++;
-    } catch(e) { console.warn("rm dispatch", uid, e.message); }
+    await sendLCToDevice(uid, lcHex);  // uses existing proxy + DEVICES guard
+    sent++;
   }
-  if (logEl) logEl.textContent = `✓ ${action.toUpperCase()} (0x${enable?"80":"00"} flag) sent to ${sent}/${targets.length} devices at ${new Date().toLocaleTimeString()}.`;
+
+  if (logEl) logEl.textContent = `✓ ${action.toUpperCase()} (bit 8 ${enable ? "SET 0x80" : "CLEARED 0x00"}) sent to ${sent}/${targets.length} device(s) at ${new Date().toLocaleTimeString()}.`;
 
   try {
     await supabasePost("runtime_monitor_log", {
@@ -11970,21 +11965,16 @@ async function tickRmTriggers() {
 
 // ── Core command send ─────────────────────────────────────────────────────────
 async function sendRmCmd(action, uid, source) {
-  const enable   = action === "activate";
-  const lcHex    = buildCurrentChangeFlagHex(enable);
-  const noteFile = rmSettings.note_file || "data.qi";
+  const enable = action === "activate";
+  const lcHex  = buildCurrentChangeFlagHex(enable);
+  await sendLCToDevice(uid, lcHex);  // uses existing proxy + DEVICES guard
   try {
-    await fetch(PROXY_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Device-UID": uid },
-      body: JSON.stringify({ body: { LC: lcHex }, req: "note.add", file: noteFile, sync: true })
-    });
     await supabasePost("runtime_monitor_log", {
       action, device_uid: uid, target_type: "device", target_id: uid,
       lc_hex: lcHex, device_count: 1, trigger_source: source,
       fired_at: new Date().toISOString()
     });
-  } catch(e) { console.warn("sendRmCmd", uid, e.message); }
+  } catch(e) { console.warn("sendRmCmd log:", e.message); }
 }
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
