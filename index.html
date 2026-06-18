@@ -4334,28 +4334,29 @@
           </div>
         </div>
         <div style="font-size:11px;color:var(--text-hint);margin-bottom:14px;line-height:1.6;">
-          Configure the firmware commands that activate and deactivate current-change bubble-up on devices. These commands are sent via <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;">note.add</code> to the device's inbound queue. Enter the exact command strings provided by your firmware team. This settings panel is the single place to update commands for future firmware enhancements.
+          Controls the <strong>current-change bubble-up flag</strong> on measurement-equipped devices. Setting bit 8 (<code style="background:var(--surface2);padding:1px 5px;border-radius:3px;">0x80</code>) in the device's bubble flag register activates a forced bubble-up every time the current measurement transitions between zero and non-zero — giving the platform equipment start and stop timestamps. Clearing it returns the device to normal scheduled reporting. Commands are built as Assignment Command <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;">0x1A</code> / Designator <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;">0x03</code> and delivered via <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;">note.add</code> to <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;">data.qi</code>.
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
-          <div>
-            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Activate Command (bubble-up ON)</label>
-            <input type="text" id="rm-cmd-activate" placeholder="e.g. runtime_monitor_on  (pending firmware spec)"
-              style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;" />
-            <div style="font-size:10px;color:var(--text-hint);margin-top:3px;">Sent when a monitoring session starts. Device begins emitting a bubble-up on every current transition.</div>
+
+        <!-- Live hex preview -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+          <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px;border:0.5px solid var(--green);">
+            <div style="font-size:10px;font-weight:700;color:var(--green-dark);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">▶ ACTIVATE — Set bit 8 (0x80)</div>
+            <div style="font-family:monospace;font-size:13px;font-weight:700;color:var(--text-primary);letter-spacing:.08em;" id="rm-hex-preview-on">—</div>
+            <div style="font-size:10px;color:var(--text-hint);margin-top:4px;">Bubble flag register → <code>0x80</code> — current-change reporting ON</div>
           </div>
-          <div>
-            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Deactivate Command (bubble-up OFF)</label>
-            <input type="text" id="rm-cmd-deactivate" placeholder="e.g. runtime_monitor_off  (pending firmware spec)"
-              style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;" />
-            <div style="font-size:10px;color:var(--text-hint);margin-top:3px;">Sent when a session ends. Device returns to normal reporting interval.</div>
+          <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px;border:0.5px solid var(--red);">
+            <div style="font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">⏹ DEACTIVATE — Clear bit 8 (0x00)</div>
+            <div style="font-family:monospace;font-size:13px;font-weight:700;color:var(--text-primary);letter-spacing:.08em;" id="rm-hex-preview-off">—</div>
+            <div style="font-size:10px;color:var(--text-hint);margin-top:4px;">Bubble flag register → <code>0x00</code> — current-change reporting OFF</div>
           </div>
         </div>
+
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
           <div>
             <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Current ON Threshold (A)</label>
             <input type="number" id="rm-current-on-threshold" value="0.5" min="0" step="0.1"
               style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" />
-            <div style="font-size:10px;color:var(--text-hint);margin-top:3px;">Minimum current (A) to treat as equipment ON. Below this = OFF.</div>
+            <div style="font-size:10px;color:var(--text-hint);margin-top:3px;">Minimum current (A) to treat as equipment ON. Values below this = OFF. Raw payload value is divided by 10.</div>
           </div>
           <div>
             <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Correlated Feed</label>
@@ -4365,7 +4366,7 @@
             <div style="font-size:10px;color:var(--text-hint);margin-top:3px;">Feed value (temperature, humidity, LMP, etc.) snapshotted at each session start/end and averaged over duration.</div>
           </div>
           <div>
-            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Note File Name</label>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Note File</label>
             <input type="text" id="rm-note-file" value="data.qi"
               style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;" />
             <div style="font-size:10px;color:var(--text-hint);margin-top:3px;">Notehub inbound note file for commands (typically data.qi).</div>
@@ -8619,6 +8620,22 @@ function buildAssignBubbleUpHex(minutes) {
   return bytes.map(b => b.toString(16).toUpperCase().padStart(2,"0")).join("");
 }
 
+function buildCurrentChangeFlagHex(enable) {
+  // Assignment Command 0x1A, Designator 0x03 = Assign Bubble Flag register
+  // Bit 8 (0x80) = current-change bubble-up reporting
+  //   enable=true  → set   bit 8: flag byte = 0x80
+  //   enable=false → clear bit 8: flag byte = 0x00
+  // Reading the existing flag value first is not possible over this channel,
+  // so we write only the current-change bit — all other flag bits remain at 0.
+  // If the firmware team identifies additional flag bits in future, update here.
+  const flagByte = enable ? 0x80 : 0x00;
+  const bytes = [0xA1, 0x05, 0x00, 0x1A, 0x03, flagByte];
+  let checksum = 0;
+  bytes.forEach(b => { checksum ^= b; });
+  bytes.push(checksum);
+  return bytes.map(b => b.toString(16).toUpperCase().padStart(2,"0")).join("");
+}
+
 function buildCancelEventHex(relayAction, eventId) {
   // Strategy 61 = restore, with SPECIFIC event ID (not 0xFF which cancels all)
   const bytes = [0xA1];
@@ -11441,7 +11458,7 @@ async function unregisterAssetDevice(assetId, type) {
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function initRuntimeMonitor() {
   logRmDdlHint();
-  await loadRmSettings();
+  await loadRmSettings();    // also calls populateRmHexPreviews()
   populateRmFeedSelects();
   populateRmDeviceSelects();
   await loadRmSchedules();
@@ -11468,18 +11485,25 @@ async function loadRmSettings() {
       rows.forEach(r => { rmSettings[r.setting_key.replace("rm_","")] = r.setting_value; });
     }
   } catch(e) {}
-  const set = (id, key) => { const el = document.getElementById(id); if (el && rmSettings[key]) el.value = rmSettings[key]; };
-  set("rm-cmd-activate",          "cmd_activate");
-  set("rm-cmd-deactivate",        "cmd_deactivate");
-  set("rm-current-on-threshold",  "current_on_threshold");
-  set("rm-feed-key",              "feed_key");
-  set("rm-note-file",             "note_file");
+  const set = (id, key) => { const el = document.getElementById(id); if (el && rmSettings[key] != null) el.value = rmSettings[key]; };
+  set("rm-current-on-threshold", "current_on_threshold");
+  set("rm-feed-key",             "feed_key");
+  set("rm-note-file",            "note_file");
+  // Populate live hex previews — these are deterministic, no user input needed
+  populateRmHexPreviews();
+}
+
+function populateRmHexPreviews() {
+  const onHex  = buildCurrentChangeFlagHex(true);
+  const offHex = buildCurrentChangeFlagHex(false);
+  const onEl   = document.getElementById("rm-hex-preview-on");
+  const offEl  = document.getElementById("rm-hex-preview-off");
+  if (onEl)  onEl.textContent  = onHex.match(/.{1,2}/g).join(" ");
+  if (offEl) offEl.textContent = offHex.match(/.{1,2}/g).join(" ");
 }
 
 async function saveRuntimeSettings() {
   const pairs = [
-    ["rm_cmd_activate",         document.getElementById("rm-cmd-activate")?.value?.trim()         || ""],
-    ["rm_cmd_deactivate",       document.getElementById("rm-cmd-deactivate")?.value?.trim()       || ""],
     ["rm_current_on_threshold", document.getElementById("rm-current-on-threshold")?.value?.trim() || "0.5"],
     ["rm_feed_key",             document.getElementById("rm-feed-key")?.value                     || ""],
     ["rm_note_file",            document.getElementById("rm-note-file")?.value?.trim()            || "data.qi"],
@@ -11636,42 +11660,36 @@ function toggleRmTriggerForm() {
 
 // ── Manual command dispatch ───────────────────────────────────────────────────
 async function sendRuntimeCommand(action) {
-  const cmdKey  = action === "activate" ? "cmd_activate" : "cmd_deactivate";
-  const cmd     = rmSettings[cmdKey];
   const logEl   = document.getElementById("rm-manual-log");
-
-  if (!cmd) {
-    if (logEl) logEl.textContent = `⚠ No ${action} command configured. Save command strings in Firmware Command Settings first.`;
-    return;
-  }
+  const enable  = action === "activate";
+  const lcHex   = buildCurrentChangeFlagHex(enable);
+  const noteFile = rmSettings.note_file || "data.qi";
 
   const targetType = document.getElementById("rm-manual-target-type")?.value;
   const targetVal  = document.getElementById("rm-manual-target")?.value;
   if (!targetType) { if (logEl) logEl.textContent = "⚠ Select a target type first."; return; }
 
-  const noteFile = rmSettings.note_file || "data.qi";
-  const targets  = resolveRmTargets(targetType, targetVal);
+  const targets = resolveRmTargets(targetType, targetVal);
   if (!targets.length) { if (logEl) logEl.textContent = "⚠ No devices matched target."; return; }
 
-  if (logEl) logEl.textContent = `Sending ${action} to ${targets.length} device(s)…`;
+  if (logEl) logEl.textContent = `Sending ${action} (${lcHex.match(/.{1,2}/g).join(" ")}) to ${targets.length} device(s)…`;
   let sent = 0;
   for (const uid of targets) {
     try {
       await fetch(PROXY_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Device-UID": uid },
-        body: JSON.stringify({ body: { cmd }, req: "note.add", file: noteFile, sync: true })
+        body: JSON.stringify({ body: { LC: lcHex }, req: "note.add", file: noteFile, sync: true })
       });
       sent++;
     } catch(e) { console.warn("rm dispatch", uid, e.message); }
   }
-  if (logEl) logEl.textContent = `✓ ${action.toUpperCase()} sent to ${sent}/${targets.length} devices at ${new Date().toLocaleTimeString()}.`;
+  if (logEl) logEl.textContent = `✓ ${action.toUpperCase()} (0x${enable?"80":"00"} flag) sent to ${sent}/${targets.length} devices at ${new Date().toLocaleTimeString()}.`;
 
-  // Log to runtime_monitor_log
   try {
     await supabasePost("runtime_monitor_log", {
       action, target_type: targetType, target_id: targetVal,
-      device_count: sent, trigger_source: "manual",
+      lc_hex: lcHex, device_count: sent, trigger_source: "manual",
       fired_at: new Date().toISOString()
     });
   } catch(e) {}
@@ -11952,19 +11970,19 @@ async function tickRmTriggers() {
 
 // ── Core command send ─────────────────────────────────────────────────────────
 async function sendRmCmd(action, uid, source) {
-  const cmdKey = action === "activate" ? "cmd_activate" : "cmd_deactivate";
-  const cmd    = rmSettings[cmdKey];
-  if (!cmd) return;
+  const enable   = action === "activate";
+  const lcHex    = buildCurrentChangeFlagHex(enable);
   const noteFile = rmSettings.note_file || "data.qi";
   try {
     await fetch(PROXY_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Device-UID": uid },
-      body: JSON.stringify({ body: { cmd }, req: "note.add", file: noteFile, sync: true })
+      body: JSON.stringify({ body: { LC: lcHex }, req: "note.add", file: noteFile, sync: true })
     });
     await supabasePost("runtime_monitor_log", {
       action, device_uid: uid, target_type: "device", target_id: uid,
-      device_count: 1, trigger_source: source, fired_at: new Date().toISOString()
+      lc_hex: lcHex, device_count: 1, trigger_source: source,
+      fired_at: new Date().toISOString()
     });
   } catch(e) { console.warn("sendRmCmd", uid, e.message); }
 }
@@ -12279,6 +12297,7 @@ CREATE TABLE IF NOT EXISTS runtime_monitor_log (
   device_uid     text,
   target_type    text,
   target_id      text,
+  lc_hex         text,
   device_count   integer,
   trigger_source text,
   fired_at       timestamptz DEFAULT now()
