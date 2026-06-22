@@ -11675,14 +11675,26 @@ function toggleRmScheduleForm() {
   const open = form.style.display !== "none";
   form.style.display = open ? "none" : "block";
   if (!open) {
+    // Opening fresh — reset all state
     rmEditingSchedId = null;
     rmSelectedMode   = null;
     document.querySelectorAll(".rm-mode-tile").forEach(t => t.classList.remove("selected"));
     document.querySelectorAll(".rm-mode-panel").forEach(p => p.style.display = "none");
     document.getElementById("rm-sched-form-title").textContent = "New Monitoring Schedule";
-    ["rm-sched-name"].forEach(id => { const el = document.getElementById(id); if(el) el.value = ""; });
+    const nameEl = document.getElementById("rm-sched-name"); if (nameEl) nameEl.value = "";
     document.getElementById("rm-sched-target-type").value = "";
     document.getElementById("rm-sched-target").innerHTML = `<option value="" disabled selected>— Choose —</option>`;
+    // Reset day checkboxes to Mon–Fri
+    document.querySelectorAll(".rm-cron-day").forEach(cb => {
+      cb.checked = parseInt(cb.value) <= 5;
+    });
+  } else {
+    // Closing — always reset editing state
+    rmEditingSchedId = null;
+    rmSelectedMode   = null;
+    document.querySelectorAll(".rm-mode-tile").forEach(t => t.classList.remove("selected"));
+    document.querySelectorAll(".rm-mode-panel").forEach(p => p.style.display = "none");
+    document.getElementById("rm-sched-form-title").textContent = "New Monitoring Schedule";
   }
 }
 function toggleRmTriggerForm() {
@@ -11691,6 +11703,7 @@ function toggleRmTriggerForm() {
   const open = form.style.display !== "none";
   form.style.display = open ? "none" : "block";
   if (!open) {
+    // Opening fresh
     rmEditingTrigId = null;
     document.getElementById("rm-trigger-form-title").textContent = "New Feed Trigger";
     ["rm-trig-name","rm-trig-activate-threshold","rm-trig-deactivate-threshold"].forEach(id => {
@@ -11698,7 +11711,13 @@ function toggleRmTriggerForm() {
     });
     document.getElementById("rm-trig-target-type").value = "";
     document.getElementById("rm-trig-target").innerHTML = `<option value="" disabled selected>— Choose —</option>`;
+    document.getElementById("rm-trig-min-rest").value = "30";
+    document.getElementById("rm-trig-season").value = "";
     populateRmFeedSelects();
+  } else {
+    // Closing
+    rmEditingTrigId = null;
+    document.getElementById("rm-trigger-form-title").textContent = "New Feed Trigger";
   }
 }
 
@@ -11893,11 +11912,65 @@ function renderRmSchedules() {
         <div style="font-size:11px;color:var(--text-hint);">${targetLabel} • ${detail}</div>
       </div>
       <div style="display:flex;gap:6px;">
+        <button onclick="editRmSchedule(${s.id})" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--blue-dark);background:var(--blue-lt,#eff6ff);color:var(--blue-dark);font-size:10px;cursor:pointer;">Edit</button>
         <button onclick="toggleRmScheduleEnabled(${s.id},${!s.enabled})" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:10px;cursor:pointer;">${s.enabled?"Pause":"Enable"}</button>
         <button onclick="deleteRmSchedule(${s.id})" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">Remove</button>
       </div>
     </div>`;
   }).join("");
+}
+
+function editRmSchedule(id) {
+  const s = rmSchedules.find(x => x.id === id);
+  if (!s) return;
+
+  rmEditingSchedId = id;
+  const cfg = s.config || {};
+
+  // Open the form
+  const form = document.getElementById("rm-schedule-form");
+  if (form) form.style.display = "block";
+
+  // Update title and save button
+  const titleEl = document.getElementById("rm-sched-form-title");
+  if (titleEl) titleEl.textContent = `Editing: ${s.name}`;
+
+  // Populate common fields
+  const setVal = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
+  setVal("rm-sched-name", s.name);
+
+  // Target type + target
+  const ttEl = document.getElementById("rm-sched-target-type");
+  if (ttEl) { ttEl.value = s.target_type || ""; onRmSchedTargetTypeChange(); }
+  // Small delay so target options populate before setting value
+  setTimeout(() => { setVal("rm-sched-target", s.target_id); }, 50);
+
+  // Mode tile
+  const modeEl = document.querySelector(`.rm-mode-tile[data-mode="${s.mode}"]`);
+  selectRmMode(s.mode, modeEl);
+
+  // Populate mode-specific fields
+  if (s.mode === "daytime") {
+    setVal("rm-cron-start", cfg.start_time);
+    setVal("rm-cron-end",   cfg.end_time);
+    setVal("rm-cron-tz",    cfg.timezone);
+    // Restore day checkboxes
+    document.querySelectorAll(".rm-cron-day").forEach(cb => {
+      cb.checked = (cfg.days || []).includes(parseInt(cb.value));
+    });
+  } else if (s.mode === "dr_summer") {
+    setVal("rm-summer-start-month", cfg.start_month);
+    setVal("rm-summer-end-month",   cfg.end_month);
+    setVal("rm-summer-mode",        cfg.sub_mode || "always");
+  } else if (s.mode === "dr_winter") {
+    setVal("rm-winter-start-month", cfg.start_month);
+    setVal("rm-winter-end-month",   cfg.end_month);
+    setVal("rm-winter-mode",        cfg.sub_mode || "always");
+  }
+  // onpeak has no extra fields
+
+  // Scroll form into view
+  form?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 async function toggleRmScheduleEnabled(id, enabled) {
@@ -12103,11 +12176,63 @@ function renderRmTriggers() {
         <div style="font-size:10px;color:var(--text-hint);">Target: ${targetLabel} • Rest: ${t.min_rest_minutes}min${t.last_fired_at ? ` • Last fired: ${new Date(t.last_fired_at).toLocaleString()}` : ""}</div>
       </div>
       <div style="display:flex;gap:6px;">
+        <button onclick="editRmTrigger(${t.id})" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--blue-dark);background:var(--blue-lt,#eff6ff);color:var(--blue-dark);font-size:10px;cursor:pointer;">Edit</button>
         <button onclick="toggleRmTriggerEnabled(${t.id},${!t.enabled})" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:10px;cursor:pointer;">${t.enabled?"Pause":"Enable"}</button>
         <button onclick="deleteRmTrigger(${t.id})" style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer;">Remove</button>
       </div>
     </div>`;
   }).join("");
+}
+
+function editRmTrigger(id) {
+  const t = rmTriggers.find(x => x.id === id);
+  if (!t) return;
+
+  rmEditingTrigId = id;
+
+  // Open the form
+  const form = document.getElementById("rm-trigger-form");
+  if (form) form.style.display = "block";
+
+  // Update form title
+  const titleEl = document.getElementById("rm-trigger-form-title");
+  if (titleEl) titleEl.textContent = `Editing: ${t.name}`;
+
+  const setVal = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
+  const setOpt = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
+
+  // Common fields
+  setVal("rm-trig-name",       t.name);
+  setVal("rm-trig-min-rest",   t.min_rest_minutes ?? 30);
+  setOpt("rm-trig-season",     t.season_guard || "");
+
+  // Target type + target
+  const ttEl = document.getElementById("rm-trig-target-type");
+  if (ttEl) { ttEl.value = t.target_type || "all"; onRmTrigTargetTypeChange(); }
+  setTimeout(() => { setVal("rm-trig-target", t.target_id); }, 50);
+
+  // Ensure feed selects are populated first
+  populateRmFeedSelects();
+
+  // Activate condition — small delay so options are rendered
+  setTimeout(() => {
+    setOpt("rm-trig-activate-feed",      t.activate_feed);
+    setOpt("rm-trig-activate-op",        t.activate_op);
+    setVal("rm-trig-activate-threshold", t.activate_threshold);
+
+    // Update unit hint
+    const def = (FEED_DEFS || {})[t.activate_feed] || {};
+    const uEl = document.getElementById("rm-trig-activate-unit");
+    if (uEl) uEl.textContent = def.unit || "";
+
+    // Deactivate condition
+    setOpt("rm-trig-deactivate-feed",      t.deactivate_feed || "");
+    setOpt("rm-trig-deactivate-op",        t.deactivate_op   || "lt");
+    setVal("rm-trig-deactivate-threshold", t.deactivate_threshold ?? "");
+  }, 60);
+
+  // Scroll into view
+  form?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 async function toggleRmTriggerEnabled(id, enabled) {
