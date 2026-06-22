@@ -853,14 +853,24 @@
           <select class="history-select" id="history-device-select">
             <option value="">All Devices</option>
           </select>
-          <select class="history-select" id="history-range">
-            <option value="">All time</option>
-            <option value="1">Last 1 hour</option>
-            <option value="6">Last 6 hours</option>
+          <select class="history-select" id="history-range" onchange="onHistoryRangeChange()">
             <option value="24" selected>Last 24 hours</option>
             <option value="48">Last 48 hours</option>
             <option value="168">Last 7 days</option>
             <option value="720">Last 30 days</option>
+            <option value="2160">Last 90 days</option>
+            <option value="custom">Custom range…</option>
+          </select>
+          <span id="history-custom-range" style="display:none;align-items:center;gap:6px;">
+            <input type="date" id="history-from-date" class="history-select" style="padding:5px 8px;font-size:11px;" />
+            <span style="font-size:11px;color:var(--text-hint);">to</span>
+            <input type="date" id="history-to-date" class="history-select" style="padding:5px 8px;font-size:11px;" />
+          </span>
+          <select class="history-select" id="history-limit">
+            <option value="500">500 rows</option>
+            <option value="1000" selected>1 000 rows</option>
+            <option value="2000">2 000 rows</option>
+            <option value="5000">5 000 rows</option>
           </select>
           <button class="history-load-btn" onclick="loadHistory()">Load</button>
           <button class="history-load-btn" style="color:var(--green-dark);border-color:var(--green);" onclick="exportHistory()">Export CSV</button>
@@ -9319,14 +9329,10 @@ async function exportHistoricEvents() {
 }
 
 async function exportHistory() {
-  const deviceFilter = document.getElementById("history-device-select").value;
-  const rangeHours = document.getElementById("history-range")?.value;
   setStatus("sending", "Preparing export...");
   try {
-    let query = `device_readings?order=recorded_at.desc&limit=5000`;
-    if (deviceFilter) query += `&device_uid=eq.${encodeURIComponent(deviceFilter)}`;
-    if (rangeHours) { const since = new Date(Date.now() - parseInt(rangeHours)*60*60*1000).toISOString(); query += `&recorded_at=gte.${since}`; }
-    const rows = await supabaseGet(query);
+    const query = buildHistoryQuery("device_readings", 10000); // higher cap for export
+    const rows  = await supabaseGet(query);
     if (!rows || rows.length === 0) { setStatus("error", "No data to export."); return; }
     const headers = ["Time","Device","Relay1","Relay2","Relay3","Relay4","Voltage (V)","Current (A)","Watts (W)","Power Factor","Comfort"];
     const csvRows = rows.map(r => {
@@ -9338,22 +9344,28 @@ async function exportHistory() {
         r.relay_status_r2 > 0 ? "On" : "Off",
         r.relay_status_r3 > 0 ? "On" : "Off",
         r.relay_status_r4 > 0 ? "On" : "Off",
-        r.voltage ? (r.voltage/10).toFixed(1) : "",
-        r.current ? (r.current/10).toFixed(1) : "",
+        r.voltage       ? (r.voltage/10).toFixed(1)      : "",
+        r.current       ? (r.current/10).toFixed(1)      : "",
         r.watts_consumed ?? "",
-        r.power_factor != null ? (r.power_factor/1000).toFixed(3) : "",
+        r.power_factor  != null ? (r.power_factor/1000).toFixed(3) : "",
         r.customer_comfort > 0 ? "On" : "Off"
       ].map(v => `"${v}"`).join(",");
     });
-    const csv = [headers.join(","), ...csvRows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    const rangeLabel = rangeHours ? `_last${rangeHours}h` : "_all";
-    const devLabel = deviceFilter ? `_${unitName(deviceFilter)}` : "_all_devices";
-    a.href = url; a.download = `device_history${devLabel}${rangeLabel}.csv`; a.click();
+    const csv      = [headers.join(","), ...csvRows].join("\n");
+    const blob     = new Blob([csv], { type: "text/csv" });
+    const url      = URL.createObjectURL(blob);
+    const a        = document.createElement("a");
+    const rangeVal = document.getElementById("history-range")?.value;
+    const rangeLabel = rangeVal === "custom"
+      ? `_${document.getElementById("history-from-date")?.value||""}__${document.getElementById("history-to-date")?.value||""}`
+      : rangeVal ? `_last${rangeVal}h` : "_all";
+    const devFilter  = document.getElementById("history-device-select")?.value;
+    const devLabel   = devFilter ? `_${unitName(devFilter)||devFilter}` : "_all_devices";
+    a.href = url;
+    a.download = `device_history${devLabel}${rangeLabel}.csv`;
+    a.click();
     URL.revokeObjectURL(url);
-    setStatus("ready", `Exported ${rows.length} records.`);
+    setStatus("ready", `Exported ${rows.length.toLocaleString()} records.`);
   } catch(e) { setStatus("error", "Export failed."); console.error(e); }
 }
 
@@ -15506,29 +15518,76 @@ async function loadLatestDevice(deviceId) {
   } catch(e) { container.innerHTML = `<div class="data-empty">Error loading data</div>`; }
 }
 async function loadLatest() { DEVICES.forEach(d => loadLatestDevice(d.id)); }
+function onHistoryRangeChange() {
+  const val     = document.getElementById("history-range")?.value;
+  const custom  = document.getElementById("history-custom-range");
+  if (custom) custom.style.display = val === "custom" ? "flex" : "none";
+  // Default custom dates to last 7 days if not already set
+  if (val === "custom") {
+    const today  = new Date().toISOString().split("T")[0];
+    const prior  = new Date(Date.now() - 7*24*60*60*1000).toISOString().split("T")[0];
+    const fromEl = document.getElementById("history-from-date");
+    const toEl   = document.getElementById("history-to-date");
+    if (fromEl && !fromEl.value) fromEl.value = prior;
+    if (toEl   && !toEl.value)   toEl.value   = today;
+  }
+}
+
+function buildHistoryQuery(baseTable, limit) {
+  const deviceFilter = document.getElementById("history-device-select")?.value;
+  const rangeVal     = document.getElementById("history-range")?.value;
+  const fromDate     = document.getElementById("history-from-date")?.value;
+  const toDate       = document.getElementById("history-to-date")?.value;
+
+  let query = `${baseTable}?order=recorded_at.desc&limit=${limit}`;
+  if (deviceFilter) query += `&device_uid=eq.${encodeURIComponent(deviceFilter)}`;
+
+  if (rangeVal === "custom") {
+    if (fromDate) query += `&recorded_at=gte.${fromDate}T00:00:00.000Z`;
+    if (toDate)   query += `&recorded_at=lte.${toDate}T23:59:59.999Z`;
+  } else if (rangeVal) {
+    const since = new Date(Date.now() - parseInt(rangeVal) * 60 * 60 * 1000).toISOString();
+    query += `&recorded_at=gte.${since}`;
+  }
+  return query;
+}
+
 async function loadHistory() {
-  const deviceFilter = document.getElementById("history-device-select").value;
-  const rangeHours = document.getElementById("history-range")?.value;
-  const tbody = document.getElementById("history-body");
-  tbody.innerHTML = `<tr><td colspan="11" class="no-data">Loading...</td></tr>`;
+  const tbody    = document.getElementById("history-body");
+  const limit    = parseInt(document.getElementById("history-limit")?.value || "1000");
+  tbody.innerHTML = `<tr><td colspan="11" class="no-data">Loading…</td></tr>`;
   try {
-    let query = `device_readings?order=recorded_at.desc&limit=200`;
-    if (deviceFilter) query += `&device_uid=eq.${encodeURIComponent(deviceFilter)}`;
-    if (rangeHours) { const since = new Date(Date.now() - parseInt(rangeHours)*60*60*1000).toISOString(); query += `&recorded_at=gte.${since}`; }
-    const rows = await supabaseGet(query);
-    if (!rows || rows.length === 0) { tbody.innerHTML = `<tr><td colspan="11" class="no-data">No history found</td></tr>`; return; }
-    tbody.innerHTML = rows.map(r => {
+    const query = buildHistoryQuery("device_readings", limit);
+    const rows  = await supabaseGet(query);
+    if (!rows || rows.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="11" class="no-data">No history found for the selected range</td></tr>`;
+      return;
+    }
+    // Show row count / cap warning in first row
+    const capWarning = rows.length >= limit
+      ? `<tr><td colspan="11" style="padding:6px 10px;font-size:10px;color:var(--amber);background:var(--amber-bg);text-align:center;font-family:monospace;">
+           ⚠ Result capped at ${limit.toLocaleString()} rows — increase the row limit or narrow the date range to see all records
+         </td></tr>`
+      : `<tr><td colspan="11" style="padding:4px 10px;font-size:10px;color:var(--text-hint);background:var(--surface2);text-align:right;font-family:monospace;">
+           ${rows.length.toLocaleString()} records — oldest: ${new Date(rows[rows.length-1].recorded_at).toLocaleString()}
+         </td></tr>`;
+    tbody.innerHTML = capWarning + rows.map(r => {
       const devName = DEVICES.find(d => d.uid === r.device_uid)?.name ?? unitName(r.device_uid);
       return `<tr>
         <td>${new Date(r.recorded_at).toLocaleString()}</td><td>${devName}</td>
         <td>${relayDot(r.relay_status_r1)}</td><td>${relayDot(r.relay_status_r2)}</td>
         <td>${relayDot(r.relay_status_r3)}</td><td>${relayDot(r.relay_status_r4)}</td>
-        <td>${r.voltage != null ? (r.voltage/10).toFixed(1)+"V" : "—"}</td><td>${r.current != null ? (r.current/10).toFixed(1)+"A" : "—"}</td>
-        <td>${r.watts_consumed != null ? r.watts_consumed+"W" : "—"}</td><td>${r.power_factor != null ? (r.power_factor/1000).toFixed(3) : "—"}</td>
+        <td>${r.voltage  != null ? (r.voltage/10).toFixed(1)+"V"  : "—"}</td>
+        <td>${r.current  != null ? (r.current/10).toFixed(1)+"A"  : "—"}</td>
+        <td>${r.watts_consumed != null ? r.watts_consumed+"W"      : "—"}</td>
+        <td>${r.power_factor   != null ? (r.power_factor/1000).toFixed(3) : "—"}</td>
         <td>${r.customer_comfort > 0 ? "On" : "Off"}</td>
       </tr>`;
     }).join("");
-  } catch(e) { tbody.innerHTML = `<tr><td colspan="11" class="no-data">Error loading history</td></tr>`; }
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="11" class="no-data">Error loading history: ${e.message}</td></tr>`;
+    console.error("loadHistory:", e);
+  }
 }
 
 buildControls();
