@@ -11753,24 +11753,67 @@ async function saveRmSchedule() {
   const targetVal  = document.getElementById("rm-sched-target")?.value;
   if (!targetType) { setStatus("error", "Select a target type."); return; }
 
+  const now    = new Date().toISOString();
   const config = buildRmSchedConfig();
   const record = {
-    name, mode: rmSelectedMode, target_type: targetType, target_id: targetVal || "all",
+    name, mode: rmSelectedMode,
+    target_type: targetType, target_id: targetVal || "all",
     config: JSON.stringify(config), enabled: true,
-    created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+    created_at: now, updated_at: now
   };
+
+  let savedToDb  = false;
+  let savedRecord = { ...record, config, id: rmEditingSchedId || Date.now() };
 
   try {
     if (rmEditingSchedId) {
-      await supabasePatch(`runtime_monitor_schedules?id=eq.${rmEditingSchedId}`, { ...record, updated_at: new Date().toISOString() });
+      const res = await supabasePatch(`runtime_monitor_schedules?id=eq.${rmEditingSchedId}`,
+        { ...record, updated_at: now, created_at: undefined });
+      if (res?.ok) { savedToDb = true; savedRecord.id = rmEditingSchedId; }
+      else console.warn("rm schedule PATCH failed:", res?.status);
     } else {
-      await supabasePost("runtime_monitor_schedules", record);
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/runtime_monitor_schedules`, {
+        method: "POST",
+        headers: {
+          "apikey":        SUPABASE_KEY,
+          "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+          "Content-Type":  "application/json",
+          "Prefer":        "return=representation"
+        },
+        body: JSON.stringify(record)
+      });
+      if (res.ok) {
+        const inserted = await res.json();
+        savedRecord = Array.isArray(inserted) ? inserted[0] : inserted;
+        if (typeof savedRecord.config === "string") {
+          try { savedRecord.config = JSON.parse(savedRecord.config); } catch(e) {}
+        }
+        savedToDb = true;
+      } else {
+        const errText = await res.text();
+        console.warn("rm schedule POST failed:", res.status, errText);
+        setStatus("error", `Save failed (${res.status}): ${errText.substring(0,120)}`);
+      }
     }
-  } catch(e) { console.warn("rm schedule save:", e.message); }
+  } catch(e) {
+    console.warn("rm schedule save exception:", e.message);
+    setStatus("error", `Save error: ${e.message}`);
+  }
+
+  // localStorage fallback
+  try {
+    const existing = JSON.parse(localStorage.getItem(RM_SCHEDULES_KEY) || "[]");
+    const filtered = existing.filter(s => s.id !== savedRecord.id);
+    filtered.push({ ...savedRecord, config });
+    localStorage.setItem(RM_SCHEDULES_KEY, JSON.stringify(filtered));
+  } catch(e) {}
 
   toggleRmScheduleForm();
+  rmEditingSchedId = null;
   await loadRmSchedules();
-  setStatus("ready", `Schedule "${name}" saved.`);
+  setStatus("ready", savedToDb
+    ? `Schedule "${name}" saved to database.`
+    : `Schedule "${name}" saved locally (database table may need to be created — check console for DDL).`);
 }
 
 function buildRmSchedConfig() {
@@ -11795,12 +11838,33 @@ function buildRmSchedConfig() {
 }
 
 async function loadRmSchedules() {
+  let dbRows    = [];
+  let localRows = [];
+
   try {
     const rows = await supabaseGet("runtime_monitor_schedules?order=created_at.asc");
-    rmSchedules = Array.isArray(rows) ? rows.map(r => ({
-      ...r, config: typeof r.config === "string" ? (() => { try { return JSON.parse(r.config); } catch(e) { return {}; } })() : (r.config||{})
-    })) : [];
-  } catch(e) { rmSchedules = []; }
+    if (Array.isArray(rows) && rows.length) dbRows = rows;
+  } catch(e) { console.warn("loadRmSchedules DB:", e.message); }
+
+  try {
+    const saved = localStorage.getItem(RM_SCHEDULES_KEY);
+    if (saved) localRows = JSON.parse(saved);
+  } catch(e) {}
+
+  if (dbRows.length) {
+    try { localStorage.setItem(RM_SCHEDULES_KEY, JSON.stringify(dbRows)); } catch(e) {}
+    rmSchedules = dbRows.map(r => ({
+      ...r,
+      config: typeof r.config === "string"
+        ? (() => { try { return JSON.parse(r.config); } catch(e) { return {}; } })()
+        : (r.config || {})
+    }));
+  } else if (localRows.length) {
+    rmSchedules = localRows;
+  } else {
+    rmSchedules = [];
+  }
+
   renderRmSchedules();
 }
 
@@ -11838,11 +11902,21 @@ function renderRmSchedules() {
 
 async function toggleRmScheduleEnabled(id, enabled) {
   try { await supabasePatch(`runtime_monitor_schedules?id=eq.${id}`, { enabled, updated_at: new Date().toISOString() }); } catch(e) {}
+  try {
+    const local = JSON.parse(localStorage.getItem(RM_SCHEDULES_KEY) || "[]");
+    const updated = local.map(s => s.id === id ? { ...s, enabled } : s);
+    localStorage.setItem(RM_SCHEDULES_KEY, JSON.stringify(updated));
+  } catch(e) {}
   await loadRmSchedules();
 }
+
 async function deleteRmSchedule(id) {
   if (!confirm("Remove this monitoring schedule?")) return;
   try { await supabaseDelete("runtime_monitor_schedules", `id=eq.${id}`); } catch(e) {}
+  try {
+    const local = JSON.parse(localStorage.getItem(RM_SCHEDULES_KEY) || "[]");
+    localStorage.setItem(RM_SCHEDULES_KEY, JSON.stringify(local.filter(s => s.id !== id)));
+  } catch(e) {}
   await loadRmSchedules();
 }
 
@@ -11897,38 +11971,108 @@ async function saveRmTrigger() {
   const season     = document.getElementById("rm-trig-season")?.value || "";
   const minRest    = parseInt(document.getElementById("rm-trig-min-rest")?.value || "30");
 
-  if (!name)    { setStatus("error", "Trigger name required."); return; }
-  if (!actFeed) { setStatus("error", "Select an activate feed."); return; }
-  if (isNaN(actThr)) { setStatus("error", "Enter an activate threshold."); return; }
+  if (!name)         { setStatus("error", "Trigger name required."); return; }
+  if (!actFeed)      { setStatus("error", "Select an activate feed."); return; }
+  if (isNaN(actThr)) { setStatus("error", "Enter an activate threshold value."); return; }
+  if (!actOp)        { setStatus("error", "Select an activate operator."); return; }
 
+  const now = new Date().toISOString();
   const record = {
-    name, target_type: targetType || "all", target_id: targetVal || "all",
-    activate_feed: actFeed, activate_op: actOp, activate_threshold: actThr,
-    deactivate_feed: deactFeed, deactivate_op: deactOp,
+    name,
+    target_type:          targetType || "all",
+    target_id:            targetVal  || "all",
+    activate_feed:        actFeed,
+    activate_op:          actOp,
+    activate_threshold:   actThr,
+    deactivate_feed:      deactFeed  || null,
+    deactivate_op:        deactOp    || null,
     deactivate_threshold: isNaN(deactThr) ? null : deactThr,
-    season_guard: season || null, min_rest_minutes: minRest,
-    enabled: true, last_fired_at: null,
-    created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+    season_guard:         season     || null,
+    min_rest_minutes:     minRest,
+    enabled:              true,
+    last_fired_at:        null,
+    created_at:           now,
+    updated_at:           now
   };
+
+  let savedToDb = false;
+  let savedRecord = { ...record, id: rmEditingTrigId || Date.now() };
 
   try {
     if (rmEditingTrigId) {
-      await supabasePatch(`runtime_monitor_triggers?id=eq.${rmEditingTrigId}`, { ...record });
+      const res = await supabasePatch(`runtime_monitor_triggers?id=eq.${rmEditingTrigId}`,
+        { ...record, created_at: undefined }); // don't overwrite created_at on edit
+      if (res?.ok) { savedToDb = true; savedRecord.id = rmEditingTrigId; }
+      else console.warn("rm trigger PATCH failed:", res?.status);
     } else {
-      await supabasePost("runtime_monitor_triggers", record);
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/runtime_monitor_triggers`, {
+        method: "POST",
+        headers: {
+          "apikey":        SUPABASE_KEY,
+          "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+          "Content-Type":  "application/json",
+          "Prefer":        "return=representation"   // get the row back so we have the DB id
+        },
+        body: JSON.stringify(record)
+      });
+      if (res.ok) {
+        const inserted = await res.json();
+        savedRecord = Array.isArray(inserted) ? inserted[0] : inserted;
+        savedToDb = true;
+      } else {
+        const errText = await res.text();
+        console.warn("rm trigger POST failed:", res.status, errText);
+        // Surface the actual Supabase error so the user knows what's wrong
+        setStatus("error", `Save failed (${res.status}): ${errText.substring(0,120)}`);
+      }
     }
-  } catch(e) { console.warn("rm trigger save:", e.message); }
+  } catch(e) {
+    console.warn("rm trigger save exception:", e.message);
+    setStatus("error", `Save error: ${e.message}`);
+  }
+
+  // Always write to localStorage as fallback / cache
+  try {
+    const existing = JSON.parse(localStorage.getItem(RM_TRIGGERS_KEY) || "[]");
+    const filtered = existing.filter(t => t.id !== savedRecord.id);
+    filtered.push(savedRecord);
+    localStorage.setItem(RM_TRIGGERS_KEY, JSON.stringify(filtered));
+  } catch(e) {}
 
   toggleRmTriggerForm();
+  rmEditingTrigId = null;
   await loadRmTriggers();
-  setStatus("ready", `Trigger "${name}" saved.`);
+  setStatus("ready", savedToDb
+    ? `Trigger "${name}" saved to database.`
+    : `Trigger "${name}" saved locally (database table may need to be created — check console for DDL).`);
 }
 
 async function loadRmTriggers() {
+  let dbRows    = [];
+  let localRows = [];
+
   try {
     const rows = await supabaseGet("runtime_monitor_triggers?order=created_at.asc");
-    rmTriggers = Array.isArray(rows) ? rows : [];
-  } catch(e) { rmTriggers = []; }
+    if (Array.isArray(rows) && rows.length) dbRows = rows;
+  } catch(e) { console.warn("loadRmTriggers DB:", e.message); }
+
+  try {
+    const saved = localStorage.getItem(RM_TRIGGERS_KEY);
+    if (saved) localRows = JSON.parse(saved);
+  } catch(e) {}
+
+  // Merge: DB wins for any id that exists in both
+  if (dbRows.length) {
+    // Sync localStorage to match DB
+    try { localStorage.setItem(RM_TRIGGERS_KEY, JSON.stringify(dbRows)); } catch(e) {}
+    rmTriggers = dbRows;
+  } else if (localRows.length) {
+    // DB table may not exist yet — use localStorage
+    rmTriggers = localRows;
+  } else {
+    rmTriggers = [];
+  }
+
   renderRmTriggers();
 }
 
@@ -11968,11 +12112,21 @@ function renderRmTriggers() {
 
 async function toggleRmTriggerEnabled(id, enabled) {
   try { await supabasePatch(`runtime_monitor_triggers?id=eq.${id}`, { enabled, updated_at: new Date().toISOString() }); } catch(e) {}
+  try {
+    const local = JSON.parse(localStorage.getItem(RM_TRIGGERS_KEY) || "[]");
+    const updated = local.map(t => t.id === id ? { ...t, enabled } : t);
+    localStorage.setItem(RM_TRIGGERS_KEY, JSON.stringify(updated));
+  } catch(e) {}
   await loadRmTriggers();
 }
+
 async function deleteRmTrigger(id) {
   if (!confirm("Remove this feed trigger?")) return;
   try { await supabaseDelete("runtime_monitor_triggers", `id=eq.${id}`); } catch(e) {}
+  try {
+    const local = JSON.parse(localStorage.getItem(RM_TRIGGERS_KEY) || "[]");
+    localStorage.setItem(RM_TRIGGERS_KEY, JSON.stringify(local.filter(t => t.id !== id)));
+  } catch(e) {}
   await loadRmTriggers();
 }
 
@@ -24477,7 +24631,9 @@ let rmEditingSchedId     = null;
 let rmEditingTrigId      = null;
 let rmSelectedMode       = null;
 let rmRuntimeChart       = null;
-const RM_SETTINGS_PREFIX = "rm_";
+const RM_SETTINGS_PREFIX  = "rm_";
+const RM_TRIGGERS_KEY     = "lcp_rm_triggers_v1";
+const RM_SCHEDULES_KEY    = "lcp_rm_schedules_v1";
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function initBatteryTab() {
