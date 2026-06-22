@@ -7208,6 +7208,37 @@ async function supabaseGet(query) {
   });
   return res.json();
 }
+
+// Paginated fetch — uses Range headers to bypass PostgREST's server-side
+// default row cap (typically 1000). Fetches in pages of pageSize until either
+// all rows are returned or the maxRows ceiling is hit.
+async function supabaseGetPaged(query, maxRows = 20000, pageSize = 1000) {
+  let allRows = [];
+  let offset  = 0;
+  while (true) {
+    const rangeEnd = offset + pageSize - 1;
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${query}`, {
+      headers: {
+        "apikey":        SUPABASE_KEY,
+        "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+        "Range":         `${offset}-${rangeEnd}`,
+        "Range-Unit":    "items",
+        "Prefer":        "count=none"
+      }
+    });
+    // 416 = range not satisfiable (no more rows)
+    if (res.status === 416) break;
+    const page = await res.json();
+    if (!Array.isArray(page) || page.length === 0) break;
+    allRows = allRows.concat(page);
+    // If we got fewer rows than the page size, we've reached the end
+    if (page.length < pageSize) break;
+    // If we've hit the caller's max ceiling, stop
+    if (allRows.length >= maxRows) { allRows = allRows.slice(0, maxRows); break; }
+    offset += pageSize;
+  }
+  return allRows;
+}
 async function supabasePost(table, data) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method: "POST",
@@ -9329,10 +9360,11 @@ async function exportHistoricEvents() {
 }
 
 async function exportHistory() {
-  setStatus("sending", "Preparing export...");
+  setStatus("sending", "Preparing export — fetching all pages...");
   try {
-    const query = buildHistoryQuery("device_readings", 10000); // higher cap for export
-    const rows  = await supabaseGet(query);
+    // Strip limit from query — supabaseGetPaged handles the ceiling
+    const query   = buildHistoryQuery("device_readings", 50000).replace(/&limit=\d+/, "");
+    const rows    = await supabaseGetPaged(query, 50000, 1000);
     if (!rows || rows.length === 0) { setStatus("error", "No data to export."); return; }
     const headers = ["Time","Device","Relay1","Relay2","Relay3","Relay4","Voltage (V)","Current (A)","Watts (W)","Power Factor","Comfort"];
     const csvRows = rows.map(r => {
@@ -9344,10 +9376,10 @@ async function exportHistory() {
         r.relay_status_r2 > 0 ? "On" : "Off",
         r.relay_status_r3 > 0 ? "On" : "Off",
         r.relay_status_r4 > 0 ? "On" : "Off",
-        r.voltage       ? (r.voltage/10).toFixed(1)      : "",
-        r.current       ? (r.current/10).toFixed(1)      : "",
+        r.voltage        ? (r.voltage/10).toFixed(1)        : "",
+        r.current        ? (r.current/10).toFixed(1)        : "",
         r.watts_consumed ?? "",
-        r.power_factor  != null ? (r.power_factor/1000).toFixed(3) : "",
+        r.power_factor   != null ? (r.power_factor/1000).toFixed(3) : "",
         r.customer_comfort > 0 ? "On" : "Off"
       ].map(v => `"${v}"`).join(",");
     });
@@ -9359,8 +9391,8 @@ async function exportHistory() {
     const rangeLabel = rangeVal === "custom"
       ? `_${document.getElementById("history-from-date")?.value||""}__${document.getElementById("history-to-date")?.value||""}`
       : rangeVal ? `_last${rangeVal}h` : "_all";
-    const devFilter  = document.getElementById("history-device-select")?.value;
-    const devLabel   = devFilter ? `_${unitName(devFilter)||devFilter}` : "_all_devices";
+    const devFilter = document.getElementById("history-device-select")?.value;
+    const devLabel  = devFilter ? `_${unitName(devFilter)||devFilter}` : "_all_devices";
     a.href = url;
     a.download = `device_history${devLabel}${rangeLabel}.csv`;
     a.click();
@@ -15554,19 +15586,20 @@ function buildHistoryQuery(baseTable, limit) {
 
 async function loadHistory() {
   const tbody    = document.getElementById("history-body");
-  const limit    = parseInt(document.getElementById("history-limit")?.value || "1000");
-  tbody.innerHTML = `<tr><td colspan="11" class="no-data">Loading…</td></tr>`;
+  const limitEl  = document.getElementById("history-limit");
+  const maxRows  = parseInt(limitEl?.value || "1000");
+  tbody.innerHTML = `<tr><td colspan="11" class="no-data">Loading… (fetching in pages, please wait)</td></tr>`;
   try {
-    const query = buildHistoryQuery("device_readings", limit);
-    const rows  = await supabaseGet(query);
+    // Strip any limit= from the query — pagination handles the ceiling
+    const query = buildHistoryQuery("device_readings", maxRows).replace(/&limit=\d+/, "");
+    const rows  = await supabaseGetPaged(query, maxRows, 1000);
     if (!rows || rows.length === 0) {
       tbody.innerHTML = `<tr><td colspan="11" class="no-data">No history found for the selected range</td></tr>`;
       return;
     }
-    // Show row count / cap warning in first row
-    const capWarning = rows.length >= limit
+    const capWarning = rows.length >= maxRows
       ? `<tr><td colspan="11" style="padding:6px 10px;font-size:10px;color:var(--amber);background:var(--amber-bg);text-align:center;font-family:monospace;">
-           ⚠ Result capped at ${limit.toLocaleString()} rows — increase the row limit or narrow the date range to see all records
+           ⚠ Result capped at ${maxRows.toLocaleString()} rows — increase the row limit or narrow the date range to see all records
          </td></tr>`
       : `<tr><td colspan="11" style="padding:4px 10px;font-size:10px;color:var(--text-hint);background:var(--surface2);text-align:right;font-family:monospace;">
            ${rows.length.toLocaleString()} records — oldest: ${new Date(rows[rows.length-1].recorded_at).toLocaleString()}
@@ -15577,10 +15610,10 @@ async function loadHistory() {
         <td>${new Date(r.recorded_at).toLocaleString()}</td><td>${devName}</td>
         <td>${relayDot(r.relay_status_r1)}</td><td>${relayDot(r.relay_status_r2)}</td>
         <td>${relayDot(r.relay_status_r3)}</td><td>${relayDot(r.relay_status_r4)}</td>
-        <td>${r.voltage  != null ? (r.voltage/10).toFixed(1)+"V"  : "—"}</td>
-        <td>${r.current  != null ? (r.current/10).toFixed(1)+"A"  : "—"}</td>
-        <td>${r.watts_consumed != null ? r.watts_consumed+"W"      : "—"}</td>
-        <td>${r.power_factor   != null ? (r.power_factor/1000).toFixed(3) : "—"}</td>
+        <td>${r.voltage       != null ? (r.voltage/10).toFixed(1)+"V"        : "—"}</td>
+        <td>${r.current       != null ? (r.current/10).toFixed(1)+"A"        : "—"}</td>
+        <td>${r.watts_consumed != null ? r.watts_consumed+"W"                 : "—"}</td>
+        <td>${r.power_factor   != null ? (r.power_factor/1000).toFixed(3)    : "—"}</td>
         <td>${r.customer_comfort > 0 ? "On" : "Off"}</td>
       </tr>`;
     }).join("");
