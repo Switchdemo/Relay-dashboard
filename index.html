@@ -4802,6 +4802,8 @@
               <option value="24" selected>Last 24 hours</option>
               <option value="72">Last 3 days</option>
               <option value="168">Last 7 days</option>
+              <option value="720">Last 30 days</option>
+              <option value="2160">Last 90 days</option>
             </select>
             <button class="queue-refresh" onclick="loadFeedChart()">Refresh</button>
           </div>
@@ -17960,54 +17962,86 @@ async function loadFeedChart() {
   const def   = FEED_DEFS[feedKey] || {};
   const since = new Date(Date.now() - rangeHrs * 60 * 60 * 1000).toISOString();
 
-  if (metaEl) metaEl.textContent = "Loading...";
+  if (metaEl) metaEl.textContent = "Loading…";
 
   try {
-    // For SCADA feeds pull from scada_readings table, otherwise monitor_feed_readings
+    // Use supabaseGetPaged to bypass PostgREST's server-side row cap.
+    // Without this, requests with limit=2000 are silently clamped to ~1000
+    // rows by the server, making 7-day and longer ranges appear truncated.
+    const maxRows = rangeHrs <= 24 ? 500 : rangeHrs <= 168 ? 3000 : 12000;
     let rows;
+
     if (feedKey.startsWith("scada_")) {
       const pointId = feedKey.replace("scada_", "");
-      rows = await supabaseGet(
-        `scada_readings?point_id=eq.${encodeURIComponent(pointId)}&recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=2000`
+      rows = await supabaseGetPaged(
+        `scada_readings?point_id=eq.${encodeURIComponent(pointId)}&recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc`,
+        maxRows
       );
     } else {
-      rows = await supabaseGet(
-        `monitor_feed_readings?feed_key=eq.${encodeURIComponent(feedKey)}&recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=2000`
+      rows = await supabaseGetPaged(
+        `monitor_feed_readings?feed_key=eq.${encodeURIComponent(feedKey)}&recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc`,
+        maxRows
       );
     }
 
     if (!Array.isArray(rows) || !rows.length) {
-      if (metaEl) metaEl.textContent = `No data for "${def.label}" in the last ${rangeHrs} hours. Data is collected every 5 minutes during monitor cycles.`;
+      if (metaEl) metaEl.textContent = `No data for "${def.label||feedKey}" in the selected range.`;
       if (feedChartInstance) { feedChartInstance.destroy(); feedChartInstance = null; }
       await loadFeedRules(feedKey);
       return;
     }
 
-    const labels = rows.map(r => {
+    // Downsample to ~500 points for chart performance on long ranges.
+    // Bucket-average so the shape of the curve is preserved.
+    let chartRows = rows;
+    const TARGET_POINTS = 500;
+    if (rows.length > TARGET_POINTS) {
+      const bucketSize = Math.ceil(rows.length / TARGET_POINTS);
+      const bucketed = [];
+      for (let i = 0; i < rows.length; i += bucketSize) {
+        const bucket    = rows.slice(i, i + bucketSize);
+        const validVals = bucket.map(r => r.value).filter(v => v != null);
+        if (!validVals.length) continue;
+        const avg = validVals.reduce((a, b) => a + b, 0) / validVals.length;
+        bucketed.push({
+          recorded_at: bucket[Math.floor(bucket.length / 2)].recorded_at,
+          value: parseFloat(avg.toFixed(2))
+        });
+      }
+      chartRows = bucketed;
+    }
+
+    const labels = chartRows.map(r => {
       const d = new Date(r.recorded_at);
       return rangeHrs <= 24
-        ? d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})
-        : d.toLocaleDateString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
+        ? d.toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" })
+        : rangeHrs <= 168
+          ? d.toLocaleDateString([], { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" })
+          : d.toLocaleDateString([], { month:"short", day:"numeric" });
     });
-    const data = rows.map(r => r.value);
+    const data = chartRows.map(r => r.value);
 
-    const min   = Math.min(...data.filter(v=>v!=null));
-    const max   = Math.max(...data.filter(v=>v!=null));
-    const avg   = (data.filter(v=>v!=null).reduce((a,b)=>a+b,0)/data.length).toFixed(1);
-    const last  = data[data.length-1];
+    const validData = data.filter(v => v != null);
+    const min  = Math.min(...validData);
+    const max  = Math.max(...validData);
+    const avg  = (validData.reduce((a, b) => a + b, 0) / validData.length).toFixed(1);
+    const last = data[data.length - 1];
+
+    const downsampleNote = rows.length !== chartRows.length
+      ? ` <span style="color:var(--text-hint);">(${chartRows.length} plotted, ${rows.length} total — averaged)</span>`
+      : "";
 
     if (metaEl) metaEl.innerHTML = `
       <span style="margin-right:16px;"><strong>Latest:</strong> ${last} ${def.unit||""}</span>
       <span style="margin-right:16px;"><strong>Min:</strong> ${min} ${def.unit||""}</span>
       <span style="margin-right:16px;"><strong>Max:</strong> ${max} ${def.unit||""}</span>
       <span><strong>Avg:</strong> ${avg} ${def.unit||""}</span>
-      <span style="margin-left:16px;color:var(--text-hint);">${rows.length} readings</span>`;
+      <span style="margin-left:16px;color:var(--text-hint);">${rows.length} readings${downsampleNote}</span>`;
 
-    // Color by feed type
-    const color = feedKey.includes("temp")||feedKey.includes("heat") ? "#e67e22"
-      : feedKey.includes("lmp") ? "#c0392b"
+    const color = feedKey.includes("temp") || feedKey.includes("heat") ? "#e67e22"
+      : feedKey.includes("lmp")      ? "#c0392b"
       : feedKey.includes("humidity") ? "#2980b9"
-      : feedKey.includes("uv")  ? "#8e44ad"
+      : feedKey.includes("uv")       ? "#8e44ad"
       : "#1a5f4a";
 
     if (feedChartInstance) { feedChartInstance.destroy(); feedChartInstance = null; }
@@ -18016,12 +18050,12 @@ async function loadFeedChart() {
       data: {
         labels,
         datasets: [{
-          label: `${def.label}${def.unit?" ("+def.unit+")":""}`,
+          label: `${def.label||feedKey}${def.unit ? " ("+def.unit+")" : ""}`,
           data,
           borderColor: color,
           backgroundColor: color + "18",
-          borderWidth: 2,
-          pointRadius: rows.length > 100 ? 0 : 3,
+          borderWidth: 1.5,
+          pointRadius: chartRows.length > 200 ? 0 : 3,
           tension: 0.3,
           fill: true
         }]
@@ -18031,22 +18065,21 @@ async function loadFeedChart() {
         maintainAspectRatio: false,
         interaction: { mode:"index", intersect:false },
         plugins: {
-          legend: { display:false },
+          legend: { display: false },
           tooltip: { callbacks: { label: ctx => `${ctx.parsed.y} ${def.unit||""}` } }
         },
         scales: {
-          x: { ticks: { maxTicksLimit:10, font:{size:10}, color:"#888780" }, grid:{color:"rgba(0,0,0,0.05)"} },
+          x: { ticks: { maxTicksLimit:10, font:{ size:10 }, color:"#888780" }, grid:{ color:"rgba(0,0,0,0.05)" } },
           y: {
-            ticks: { font:{size:10}, color:"#888780" },
+            ticks: { font:{ size:10 }, color:"#888780" },
             grid:  { color:"rgba(0,0,0,0.05)" },
-            title: { display:true, text: def.unit||"", font:{size:10}, color:"#888780" }
+            title: { display: true, text: def.unit||"", font:{ size:10 }, color:"#888780" }
           }
         }
       }
     });
     if (chartInstances) chartInstances["feed-data-chart"] = feedChartInstance;
 
-    // Load rules for this feed below the chart
     await loadFeedRules(feedKey);
 
   } catch(e) {
@@ -23622,8 +23655,9 @@ async function loadSCADATrend() {
   if (metaEl) metaEl.textContent = "Loading...";
 
   try {
-    const rows = await supabaseGet(
-      `scada_readings?point_id=eq.${encodeURIComponent(pointId)}&recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=2000`
+    const rows = await supabaseGetPaged(
+      `scada_readings?point_id=eq.${encodeURIComponent(pointId)}&recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc`,
+      rangeHrs <= 24 ? 500 : rangeHrs <= 168 ? 3000 : 12000
     );
     const point = scadaPoints.find(p => p.point_id === pointId);
 
