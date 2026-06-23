@@ -17977,12 +17977,12 @@ async function loadFeedChart() {
     if (feedKey.startsWith("scada_")) {
       const pointId = feedKey.replace("scada_", "");
       rows = await supabaseGetPaged(
-        `scada_readings?point_id=eq.${encodeURIComponent(pointId)}&recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc`,
+        `scada_readings?point_id=eq.${encodeURIComponent(pointId)}&recorded_at=gte.${since}&order=recorded_at.asc`,
         maxRows
       );
     } else {
       rows = await supabaseGetPaged(
-        `monitor_feed_readings?feed_key=eq.${encodeURIComponent(feedKey)}&recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc`,
+        `monitor_feed_readings?feed_key=eq.${encodeURIComponent(feedKey)}&recorded_at=gte.${since}&order=recorded_at.asc`,
         maxRows
       );
     }
@@ -22843,12 +22843,12 @@ async function loadCorrelationChart() {
   try {
     // Fetch outage readings
     const outageRows = await supabaseGet(
-      `outage_readings?recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=2000`
+      `outage_readings?recorded_at=gte.${since}&order=recorded_at.asc&limit=2000`
     ).catch(() => []);
 
     // Fetch device health (offline events — no report in 2+ hours)
     const healthRows = await supabaseGet(
-      `device_health?recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=2000`
+      `device_health?recorded_at=gte.${since}&order=recorded_at.asc&limit=2000`
     ).catch(() => []);
 
     if (!Array.isArray(outageRows) || !outageRows.length) {
@@ -23445,7 +23445,7 @@ async function refreshSCADADisplay() {
   const since = new Date(Date.now() - 20 * 60 * 1000).toISOString(); // last 20 min
   try {
     const rows = await supabaseGet(
-      `scada_readings?recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.desc&limit=500`
+      `scada_readings?recorded_at=gte.${since}&order=recorded_at.desc&limit=500`
     );
     if (Array.isArray(rows)) {
       rows.forEach(r => {
@@ -23659,7 +23659,7 @@ async function loadSCADATrend() {
 
   try {
     const rows = await supabaseGetPaged(
-      `scada_readings?point_id=eq.${encodeURIComponent(pointId)}&recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc`,
+      `scada_readings?point_id=eq.${encodeURIComponent(pointId)}&recorded_at=gte.${since}&order=recorded_at.asc`,
       rangeHrs <= 24 ? 500 : rangeHrs <= 168 ? 3000 : 12000
     );
     const point = scadaPoints.find(p => p.point_id === pointId);
@@ -23840,7 +23840,7 @@ async function refreshEVStatus() {
   // Fetch latest status from Supabase ev_sessions table
   try {
     const since = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // last 1 hour
-    const rows  = await supabaseGet(`ev_sessions?updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=200`);
+    const rows  = await supabaseGet(`ev_sessions?updated_at=gte.${since}&order=updated_at.desc&limit=200`);
     if (Array.isArray(rows)) {
       rows.forEach(r => {
         if (!evSessions[r.station_id] || new Date(r.updated_at) > new Date(evSessions[r.station_id].updated_at || 0)) {
@@ -24097,7 +24097,7 @@ async function loadEVSessionLog() {
   const rangeHrs = parseInt(document.getElementById("ev-log-range")?.value || "24");
   const since  = new Date(Date.now() - rangeHrs * 60 * 60 * 1000).toISOString();
   try {
-    const rows = await supabaseGet(`ev_sessions?updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=100`);
+    const rows = await supabaseGet(`ev_sessions?updated_at=gte.${since}&order=updated_at.desc&limit=100`);
     if (!Array.isArray(rows) || !rows.length) {
       list.innerHTML = '<div class="sched-empty">No sessions in this period. Sessions are recorded as chargers connect and report via OCPP.</div>';
       return;
@@ -28908,7 +28908,7 @@ async function exportFeedCSV(feedKey, feedLabel) {
   const since = new Date(Date.now() - 30 * 86400000).toISOString();
   try {
     // Try weather_readings first
-    const wr = await supabaseGet(`weather_readings?recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=10000`).catch(() => []);
+    const wr = await supabaseGet(`weather_readings?recorded_at=gte.${since}&order=recorded_at.asc&limit=10000`).catch(() => []);
     if (Array.isArray(wr) && wr.length && wr[0][feedKey] !== undefined) {
       rows = wr.filter(r => r[feedKey] != null).map(r => ({ time: r.recorded_at, value: r[feedKey] }));
     }
@@ -28916,7 +28916,7 @@ async function exportFeedCSV(feedKey, feedLabel) {
   if (!rows.length) {
     // Try SCADA readings
     try {
-      const sr = await supabaseGet(`scada_readings?feed_key=eq.${encodeURIComponent(feedKey)}&recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=10000`).catch(() => []);
+      const sr = await supabaseGet(`scada_readings?feed_key=eq.${encodeURIComponent(feedKey)}&recorded_at=gte.${since}&order=recorded_at.asc&limit=10000`).catch(() => []);
       if (Array.isArray(sr)) rows = sr.map(r => ({ time: r.recorded_at, value: r.value }));
     } catch(e) {}
   }
@@ -29104,7 +29104,7 @@ async function refreshEVLiveMonitor() {
   // Pull fresh session data
   try {
     const since = new Date(Date.now() - 24 * 3600000).toISOString();
-    const rows  = await supabaseGet(`ev_sessions?updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=500`);
+    const rows  = await supabaseGet(`ev_sessions?updated_at=gte.${since}&order=updated_at.desc&limit=500`);
     if (Array.isArray(rows)) {
       rows.forEach(r => {
         if (!evSessions[r.station_id] || new Date(r.updated_at) > new Date(evSessions[r.station_id]?.updated_at || 0))
