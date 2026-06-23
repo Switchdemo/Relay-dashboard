@@ -7215,27 +7215,30 @@ async function supabaseGet(query) {
 // default row cap (typically 1000). Fetches in pages of pageSize until either
 // all rows are returned or the maxRows ceiling is hit.
 async function supabaseGetPaged(query, maxRows = 20000, pageSize = 1000) {
+  // Supabase/PostgREST can silently ignore the Range header depending on
+  // server config. Use explicit limit= and offset= query parameters instead,
+  // which are always respected regardless of server-side max-rows settings.
   let allRows = [];
   let offset  = 0;
+  // Determine separator: if query already has a ?, append with &, else use ?
+  const sep = query.includes("?") ? "&" : "?";
+
   while (true) {
-    const rangeEnd = offset + pageSize - 1;
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${query}`, {
+    const pagedQuery = `${query}${sep}limit=${pageSize}&offset=${offset}`;
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${pagedQuery}`, {
       headers: {
         "apikey":        SUPABASE_KEY,
         "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
-        "Range":         `${offset}-${rangeEnd}`,
-        "Range-Unit":    "items",
         "Prefer":        "count=none"
       }
     });
-    // 416 = range not satisfiable (no more rows)
-    if (res.status === 416) break;
+    if (!res.ok) { console.warn("supabaseGetPaged HTTP error:", res.status, pagedQuery); break; }
     const page = await res.json();
     if (!Array.isArray(page) || page.length === 0) break;
     allRows = allRows.concat(page);
-    // If we got fewer rows than the page size, we've reached the end
+    // Fewer rows than pageSize = last page reached
     if (page.length < pageSize) break;
-    // If we've hit the caller's max ceiling, stop
+    // Hit caller's ceiling — stop and trim
     if (allRows.length >= maxRows) { allRows = allRows.slice(0, maxRows); break; }
     offset += pageSize;
   }
