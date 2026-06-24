@@ -12511,6 +12511,8 @@ function buildDayNightAnnotations(bands, xLabels) {
 
   return annotations;
 }
+
+function switchRmChart(mode, el) {
   rmChartMode = mode;
   document.querySelectorAll(".rm-chart-toggle[id^='rm-toggle']").forEach(b => b.classList.remove("active"));
   if (el) el.classList.add("active");
