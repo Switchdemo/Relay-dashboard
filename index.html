@@ -4746,7 +4746,7 @@
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
             <span style="font-size:11px;color:var(--text-hint);min-width:70px;">Chart view:</span>
             <button class="rm-chart-toggle active" id="rm-toggle-timeline" onclick="switchRmChart('timeline',this)">📅 Daily Timeline</button>
-            <button class="rm-chart-toggle" id="rm-toggle-scatter" onclick="switchRmChart('scatter',this)">🔵 Scatter</button>
+            <button class="rm-chart-toggle" id="rm-toggle-scatter" onclick="switchRmChart('scatter',this)">📈 Line — Duration & Condition</button>
             <button class="rm-chart-toggle" id="rm-toggle-daily" onclick="switchRmChart('daily',this)">📊 Daily Summary</button>
             <button class="rm-chart-toggle" id="rm-toggle-daynight" onclick="switchRmDayNight(this)" title="Shade night periods on timeline chart" style="margin-left:12px;border-style:dashed;">🌙 Day/Night</button>
           </div>
@@ -12348,60 +12348,70 @@ function switchRmDayNight(el) {
 }
 
 // ── Solar position engine — no API required ───────────────────────────────────
-// Returns { sunrise, sunset } as Date objects for a given date and lat/lon.
-// Uses the NOAA solar calculation algorithm (accurate to ±1 minute).
-function getSunriseSunset(date, lat, lon) {
-  const rad   = Math.PI / 180;
-  const JD    = Math.floor(date.getTime() / 86400000) + 2440587.5;
-  const n     = JD - 2451545.0;
-  const L     = (280.46 + 0.9856474 * n) % 360;
-  const g     = (357.528 + 0.9856003 * n) % 360;
-  const lambda= L + 1.915 * Math.sin(g * rad) + 0.020 * Math.sin(2 * g * rad);
-  const e     = 23.439 - 0.0000004 * n;
-  const sinDec= Math.sin(e * rad) * Math.sin(lambda * rad);
-  const dec   = Math.asin(sinDec);
-  const cosHA = (Math.cos(90.833 * rad) - sinDec * Math.sin(lat * rad))
-              / (Math.cos(dec) * Math.cos(lat * rad));
-  // Clamp for polar day/night
-  const cosHAc = Math.max(-1, Math.min(1, cosHA));
-  const HA    = Math.acos(cosHAc) / rad;
-  const eqTime= 4 * (L - 0.0057183 - Math.atan2(
-    Math.cos(e * rad) * Math.sin(lambda * rad),
-    Math.cos(lambda * rad)
-  ) / rad + (lon < 0 ? 360 : 0)) - 60 * (lon / 15);
+// Returns { sunrise, sunset } as UTC millisecond timestamps for a given
+// calendar date (local) and lat/lon.
+// Adapted from NOAA solar calculation — accurate to ±1-2 minutes.
+function getSunriseSunset(localDateMidnight, lat, lon) {
+  // localDateMidnight should be a Date set to local midnight (00:00:00 local)
+  // We work entirely in Julian Day / UTC to avoid DST confusion
+  const rad  = d => d * Math.PI / 180;
+  const deg  = r => r * 180 / Math.PI;
 
-  const y          = date.getUTCFullYear();
-  const m          = date.getUTCMonth();
-  const d          = date.getUTCDate();
-  const tzOffset   = date.getTimezoneOffset(); // minutes west of UTC
-  const solarNoon  = 720 - 4 * lon - eqTime - tzOffset;
-  const sunriseMin = solarNoon - HA * 4;
-  const sunsetMin  = solarNoon + HA * 4;
+  // Julian day of local noon (approximate)
+  const JD = localDateMidnight.getTime() / 86400000 + 2440587.5 + 0.5;
 
-  const toDate = mins => {
-    const base = new Date(y, m, d, 0, 0, 0);
-    base.setMinutes(base.getMinutes() + Math.round(mins));
-    return base;
+  const n       = JD - 2451545.0;
+  const L       = ((280.46 + 0.9856474 * n) % 360 + 360) % 360;
+  const g       = ((357.528 + 0.9856003 * n) % 360 + 360) % 360;
+  const lambda  = L + 1.915 * Math.sin(rad(g)) + 0.020 * Math.sin(rad(2*g));
+  const e       = 23.439 - 0.0000004 * n;
+  const sinDec  = Math.sin(rad(e)) * Math.sin(rad(lambda));
+  const dec     = Math.asin(sinDec);
+
+  // Equation of time (minutes)
+  const RA      = deg(Math.atan2(Math.cos(rad(e)) * Math.sin(rad(lambda)), Math.cos(rad(lambda))));
+  const eqTime  = 4 * (L - RA);
+
+  // Hour angle at sunrise/sunset (solar zenith = 90.833° to account for refraction)
+  const cosHA   = (Math.cos(rad(90.833)) - sinDec * Math.sin(rad(lat)))
+                / (Math.cos(dec) * Math.cos(rad(lat)));
+  const cosHAc  = Math.max(-1, Math.min(1, cosHA));
+  const HA      = deg(Math.acos(cosHAc));   // degrees
+
+  // Solar noon in minutes from UTC midnight
+  const solarNoonUTC = 720 - 4 * lon - eqTime;
+  const sunriseUTC   = solarNoonUTC - HA * 4;  // HA*4 = minutes
+  const sunsetUTC    = solarNoonUTC + HA * 4;
+
+  // Convert to absolute UTC timestamps
+  // localDateMidnight.getTime() is UTC ms of local midnight
+  // We need UTC ms of the UTC midnight of the SAME calendar day
+  const utcMidnight = Date.UTC(
+    localDateMidnight.getFullYear(),
+    localDateMidnight.getMonth(),
+    localDateMidnight.getDate()
+  );
+
+  return {
+    sunrise: new Date(utcMidnight + sunriseUTC * 60000),
+    sunset:  new Date(utcMidnight + sunsetUTC  * 60000),
   };
-
-  return { sunrise: toDate(sunriseMin), sunset: toDate(sunsetMin) };
 }
 
-// Build an array of {start, end, isNight} bands covering the chart's time range
+// Build night bands as UTC timestamp ranges covering the session window
 function buildDayNightBands(sessions) {
   if (!sessions.length) return [];
-  const lat = wxLocationData?.lat ?? 35.5;  // fallback to mid-US if not set
+  const lat = wxLocationData?.lat ?? 35.5;
   const lon = wxLocationData?.lon ?? -97.5;
 
+  // Work in local time for calendar day boundaries
   const firstTs = new Date(sessions[0].session_start);
   const lastTs  = new Date(sessions[sessions.length-1].session_end || sessions[sessions.length-1].session_start);
 
-  // Collect unique dates spanning the session range
+  // Build array of local calendar dates spanning the session range
   const days = [];
-  const cur  = new Date(firstTs);
-  cur.setHours(0, 0, 0, 0);
-  const end  = new Date(lastTs);
-  end.setHours(0, 0, 0, 0);
+  const cur  = new Date(firstTs.getFullYear(), firstTs.getMonth(), firstTs.getDate());
+  const end  = new Date(lastTs.getFullYear(),  lastTs.getMonth(),  lastTs.getDate());
   while (cur <= end) {
     days.push(new Date(cur));
     cur.setDate(cur.getDate() + 1);
@@ -12410,31 +12420,39 @@ function buildDayNightBands(sessions) {
   const bands = [];
   days.forEach((day, i) => {
     const { sunrise, sunset } = getSunriseSunset(day, lat, lon);
-    const prevDay = new Date(day); prevDay.setDate(prevDay.getDate() - 1);
-    const { sunset: prevSunset } = i === 0 ? { sunset: new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0,0,0) } : getSunriseSunset(prevDay, lat, lon);
 
-    // Night: midnight → sunrise
-    bands.push({ start: new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0,0,0), end: sunrise,  isNight: true  });
-    // Day: sunrise → sunset
-    bands.push({ start: sunrise,  end: sunset,   isNight: false });
-    // Night: sunset → midnight
-    const nextMidnight = new Date(day.getFullYear(), day.getMonth(), day.getDate()+1, 0,0,0);
-    bands.push({ start: sunset, end: nextMidnight, isNight: true });
+    // Local midnight start and end of this day
+    const dayStart = day.getTime();
+    const dayEnd   = new Date(day.getFullYear(), day.getMonth(), day.getDate()+1).getTime();
+
+    // Pre-sunrise night band
+    if (sunrise.getTime() > dayStart) {
+      bands.push({ start: dayStart, end: sunrise.getTime(), isNight: true });
+    }
+    // Daytime band
+    bands.push({ start: sunrise.getTime(), end: sunset.getTime(), isNight: false });
+    // Post-sunset night band
+    if (sunset.getTime() < dayEnd) {
+      bands.push({ start: sunset.getTime(), end: dayEnd, isNight: true });
+    }
   });
 
   return bands;
 }
 
-// Convert bands to pixel-ready objects for direct canvas drawing
+// Map night bands to x-axis bar indices for canvas drawing
 function buildDayNightAnnotations(bands, labelISOs) {
   if (!bands.length || !labelISOs.length) return [];
+  // labelISOs are session_start timestamps from Supabase — parse to UTC ms
   const labelTimes = labelISOs.map(l => new Date(l).getTime());
   const nightRanges = [];
 
   bands.forEach(band => {
     if (!band.isNight) return;
-    const bs = band.start.getTime();
-    const be = band.end.getTime();
+    const bs = typeof band.start === "number" ? band.start : band.start.getTime();
+    const be = typeof band.end   === "number" ? band.end   : band.end.getTime();
+
+    // Find the first label index whose timestamp falls within this night band
     const firstIdx = labelTimes.findIndex(t => t >= bs && t < be);
     if (firstIdx === -1) return;
     let lastIdx = firstIdx;
@@ -12601,24 +12619,71 @@ function renderRmMainChart(sessions) {
   const condColor = rmChartCondition === "temp" ? "#e67e22" : rmChartCondition === "heat" ? "#c0392b" : "#2980b9";
 
   if (rmChartMode === "scatter") {
-    const onPeak  = complete.filter(s => s.is_peak  && s[condKey] != null).map(s => ({ x:s[condKey], y:s.duration_minutes }));
-    const offPeak = complete.filter(s => !s.is_peak && s[condKey] != null).map(s => ({ x:s[condKey], y:s.duration_minutes }));
+    // Line chart: session start time on x-axis, duration and condition as two lines
+    // Sort chronologically for the line to make sense
+    const sorted   = complete.filter(s => s[condKey] != null)
+                             .slice().sort((a,b) => new Date(a.session_start)-new Date(b.session_start));
+    const labels   = sorted.map(s => new Date(s.session_start).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}));
+    const durLine  = sorted.map(s => s.duration_minutes||0);
+    const condLine = sorted.map(s => s[condKey]);
+    const ptColors = sorted.map(s => s.is_peak ? "rgba(192,57,43,0.85)" : "rgba(29,158,117,0.85)");
+
     rmMainChart = new Chart(canvas, {
-      type: "scatter",
-      data: { datasets: [
-        { label:"On-Peak",  data:onPeak,  backgroundColor:"rgba(192,57,43,0.75)",  pointRadius:6, pointHoverRadius:8 },
-        { label:"Off-Peak", data:offPeak, backgroundColor:"rgba(29,158,117,0.75)", pointRadius:6, pointHoverRadius:8 },
-      ]},
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label:           "Duration (min)",
+            data:            durLine,
+            borderColor:     "rgba(29,158,117,0.9)",
+            backgroundColor: "rgba(29,158,117,0.08)",
+            pointBackgroundColor: ptColors,
+            pointBorderColor:     ptColors,
+            pointRadius:     4,
+            pointHoverRadius:6,
+            borderWidth:     2,
+            tension:         0.3,
+            fill:            true,
+            yAxisID:         "y",
+          },
+          {
+            label:           condLabel,
+            data:            condLine,
+            borderColor:     condColor,
+            backgroundColor: "transparent",
+            pointBackgroundColor: condColor,
+            pointRadius:     sorted.length > 60 ? 0 : 3,
+            borderWidth:     2,
+            tension:         0.3,
+            fill:            false,
+            yAxisID:         "y2",
+            spanGaps:        true,
+          }
+        ]
+      },
       options: {
         responsive:true, maintainAspectRatio:false,
+        interaction:{ mode:"index", intersect:false },
         plugins: {
-          legend:{display:true,position:"top",labels:{font:{size:11}}},
-          title:{display:true,text:`Cycle Duration vs ${condLabel}`,font:{size:12,weight:"500"},color:"#888780"},
-          tooltip:{callbacks:{label:ctx=>`${condLabel}: ${ctx.parsed.x} | Duration: ${ctx.parsed.y} min`}}
+          legend:{ display:true, position:"top", labels:{ font:{size:11},
+            generateLabels: () => [
+              { text:"On-Peak cycle",  fillStyle:"rgba(192,57,43,0.85)",  strokeStyle:"rgba(192,57,43,0.85)",  lineWidth:1 },
+              { text:"Off-Peak cycle", fillStyle:"rgba(29,158,117,0.85)", strokeStyle:"rgba(29,158,117,0.85)", lineWidth:1 },
+              { text:condLabel,        fillStyle:"transparent",           strokeStyle:condColor,               lineWidth:2 },
+            ]
+          }},
+          title:{ display:true, text:`Cycle Duration & ${condLabel} Over Time`, font:{size:12,weight:"500"}, color:"#888780" },
+          tooltip:{ callbacks:{
+            label: ctx => ctx.datasetIndex === 0
+              ? `Duration: ${ctx.parsed.y} min | ${sorted[ctx.dataIndex]?.is_peak ? "ON-PEAK" : "Off-Peak"}`
+              : `${condLabel}: ${ctx.parsed.y}`
+          }}
         },
         scales: {
-          x:{title:{display:true,text:condLabel,font:{size:11}},ticks:{font:{size:10}},grid:{color:"rgba(0,0,0,0.05)"}},
-          y:{title:{display:true,text:"Duration (min)",font:{size:11}},beginAtZero:true,ticks:{font:{size:10}},grid:{color:"rgba(0,0,0,0.05)"}}
+          x:  { ticks:{ maxTicksLimit:12, font:{size:9}, maxRotation:45 }, grid:{ display:false } },
+          y:  { beginAtZero:true, title:{ display:true, text:"Duration (min)", font:{size:10} }, ticks:{ font:{size:10} }, grid:{ color:"rgba(0,0,0,0.05)" } },
+          y2: { position:"right", title:{ display:true, text:condLabel, font:{size:10} }, ticks:{ font:{size:10} }, grid:{ display:false } }
         }
       }
     });
