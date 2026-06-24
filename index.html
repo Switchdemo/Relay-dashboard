@@ -12418,15 +12418,32 @@ async function loadRuntimeAnalytics() {
 // ── Live feed join ────────────────────────────────────────────────────────────────────────────────────
 async function joinFeedDataToSessions(sessions) {
   if (!sessions.length) return sessions;
-  const earliest = sessions[0].session_start;
-  const latest   = sessions[sessions.length-1].session_end || sessions[sessions.length-1].session_start;
+
+  // Normalize Supabase timestamps — they come back as "2026-06-24 00:03:28+00"
+  // (space instead of T, +00 instead of Z). new Date() handles this but URL
+  // embedding needs a clean ISO string with no spaces or + signs.
+  const toISO = ts => ts ? new Date(ts).toISOString() : null;
+
+  // Add a 2-hour buffer on each side so feed readings that straddle the
+  // session window edges are included in the nearest-timestamp lookups.
+  const firstStart = new Date(sessions[0].session_start);
+  firstStart.setHours(firstStart.getHours() - 2);
+  const lastEnd = new Date(sessions[sessions.length-1].session_end || sessions[sessions.length-1].session_start);
+  lastEnd.setHours(lastEnd.getHours() + 2);
+
+  const earliest = firstStart.toISOString();
+  const latest   = lastEnd.toISOString();
+
+  console.log("[RM Analytics] Fetching feed data:", earliest, "→", latest);
 
   const [tempRows, heatRows, humidRows, touRows] = await Promise.all([
-    supabaseGetPaged(`monitor_feed_readings?feed_key=eq.nws_temp&recorded_at=gte.${earliest}&recorded_at=lte.${latest}&order=recorded_at.asc&select=recorded_at,value`, 5000).catch(()=>[]),
-    supabaseGetPaged(`monitor_feed_readings?feed_key=eq.nws_heat_index&recorded_at=gte.${earliest}&recorded_at=lte.${latest}&order=recorded_at.asc&select=recorded_at,value`, 5000).catch(()=>[]),
-    supabaseGetPaged(`monitor_feed_readings?feed_key=eq.nws_humidity&recorded_at=gte.${earliest}&recorded_at=lte.${latest}&order=recorded_at.asc&select=recorded_at,value`, 5000).catch(()=>[]),
-    supabaseGetPaged(`monitor_feed_readings?feed_key=eq.tou_peak&recorded_at=gte.${earliest}&recorded_at=lte.${latest}&order=recorded_at.asc&select=recorded_at,value`, 5000).catch(()=>[]),
+    supabaseGetPaged(`monitor_feed_readings?feed_key=eq.nws_temp&recorded_at=gte.${earliest}&recorded_at=lte.${latest}&order=recorded_at.asc&select=recorded_at,value`, 5000).catch(e => { console.warn("nws_temp fetch:", e.message); return []; }),
+    supabaseGetPaged(`monitor_feed_readings?feed_key=eq.nws_heat_index&recorded_at=gte.${earliest}&recorded_at=lte.${latest}&order=recorded_at.asc&select=recorded_at,value`, 5000).catch(e => { console.warn("nws_heat_index fetch:", e.message); return []; }),
+    supabaseGetPaged(`monitor_feed_readings?feed_key=eq.nws_humidity&recorded_at=gte.${earliest}&recorded_at=lte.${latest}&order=recorded_at.asc&select=recorded_at,value`, 5000).catch(e => { console.warn("nws_humidity fetch:", e.message); return []; }),
+    supabaseGetPaged(`monitor_feed_readings?feed_key=eq.tou_peak&recorded_at=gte.${earliest}&recorded_at=lte.${latest}&order=recorded_at.asc&select=recorded_at,value`, 5000).catch(e => { console.warn("tou_peak fetch:", e.message); return []; }),
   ]);
+
+  console.log(`[RM Analytics] Feed rows — temp:${tempRows.length} heat:${heatRows.length} humid:${humidRows.length} tou:${touRows.length}`);
 
   const nearest = (rows, ts) => {
     if (!rows.length || !ts) return null;
@@ -12442,17 +12459,17 @@ async function joinFeedDataToSessions(sessions) {
     if (!rows.length || !s0) return null;
     if (!e0) return nearest(rows, s0);
     const s = new Date(s0).getTime(), e = new Date(e0).getTime();
-    const ir = rows.filter(r => { const t=new Date(r.recorded_at).getTime(); return t>=s&&t<=e; });
-    if (!ir.length) return nearest(rows, s0);
-    return parseFloat((ir.reduce((a,r)=>a+parseFloat(r.value||0),0)/ir.length).toFixed(1));
+    const ir = rows.filter(r => { const t = new Date(r.recorded_at).getTime(); return t >= s && t <= e; });
+    if (!ir.length) return nearest(rows, s0); // fallback to nearest if nothing in range
+    return parseFloat((ir.reduce((a,r) => a + parseFloat(r.value||0), 0) / ir.length).toFixed(1));
   };
 
   return sessions.map(s => ({
     ...s,
-    temp_avg:        rangeAvg(tempRows,  s.session_start, s.session_end),
-    heat_index_avg:  rangeAvg(heatRows,  s.session_start, s.session_end),
-    humidity_avg:    rangeAvg(humidRows, s.session_start, s.session_end),
-    is_peak:         (nearest(touRows, s.session_start) == 1),
+    temp_avg:       rangeAvg(tempRows,  s.session_start, s.session_end),
+    heat_index_avg: rangeAvg(heatRows,  s.session_start, s.session_end),
+    humidity_avg:   rangeAvg(humidRows, s.session_start, s.session_end),
+    is_peak:        (nearest(touRows, s.session_start) == 1),
   }));
 }
 
