@@ -7,7 +7,49 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+<script>
+// Minimal inline annotation plugin — draws background box bands on Chart.js charts.
+// Avoids CDN dependency on chartjs-plugin-annotation which can break page load
+// if there is a version conflict or network failure.
+(function() {
+  const annotationPlugin = {
+    id: "annotationBoxes",
+    beforeDraw(chart, args, options) {
+      const annotations = chart.config?.options?.plugins?.annotation?.annotations;
+      if (!annotations || !Object.keys(annotations).length) return;
+      const { ctx, chartArea, scales } = chart;
+      if (!chartArea) return;
+      ctx.save();
+      Object.values(annotations).forEach(ann => {
+        if (ann.type !== "box") return;
+        const xScale = scales.x;
+        if (!xScale) return;
+        const x1 = xScale.getPixelForValue(ann.xMin);
+        const x2 = xScale.getPixelForValue(ann.xMax);
+        const y1 = chartArea.top;
+        const y2 = chartArea.bottom;
+        ctx.fillStyle = ann.backgroundColor || "rgba(0,0,0,0.05)";
+        ctx.fillRect(Math.min(x1,x2), y1, Math.abs(x2-x1), y2-y1);
+        // Optional moon label
+        if (ann.label?.display && ann.label?.content) {
+          ctx.fillStyle = ann.label.color || "rgba(100,100,160,0.5)";
+          ctx.font = `${ann.label.font?.size||10}px sans-serif`;
+          ctx.fillText(ann.label.content, Math.min(x1,x2)+2, y1+12);
+        }
+      });
+      ctx.restore();
+    }
+  };
+  if (typeof Chart !== "undefined") {
+    Chart.register(annotationPlugin);
+  } else {
+    // Chart.js not loaded yet — register after page load
+    window.addEventListener("load", () => {
+      if (typeof Chart !== "undefined") Chart.register(annotationPlugin);
+    });
+  }
+})();
+</script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
