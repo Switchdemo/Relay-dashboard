@@ -7,49 +7,6 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script>
-// Minimal inline annotation plugin — draws background box bands on Chart.js charts.
-// Avoids CDN dependency on chartjs-plugin-annotation which can break page load
-// if there is a version conflict or network failure.
-(function() {
-  const annotationPlugin = {
-    id: "annotationBoxes",
-    beforeDraw(chart, args, options) {
-      const annotations = chart.config?.options?.plugins?.annotation?.annotations;
-      if (!annotations || !Object.keys(annotations).length) return;
-      const { ctx, chartArea, scales } = chart;
-      if (!chartArea) return;
-      ctx.save();
-      Object.values(annotations).forEach(ann => {
-        if (ann.type !== "box") return;
-        const xScale = scales.x;
-        if (!xScale) return;
-        const x1 = xScale.getPixelForValue(ann.xMin);
-        const x2 = xScale.getPixelForValue(ann.xMax);
-        const y1 = chartArea.top;
-        const y2 = chartArea.bottom;
-        ctx.fillStyle = ann.backgroundColor || "rgba(0,0,0,0.05)";
-        ctx.fillRect(Math.min(x1,x2), y1, Math.abs(x2-x1), y2-y1);
-        // Optional moon label
-        if (ann.label?.display && ann.label?.content) {
-          ctx.fillStyle = ann.label.color || "rgba(100,100,160,0.5)";
-          ctx.font = `${ann.label.font?.size||10}px sans-serif`;
-          ctx.fillText(ann.label.content, Math.min(x1,x2)+2, y1+12);
-        }
-      });
-      ctx.restore();
-    }
-  };
-  if (typeof Chart !== "undefined") {
-    Chart.register(annotationPlugin);
-  } else {
-    // Chart.js not loaded yet — register after page load
-    window.addEventListener("load", () => {
-      if (typeof Chart !== "undefined") Chart.register(annotationPlugin);
-    });
-  }
-})();
-</script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -12468,20 +12425,16 @@ function buildDayNightBands(sessions) {
   return bands;
 }
 
-// Convert bands into Chart.js annotation plugin boxes indexed by label
-function buildDayNightAnnotations(bands, xLabels) {
-  if (!bands.length || !xLabels.length) return {};
-  const annotations = {};
-  // We need to map time positions to x-axis label indices
-  // Each label represents a session start time — map label index to timestamp
-  const labelTimes = xLabels.map(l => new Date(l).getTime());
+// Convert bands to pixel-ready objects for direct canvas drawing
+function buildDayNightAnnotations(bands, labelISOs) {
+  if (!bands.length || !labelISOs.length) return [];
+  const labelTimes = labelISOs.map(l => new Date(l).getTime());
+  const nightRanges = [];
 
-  bands.forEach((band, i) => {
-    if (!band.isNight) return; // only shade night, leave day transparent
+  bands.forEach(band => {
+    if (!band.isNight) return;
     const bs = band.start.getTime();
     const be = band.end.getTime();
-
-    // Find label indices that fall within this night band
     const firstIdx = labelTimes.findIndex(t => t >= bs && t < be);
     if (firstIdx === -1) return;
     let lastIdx = firstIdx;
@@ -12489,27 +12442,10 @@ function buildDayNightAnnotations(bands, xLabels) {
       if (labelTimes[j] < be) lastIdx = j;
       else break;
     }
-
-    annotations[`night_${i}`] = {
-      type:        "box",
-      xMin:        Math.max(0, firstIdx - 0.5),
-      xMax:        lastIdx + 0.5,
-      yMin:        0,
-      yMax:        "max",
-      backgroundColor: "rgba(30,30,60,0.10)",
-      borderWidth: 0,
-      label: {
-        display:    true,
-        content:    "🌙",
-        position:   { x: "start", y: "start" },
-        font:       { size: 10 },
-        color:      "rgba(100,100,160,0.5)",
-        padding:    2
-      }
-    };
+    nightRanges.push({ xMin: Math.max(0, firstIdx - 0.5), xMax: lastIdx + 0.5 });
   });
 
-  return annotations;
+  return nightRanges;
 }
 
 function switchRmChart(mode, el) {
@@ -12726,15 +12662,39 @@ function renderRmMainChart(sessions) {
     const condData = complete.map(s => s[condKey]);
     const colors   = complete.map(s => s.is_peak ? "rgba(192,57,43,0.7)" : "rgba(29,158,117,0.6)");
 
-    // Build day/night annotations if toggle is on
-    let annotations = {};
+    // Build day/night bands if toggle is on
+    let nightRanges = [];
     if (rmShowDayNight) {
       const bands = buildDayNightBands(complete);
-      annotations = buildDayNightAnnotations(bands, labelISOs);
+      nightRanges = buildDayNightAnnotations(bands, labelISOs);
     }
+
+    // Inline beforeDraw plugin — draws night shading directly on canvas
+    // No external plugin dependency required
+    const dayNightPlugin = {
+      id: "dayNightShading",
+      beforeDraw(chart) {
+        if (!nightRanges.length) return;
+        const { ctx, chartArea, scales } = chart;
+        if (!chartArea || !scales.x) return;
+        ctx.save();
+        nightRanges.forEach(range => {
+          const x1 = scales.x.getPixelForValue(range.xMin);
+          const x2 = scales.x.getPixelForValue(range.xMax);
+          ctx.fillStyle = "rgba(20,20,60,0.09)";
+          ctx.fillRect(Math.min(x1,x2), chartArea.top, Math.abs(x2-x1), chartArea.bottom - chartArea.top);
+          // Moon emoji at top of band
+          ctx.font = "10px sans-serif";
+          ctx.fillStyle = "rgba(80,80,140,0.5)";
+          ctx.fillText("🌙", Math.min(x1,x2)+2, chartArea.top + 12);
+        });
+        ctx.restore();
+      }
+    };
 
     rmMainChart = new Chart(canvas, {
       type:"bar",
+      plugins: rmShowDayNight ? [dayNightPlugin] : [],
       data:{
         labels,
         datasets:[
@@ -12745,14 +12705,13 @@ function renderRmMainChart(sessions) {
       options:{
         responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
         plugins:{
-          annotation: { annotations },
           legend:{display:true,position:"top",labels:{font:{size:11},generateLabels:()=>[
             {text:"On-Peak cycle",fillStyle:"rgba(192,57,43,0.7)",strokeStyle:"rgba(192,57,43,0.7)",lineWidth:1},
             {text:"Off-Peak cycle",fillStyle:"rgba(29,158,117,0.6)",strokeStyle:"rgba(29,158,117,0.6)",lineWidth:1},
             {text:condLabel,fillStyle:"transparent",strokeStyle:condColor,lineWidth:2},
-            ...(rmShowDayNight ? [{text:"Night period",fillStyle:"rgba(30,30,60,0.10)",strokeStyle:"rgba(100,100,160,0.4)",lineWidth:1}] : [])
+            ...(rmShowDayNight?[{text:"Night period",fillStyle:"rgba(20,20,60,0.09)",strokeStyle:"rgba(80,80,140,0.4)",lineWidth:1}]:[])
           ]}},
-          title:{display:true,text:"Cycle Timeline — Duration & "+condLabel+(rmShowDayNight?" (🌙 day/night)":""),font:{size:12,weight:"500"},color:"#888780"},
+          title:{display:true,text:"Cycle Timeline — Duration & "+condLabel+(rmShowDayNight?" 🌙":""),font:{size:12,weight:"500"},color:"#888780"},
           tooltip:{callbacks:{label:ctx=>ctx.datasetIndex===0?`Duration: ${ctx.parsed.y} min | ${complete[ctx.dataIndex]?.is_peak?"ON-PEAK":"Off-Peak"}`:`${condLabel}: ${ctx.parsed.y}`}}
         },
         scales:{
