@@ -570,9 +570,14 @@
   .rm-mode-tile:hover { border-color:var(--blue-dark); }
   .rm-mode-tile.selected { border-color:var(--blue-dark);background:var(--blue-lt,#eff6ff); }
   .rm-mode-panel { display:none; }
-  .rm-session-row { display:grid;grid-template-columns:130px 130px 70px 80px 80px 1fr;gap:8px;padding:7px 10px;border-radius:var(--radius-sm);border-bottom:0.5px solid var(--border);font-size:11px;align-items:center; }
+  .rm-chart-toggle { padding:5px 11px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:11px;cursor:pointer;color:var(--text-secondary);transition:all .12s; }
+  .rm-chart-toggle:hover { border-color:var(--blue-dark);color:var(--blue-dark); }
+  .rm-chart-toggle.active { border-color:var(--blue-dark);background:var(--blue-lt,#eff6ff);color:var(--blue-dark);font-weight:600; }
+  .rm-session-row { display:grid;grid-template-columns:140px 80px 70px 65px 65px 65px 65px 70px;gap:6px;padding:6px 10px;border-radius:var(--radius-sm);border-bottom:0.5px solid var(--border);font-size:11px;align-items:center; }
   .rm-session-row:hover { background:var(--surface2); }
-  .rm-session-header { font-weight:700;color:var(--text-hint);font-size:10px;text-transform:uppercase;letter-spacing:.04em; }
+  .rm-session-header { font-weight:700;color:var(--text-hint);font-size:10px;text-transform:uppercase;letter-spacing:.04em;background:var(--surface2);border-radius:var(--radius-sm); }
+  .rm-daily-row { display:grid;grid-template-columns:110px 60px 80px 80px 70px 70px 70px 80px;gap:6px;padding:6px 10px;border-radius:var(--radius-sm);border-bottom:0.5px solid var(--border);font-size:11px;align-items:center; }
+  .rm-daily-row:hover { background:var(--surface2); }
   .rm-trigger-card { border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px;background:var(--surface);margin-bottom:8px;display:flex;align-items:center;gap:12px; }
   .rm-sched-card  { border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:12px;background:var(--surface);margin-bottom:8px;display:flex;align-items:center;gap:12px; }
 
@@ -4706,11 +4711,11 @@
       <div class="sched-card">
         <div class="sched-card-header">
           <div class="sched-card-title">📊 Runtime Analytics</div>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <select id="rm-analytics-device" style="padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
-              <option value="">All Devices</option>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <select id="rm-analytics-device" onchange="loadRuntimeAnalytics()" style="padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="">-- Select Device --</option>
             </select>
-            <select id="rm-analytics-range" style="padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+            <select id="rm-analytics-range" onchange="loadRuntimeAnalytics()" style="padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
               <option value="1">Today</option>
               <option value="7" selected>Last 7 days</option>
               <option value="30">Last 30 days</option>
@@ -4721,23 +4726,48 @@
           </div>
         </div>
 
-        <!-- KPI tiles -->
-        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:14px;">
+        <!-- KPI tiles — expanded with correlated feed values -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">
           <div class="ev-meter-tile"><div class="ev-meter-val" id="rm-kpi-sessions">—</div><div class="ev-meter-lbl">Sessions</div></div>
-          <div class="ev-meter-tile"><div class="ev-meter-val" id="rm-kpi-total-hrs" style="color:var(--blue-dark);">—</div><div class="ev-meter-lbl">Total Hrs</div></div>
-          <div class="ev-meter-tile"><div class="ev-meter-val" id="rm-kpi-avg-dur" style="color:var(--green-dark);">—</div><div class="ev-meter-lbl">Avg Duration</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="rm-kpi-total-hrs" style="color:var(--blue-dark);">—</div><div class="ev-meter-lbl">Total Runtime</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="rm-kpi-avg-dur" style="color:var(--green-dark);">—</div><div class="ev-meter-lbl">Avg Cycle</div></div>
           <div class="ev-meter-tile"><div class="ev-meter-val" id="rm-kpi-longest" style="color:var(--amber);">—</div><div class="ev-meter-lbl">Longest Run</div></div>
-          <div class="ev-meter-tile"><div class="ev-meter-val" id="rm-kpi-feed-avg" style="color:var(--red);">—</div><div class="ev-meter-lbl">Avg Feed Val</div></div>
-          <div class="ev-meter-tile"><div class="ev-meter-val" id="rm-kpi-devices">—</div><div class="ev-meter-lbl">Devices</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="rm-kpi-avg-temp" style="color:var(--red);">—</div><div class="ev-meter-lbl">Avg Temp (°F)</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="rm-kpi-avg-heat" style="color:var(--amber);">—</div><div class="ev-meter-lbl">Avg Heat Index</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="rm-kpi-avg-humidity" style="color:var(--blue-dark);">—</div><div class="ev-meter-lbl">Avg Humidity (%)</div></div>
+          <div class="ev-meter-tile"><div class="ev-meter-val" id="rm-kpi-peak-pct" style="color:var(--purple,#7c3aed);">—</div><div class="ev-meter-lbl">On-Peak Sessions</div></div>
         </div>
 
-        <!-- Chart -->
-        <div style="position:relative;height:260px;width:100%;margin-bottom:14px;">
-          <canvas id="rm-runtime-chart"></canvas>
+        <!-- Chart toggle -->
+        <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
+          <span style="font-size:11px;color:var(--text-hint);margin-right:4px;">Chart view:</span>
+          <button class="rm-chart-toggle active" id="rm-toggle-timeline" onclick="switchRmChart('timeline',this)">📅 Daily Timeline</button>
+          <button class="rm-chart-toggle" id="rm-toggle-scatter" onclick="switchRmChart('scatter',this)">🔵 Scatter — Duration vs Condition</button>
+          <button class="rm-chart-toggle" id="rm-toggle-daily" onclick="switchRmChart('daily',this)">📊 Daily Summary</button>
+          <span style="font-size:11px;color:var(--text-hint);margin-left:auto;">Condition:</span>
+          <button class="rm-chart-toggle active" id="rm-cond-temp" onclick="switchRmCondition('temp',this)">🌡️ Temp</button>
+          <button class="rm-chart-toggle" id="rm-cond-heat" onclick="switchRmCondition('heat',this)">🔥 Heat Index</button>
+          <button class="rm-chart-toggle" id="rm-cond-humidity" onclick="switchRmCondition('humidity',this)">💧 Humidity</button>
         </div>
 
-        <!-- Session table -->
-        <div id="rm-sessions-table"><div class="sched-empty">Load analytics to see session history.</div></div>
+        <!-- Chart canvas -->
+        <div style="position:relative;height:300px;width:100%;margin-bottom:14px;">
+          <canvas id="rm-main-chart"></canvas>
+        </div>
+
+        <!-- Daily summary table -->
+        <div id="rm-daily-summary" style="margin-bottom:14px;display:none;">
+          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Daily Summary</div>
+          <div id="rm-daily-table"></div>
+        </div>
+
+        <!-- Session detail table -->
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Session Detail</div>
+          <div id="rm-sessions-table"><div class="sched-empty">Select a device and click Refresh to load analytics.</div></div>
+        </div>
       </div>
 
       <!-- ── SECTION 6: Backfill ── -->
@@ -11602,25 +11632,27 @@ function populateRmFeedSelects() {
 
 // ── Device select population ───────────────────────────────────────────────────
 function populateRmDeviceSelects() {
-  const relayDevs = (DEVICES || []).filter(d => !d.type || d.type === "relay");
+  const relayDevs  = (DEVICES || []).filter(d => !d.type || d.type === "relay");
   const deviceOpts = relayDevs.map(d => `<option value="${d.uid}">${d.name}</option>`).join("");
-  const groupOpts  = Object.entries(groupNames || {})
-    .sort(([a],[b]) => parseInt(a)-parseInt(b))
-    .map(([n,name]) => `<option value="group_${n}">Group ${n}: ${name}</option>`).join("");
 
-  ["rm-manual-target-type","rm-sched-target-type","rm-trig-target-type"].forEach(ttId => {
-    // onchange handlers are inline; just ensure they exist
-  });
-
-  // Analytics device selector
+  // Analytics device dropdown — single device selection
   const aDevEl = document.getElementById("rm-analytics-device");
   if (aDevEl) {
-    aDevEl.innerHTML = `<option value="">All Devices</option>` + deviceOpts;
+    const prev = aDevEl.value;
+    aDevEl.innerHTML = `<option value="">-- Select Device --</option>` + deviceOpts;
+    if (prev) aDevEl.value = prev;
   }
-  // Backfill device selector
+  // Backfill device dropdown
   const bDevEl = document.getElementById("rm-backfill-device");
   if (bDevEl) {
+    const prev = bDevEl.value;
     bDevEl.innerHTML = `<option value="">All Devices</option>` + deviceOpts;
+    if (prev) bDevEl.value = prev;
+  }
+  // Manual target relay device for relay fallback thermostat
+  const relayDev = document.getElementById("therm-relay-device");
+  if (relayDev) {
+    relayDev.innerHTML = `<option value="">-- Select relay device --</option>` + deviceOpts;
   }
 }
 
@@ -12301,138 +12333,329 @@ async function sendRmCmd(action, uid, source) {
 }
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
+// ── Chart toggle controls ──────────────────────────────────────────────────────────────────────────────
+function switchRmChart(mode, el) {
+  rmChartMode = mode;
+  document.querySelectorAll(".rm-chart-toggle[id^='rm-toggle']").forEach(b => b.classList.remove("active"));
+  if (el) el.classList.add("active");
+  const dailySumEl = document.getElementById("rm-daily-summary");
+  if (dailySumEl) dailySumEl.style.display = mode === "daily" ? "block" : "none";
+  renderRmMainChart(rmAnalyticsSessions);
+}
+
+function switchRmCondition(cond, el) {
+  rmChartCondition = cond;
+  document.querySelectorAll(".rm-chart-toggle[id^='rm-cond']").forEach(b => b.classList.remove("active"));
+  if (el) el.classList.add("active");
+  renderRmMainChart(rmAnalyticsSessions);
+}
+
+// ── Main analytics loader ─────────────────────────────────────────────────────────────────────────────
 async function loadRuntimeAnalytics() {
   const deviceFilter = document.getElementById("rm-analytics-device")?.value;
   const rangeDays    = parseInt(document.getElementById("rm-analytics-range")?.value || "7");
   const since        = new Date(Date.now() - rangeDays * 864e5).toISOString();
   const tableEl      = document.getElementById("rm-sessions-table");
 
+  if (!deviceFilter) {
+    if (tableEl) tableEl.innerHTML = '<div class="sched-empty">Select a device from the dropdown to load analytics.</div>';
+    return;
+  }
   if (tableEl) tableEl.innerHTML = '<div class="sched-empty">Loading…</div>';
-
-  let query = `equipment_runtime_sessions?session_start=gte.${since}&order=session_start.desc`;
-  if (deviceFilter) query += `&device_uid=eq.${encodeURIComponent(deviceFilter)}`;
 
   let sessions = [];
   try {
-    sessions = await supabaseGetPaged(query, 5000);
+    sessions = await supabaseGetPaged(
+      `equipment_runtime_sessions?device_uid=eq.${encodeURIComponent(deviceFilter)}&session_start=gte.${since}&order=session_start.asc`,
+      5000
+    );
     if (!Array.isArray(sessions)) sessions = [];
   } catch(e) {
-    if (tableEl) tableEl.innerHTML = `<div class="sched-empty">Error loading sessions: ${e.message}</div>`;
-    console.error("loadRuntimeAnalytics:", e);
+    if (tableEl) tableEl.innerHTML = `<div class="sched-empty">Error: ${e.message}</div>`;
     return;
   }
 
   if (!sessions.length) {
-    if (tableEl) tableEl.innerHTML = '<div class="sched-empty">No sessions found. Run the Historical Backfill below to populate session data from device_readings.</div>';
-    // Still update KPIs to zero
+    if (tableEl) tableEl.innerHTML = '<div class="sched-empty">No sessions found for this device in the selected range. Run the Historical Backfill below to populate session data.</div>';
     const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
-    set("rm-kpi-sessions", 0); set("rm-kpi-total-hrs", "0 h");
-    set("rm-kpi-avg-dur", "—"); set("rm-kpi-longest", "—");
-    set("rm-kpi-feed-avg", "—"); set("rm-kpi-devices", 0);
+    ["rm-kpi-sessions","rm-kpi-total-hrs","rm-kpi-avg-dur","rm-kpi-longest",
+     "rm-kpi-avg-temp","rm-kpi-avg-heat","rm-kpi-avg-humidity","rm-kpi-peak-pct"
+    ].forEach(id => set(id, "—"));
     return;
   }
 
-  // KPIs
+  // Live join feed data
+  if (tableEl) tableEl.innerHTML = '<div class="sched-empty">Correlating feed data…</div>';
+  sessions = await joinFeedDataToSessions(sessions);
+  rmAnalyticsSessions = sessions;
+
   const complete  = sessions.filter(s => s.session_end && s.duration_minutes != null);
-  const totalHrs  = complete.reduce((s,r) => s + (r.duration_minutes||0), 0) / 60;
-  const avgDur    = complete.length ? (complete.reduce((s,r) => s + (r.duration_minutes||0), 0) / complete.length) : 0;
+  const totalMins = complete.reduce((s,r) => s + (r.duration_minutes||0), 0);
+  const avgDur    = complete.length ? totalMins / complete.length : 0;
   const longest   = complete.length ? Math.max(...complete.map(r => r.duration_minutes||0)) : 0;
-  const feedVals  = complete.map(r => r.feed_value_avg).filter(v => v != null);
-  const avgFeed   = feedVals.length ? feedVals.reduce((a,b) => a+b, 0) / feedVals.length : null;
-  const devices   = new Set(sessions.map(s => s.device_uid)).size;
-  const feedLabel = (FEED_DEFS||{})[rmSettings.feed_key]?.label || "Feed";
-  const feedUnit  = (FEED_DEFS||{})[rmSettings.feed_key]?.unit  || "";
+  const temps     = sessions.map(s => s.temp_avg).filter(v => v != null);
+  const heats     = sessions.map(s => s.heat_index_avg).filter(v => v != null);
+  const humids    = sessions.map(s => s.humidity_avg).filter(v => v != null);
+  const peakSess  = sessions.filter(s => s.is_peak).length;
+  const avg       = arr => arr.length ? (arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(1) : null;
+  const peakPct   = sessions.length ? Math.round(peakSess/sessions.length*100) : 0;
 
   const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
-  set("rm-kpi-sessions",   sessions.length);
-  set("rm-kpi-total-hrs",  totalHrs.toFixed(1) + " h");
-  set("rm-kpi-avg-dur",    avgDur < 60 ? Math.round(avgDur) + " min" : (avgDur/60).toFixed(1) + " h");
-  set("rm-kpi-longest",    longest < 60 ? longest + " min" : (longest/60).toFixed(1) + " h");
-  set("rm-kpi-feed-avg",   avgFeed != null ? avgFeed.toFixed(1) + " " + feedUnit : "—");
-  set("rm-kpi-devices",    devices);
+  set("rm-kpi-sessions",     sessions.length);
+  set("rm-kpi-total-hrs",    totalMins < 60 ? Math.round(totalMins)+" min" : (totalMins/60).toFixed(1)+" h");
+  set("rm-kpi-avg-dur",      avgDur < 60 ? Math.round(avgDur)+" min" : (avgDur/60).toFixed(1)+" h");
+  set("rm-kpi-longest",      longest < 60 ? longest+" min" : (longest/60).toFixed(1)+" h");
+  set("rm-kpi-avg-temp",     avg(temps)  ? avg(temps)+"°F"  : "—");
+  set("rm-kpi-avg-heat",     avg(heats)  ? avg(heats)+"°F"  : "—");
+  set("rm-kpi-avg-humidity", avg(humids) ? avg(humids)+"%" : "—");
+  set("rm-kpi-peak-pct",     `${peakSess} (${peakPct}%)`);
 
-  await renderRmChart(sessions, rangeDays);
-  renderRmSessionTable(sessions, feedLabel, feedUnit);
+  renderRmMainChart(sessions);
+  renderRmDailySummary(sessions, rangeDays);
+  renderRmSessionTable(sessions);
 }
 
-async function renderRmChart(sessions, rangeDays) {
-  const canvas = document.getElementById("rm-runtime-chart");
-  if (!canvas) return;
-  if (typeof Chart === "undefined") return;
+// ── Live feed join ────────────────────────────────────────────────────────────────────────────────────
+async function joinFeedDataToSessions(sessions) {
+  if (!sessions.length) return sessions;
+  const earliest = sessions[0].session_start;
+  const latest   = sessions[sessions.length-1].session_end || sessions[sessions.length-1].session_start;
 
-  // Build daily totals
-  const days = [];
-  for (let i = rangeDays - 1; i >= 0; i--) {
-    const d = new Date(Date.now() - i * 864e5);
-    days.push(d.toISOString().split("T")[0]);
-  }
-  const daily = {};
-  days.forEach(d => daily[d] = 0);
-  sessions.forEach(s => {
-    const day = (s.session_start||"").split("T")[0];
-    if (daily[day] !== undefined) daily[day] += (s.duration_minutes||0) / 60;
-  });
+  const [tempRows, heatRows, humidRows, touRows] = await Promise.all([
+    supabaseGetPaged(`monitor_feed_readings?feed_key=eq.nws_temp&recorded_at=gte.${earliest}&recorded_at=lte.${latest}&order=recorded_at.asc&select=recorded_at,value`, 5000).catch(()=>[]),
+    supabaseGetPaged(`monitor_feed_readings?feed_key=eq.nws_heat_index&recorded_at=gte.${earliest}&recorded_at=lte.${latest}&order=recorded_at.asc&select=recorded_at,value`, 5000).catch(()=>[]),
+    supabaseGetPaged(`monitor_feed_readings?feed_key=eq.nws_humidity&recorded_at=gte.${earliest}&recorded_at=lte.${latest}&order=recorded_at.asc&select=recorded_at,value`, 5000).catch(()=>[]),
+    supabaseGetPaged(`monitor_feed_readings?feed_key=eq.tou_peak&recorded_at=gte.${earliest}&recorded_at=lte.${latest}&order=recorded_at.asc&select=recorded_at,value`, 5000).catch(()=>[]),
+  ]);
 
-  if (rmRuntimeChart) { try { rmRuntimeChart.destroy(); } catch(e) {} rmRuntimeChart = null; }
-  rmRuntimeChart = new Chart(canvas, {
-    type: "bar",
-    data: {
-      labels: days.map(d => { const dt = new Date(d+"T12:00:00"); return dt.toLocaleDateString([],{month:"short",day:"numeric"}); }),
-      datasets: [{
-        label: "Runtime (hrs)",
-        data: days.map(d => parseFloat(daily[d].toFixed(2))),
-        backgroundColor: "rgba(29,158,117,0.6)",
-        borderColor: "#1D9E75",
-        borderWidth: 1,
-        borderRadius: 3,
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.parsed.y.toFixed(2)} hrs` } } },
-      scales: {
-        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
-        y: { beginAtZero: true, ticks: { font: { size: 10 }, callback: v => v + " h" } }
-      }
+  const nearest = (rows, ts) => {
+    if (!rows.length || !ts) return null;
+    const t = new Date(ts).getTime();
+    let best = rows[0];
+    for (const r of rows) {
+      if (Math.abs(new Date(r.recorded_at).getTime()-t) < Math.abs(new Date(best.recorded_at).getTime()-t)) best = r;
     }
-  });
+    return best?.value != null ? parseFloat(best.value) : null;
+  };
+
+  const rangeAvg = (rows, s0, e0) => {
+    if (!rows.length || !s0) return null;
+    if (!e0) return nearest(rows, s0);
+    const s = new Date(s0).getTime(), e = new Date(e0).getTime();
+    const ir = rows.filter(r => { const t=new Date(r.recorded_at).getTime(); return t>=s&&t<=e; });
+    if (!ir.length) return nearest(rows, s0);
+    return parseFloat((ir.reduce((a,r)=>a+parseFloat(r.value||0),0)/ir.length).toFixed(1));
+  };
+
+  return sessions.map(s => ({
+    ...s,
+    temp_avg:        rangeAvg(tempRows,  s.session_start, s.session_end),
+    heat_index_avg:  rangeAvg(heatRows,  s.session_start, s.session_end),
+    humidity_avg:    rangeAvg(humidRows, s.session_start, s.session_end),
+    is_peak:         (nearest(touRows, s.session_start) == 1),
+  }));
 }
 
-function renderRmSessionTable(sessions, feedLabel, feedUnit) {
+// ── Main chart ─────────────────────────────────────────────────────────────────────────────────────────
+function renderRmMainChart(sessions) {
+  const canvas = document.getElementById("rm-main-chart");
+  if (!canvas || typeof Chart === "undefined") return;
+  if (rmMainChart) { try { rmMainChart.destroy(); } catch(e) {} rmMainChart = null; }
+
+  const complete = sessions.filter(s => s.session_end && s.duration_minutes != null);
+  if (!complete.length) return;
+
+  const condKey   = rmChartCondition === "temp" ? "temp_avg" : rmChartCondition === "heat" ? "heat_index_avg" : "humidity_avg";
+  const condLabel = rmChartCondition === "temp" ? "Temperature (°F)" : rmChartCondition === "heat" ? "Heat Index (°F)" : "Humidity (%)";
+  const condColor = rmChartCondition === "temp" ? "#e67e22" : rmChartCondition === "heat" ? "#c0392b" : "#2980b9";
+
+  if (rmChartMode === "scatter") {
+    const onPeak  = complete.filter(s => s.is_peak  && s[condKey] != null).map(s => ({ x:s[condKey], y:s.duration_minutes }));
+    const offPeak = complete.filter(s => !s.is_peak && s[condKey] != null).map(s => ({ x:s[condKey], y:s.duration_minutes }));
+    rmMainChart = new Chart(canvas, {
+      type: "scatter",
+      data: { datasets: [
+        { label:"On-Peak",  data:onPeak,  backgroundColor:"rgba(192,57,43,0.75)",  pointRadius:6, pointHoverRadius:8 },
+        { label:"Off-Peak", data:offPeak, backgroundColor:"rgba(29,158,117,0.75)", pointRadius:6, pointHoverRadius:8 },
+      ]},
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins: {
+          legend:{display:true,position:"top",labels:{font:{size:11}}},
+          title:{display:true,text:`Cycle Duration vs ${condLabel}`,font:{size:12,weight:"500"},color:"#888780"},
+          tooltip:{callbacks:{label:ctx=>`${condLabel}: ${ctx.parsed.x} | Duration: ${ctx.parsed.y} min`}}
+        },
+        scales: {
+          x:{title:{display:true,text:condLabel,font:{size:11}},ticks:{font:{size:10}},grid:{color:"rgba(0,0,0,0.05)"}},
+          y:{title:{display:true,text:"Duration (min)",font:{size:11}},beginAtZero:true,ticks:{font:{size:10}},grid:{color:"rgba(0,0,0,0.05)"}}
+        }
+      }
+    });
+
+  } else if (rmChartMode === "daily") {
+    const rangeDays = parseInt(document.getElementById("rm-analytics-range")?.value || "7");
+    const days = [];
+    for (let i=rangeDays-1;i>=0;i--) { const d=new Date(Date.now()-i*864e5); days.push(d.toISOString().split("T")[0]); }
+    const daily = {};
+    days.forEach(d => daily[d] = {mins:0, conds:[]});
+    complete.forEach(s => {
+      const day = s.session_start.split("T")[0];
+      if (daily[day]) { daily[day].mins += s.duration_minutes||0; if (s[condKey]!=null) daily[day].conds.push(s[condKey]); }
+    });
+    rmMainChart = new Chart(canvas, {
+      type:"bar",
+      data:{
+        labels:days.map(d=>{const dt=new Date(d+"T12:00:00");return dt.toLocaleDateString([],{month:"short",day:"numeric"});}),
+        datasets:[
+          {label:"Runtime (hrs)",data:days.map(d=>parseFloat((daily[d].mins/60).toFixed(2))),backgroundColor:"rgba(29,158,117,0.6)",borderColor:"#1D9E75",borderWidth:1,borderRadius:3,yAxisID:"y"},
+          {label:condLabel,data:days.map(d=>daily[d].conds.length?parseFloat((daily[d].conds.reduce((a,b)=>a+b,0)/daily[d].conds.length).toFixed(1)):null),type:"line",borderColor:condColor,backgroundColor:"transparent",pointRadius:3,pointBackgroundColor:condColor,borderWidth:2,yAxisID:"y2",spanGaps:true}
+        ]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+        plugins:{legend:{display:true,position:"top",labels:{font:{size:11}}},title:{display:true,text:"Daily Runtime vs "+condLabel,font:{size:12,weight:"500"},color:"#888780"}},
+        scales:{
+          x:{grid:{display:false},ticks:{font:{size:10}}},
+          y:{beginAtZero:true,title:{display:true,text:"Runtime (hrs)",font:{size:10}},ticks:{font:{size:10},callback:v=>v+"h"}},
+          y2:{position:"right",title:{display:true,text:condLabel,font:{size:10}},ticks:{font:{size:10}},grid:{display:false}}
+        }
+      }
+    });
+
+  } else {
+    // Timeline
+    const labels   = complete.map(s => new Date(s.session_start).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}));
+    const durData  = complete.map(s => s.duration_minutes||0);
+    const condData = complete.map(s => s[condKey]);
+    const colors   = complete.map(s => s.is_peak ? "rgba(192,57,43,0.7)" : "rgba(29,158,117,0.6)");
+    rmMainChart = new Chart(canvas, {
+      type:"bar",
+      data:{
+        labels,
+        datasets:[
+          {label:"Duration (min)",data:durData,backgroundColor:colors,borderRadius:2,yAxisID:"y"},
+          {label:condLabel,data:condData,type:"line",borderColor:condColor,backgroundColor:"transparent",pointRadius:complete.length>50?0:3,pointBackgroundColor:condColor,borderWidth:2,yAxisID:"y2",spanGaps:true}
+        ]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+        plugins:{
+          legend:{display:true,position:"top",labels:{font:{size:11},generateLabels:()=>[
+            {text:"On-Peak cycle",fillStyle:"rgba(192,57,43,0.7)",strokeStyle:"rgba(192,57,43,0.7)",lineWidth:1},
+            {text:"Off-Peak cycle",fillStyle:"rgba(29,158,117,0.6)",strokeStyle:"rgba(29,158,117,0.6)",lineWidth:1},
+            {text:condLabel,fillStyle:"transparent",strokeStyle:condColor,lineWidth:2}
+          ]}},
+          title:{display:true,text:"Cycle Timeline — Duration & "+condLabel,font:{size:12,weight:"500"},color:"#888780"},
+          tooltip:{callbacks:{label:ctx=>ctx.datasetIndex===0?`Duration: ${ctx.parsed.y} min | ${complete[ctx.dataIndex]?.is_peak?"ON-PEAK":"Off-Peak"}`:`${condLabel}: ${ctx.parsed.y}`}}
+        },
+        scales:{
+          x:{ticks:{maxTicksLimit:12,font:{size:9},maxRotation:45},grid:{display:false}},
+          y:{beginAtZero:true,title:{display:true,text:"Duration (min)",font:{size:10}},ticks:{font:{size:10}}},
+          y2:{position:"right",title:{display:true,text:condLabel,font:{size:10}},ticks:{font:{size:10}},grid:{display:false}}
+        }
+      }
+    });
+  }
+}
+
+// ── Daily summary table ─────────────────────────────────────────────────────────────────────────────────
+function renderRmDailySummary(sessions, rangeDays) {
+  const el = document.getElementById("rm-daily-table");
+  if (!el) return;
+  const days = [];
+  for (let i=rangeDays-1;i>=0;i--) { const d=new Date(Date.now()-i*864e5); days.push(d.toISOString().split("T")[0]); }
+  const daily = {};
+  days.forEach(d => daily[d] = {cycles:0,mins:0,peakCycles:0,temps:[],heats:[],humids:[]});
+  sessions.forEach(s => {
+    const day = s.session_start?.split("T")[0];
+    if (!daily[day]) return;
+    daily[day].cycles++;
+    daily[day].mins += s.duration_minutes||0;
+    if (s.is_peak) daily[day].peakCycles++;
+    if (s.temp_avg       != null) daily[day].temps.push(s.temp_avg);
+    if (s.heat_index_avg != null) daily[day].heats.push(s.heat_index_avg);
+    if (s.humidity_avg   != null) daily[day].humids.push(s.humidity_avg);
+  });
+  const avg    = arr => arr.length ? (arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(1) : "—";
+  const fmtHrs = m => m < 60 ? Math.round(m)+"min" : (m/60).toFixed(1)+"h";
+  const active = days.filter(d => daily[d].cycles > 0);
+  if (!active.length) { el.innerHTML = '<div class="sched-empty">No sessions in this range.</div>'; return; }
+  el.innerHTML = `
+    <div class="rm-daily-row" style="background:var(--surface2);font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;">
+      <span>Date</span><span>Cycles</span><span>Total RT</span><span>Avg Cycle</span><span>Avg Temp</span><span>Avg Heat Idx</span><span>Avg Humid</span><span>Peak Cycles</span>
+    </div>
+    ${active.map(d => {
+      const r=daily[d];
+      const avgDur=r.cycles?Math.round(r.mins/r.cycles):0;
+      const dt=new Date(d+"T12:00:00");
+      return `<div class="rm-daily-row">
+        <span style="font-weight:600;">${dt.toLocaleDateString([],{weekday:"short",month:"short",day:"numeric"})}</span>
+        <span>${r.cycles}</span>
+        <span style="color:var(--blue-dark);font-weight:600;">${fmtHrs(r.mins)}</span>
+        <span>${avgDur} min</span>
+        <span style="color:var(--red);">${avg(r.temps)}${r.temps.length?"°F":""}</span>
+        <span style="color:var(--amber);">${avg(r.heats)}${r.heats.length?"°F":""}</span>
+        <span style="color:var(--blue-dark);">${avg(r.humids)}${r.humids.length?"%":""}</span>
+        <span style="color:${r.peakCycles>0?"var(--red)":"var(--text-hint)"};">${r.peakCycles} / ${r.cycles}</span>
+      </div>`;
+    }).join("")}`;
+}
+
+// ── Session detail table ───────────────────────────────────────────────────────────────────────────────
+function renderRmSessionTable(sessions) {
   const el = document.getElementById("rm-sessions-table");
   if (!el) return;
-  if (!sessions.length) { el.innerHTML = '<div class="sched-empty">No sessions found for the selected range.</div>'; return; }
-  const fmtDur = m => m == null ? "—" : m < 60 ? `${Math.round(m)} min` : `${(m/60).toFixed(1)} h`;
-  const fmtTs  = ts => ts ? new Date(ts).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) : "—";
-  const fmtFv  = v => v != null ? parseFloat(v).toFixed(1) + " " + feedUnit : "—";
+  if (!sessions.length) { el.innerHTML = '<div class="sched-empty">No sessions found.</div>'; return; }
+  const fmtDur = m => m==null?"—":m<60?`${Math.round(m)} min`:`${(m/60).toFixed(1)} h`;
+  const fmtTs  = ts => ts?new Date(ts).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}):"—";
+  const fmtF   = (v,u) => v!=null?parseFloat(v).toFixed(1)+u:"—";
   el.innerHTML = `
     <div class="rm-session-row rm-session-header">
-      <span>Device</span><span>Start</span><span>Duration</span><span>${feedLabel} Start</span><span>${feedLabel} Avg</span><span>Source</span>
+      <span>Start</span><span>Duration</span><span>Temp °F</span><span>Heat Idx</span><span>Humidity</span><span>TOU</span><span>Source</span><span>Status</span>
     </div>
-    ${sessions.slice(0, 200).map(s => `
-    <div class="rm-session-row">
-      <span style="font-family:monospace;font-size:10px;">${unitName(s.device_uid)||s.device_uid||"—"}</span>
-      <span>${fmtTs(s.session_start)}</span>
-      <span style="font-weight:600;color:${(s.duration_minutes||0)>120?"var(--red)":(s.duration_minutes||0)>60?"var(--amber)":"var(--text-primary)"};">${fmtDur(s.duration_minutes)}</span>
-      <span>${fmtFv(s.feed_value_start)}</span>
-      <span>${fmtFv(s.feed_value_avg)}</span>
-      <span style="font-size:10px;color:var(--text-hint);">${s.trigger_source||"—"}</span>
-    </div>`).join("")}`;
+    ${sessions.slice().reverse().slice(0,200).map(s => {
+      const dur=s.duration_minutes;
+      const dc=dur==null?"var(--text-hint)":dur>30?"var(--red)":dur>15?"var(--amber)":"var(--text-primary)";
+      const pk=s.is_peak
+        ?'<span style="font-size:9px;padding:1px 5px;border-radius:8px;background:var(--red-lt,#fef2f2);color:var(--red);font-weight:700;">PEAK</span>'
+        :'<span style="font-size:9px;padding:1px 5px;border-radius:8px;background:var(--surface2);color:var(--text-hint);">off</span>';
+      return `<div class="rm-session-row">
+        <span style="font-size:10px;">${fmtTs(s.session_start)}</span>
+        <span style="font-weight:600;color:${dc};">${fmtDur(dur)}</span>
+        <span style="color:var(--red);">${fmtF(s.temp_avg,"°")}</span>
+        <span style="color:var(--amber);">${fmtF(s.heat_index_avg,"°")}</span>
+        <span style="color:var(--blue-dark);">${fmtF(s.humidity_avg,"%")}</span>
+        <span>${pk}</span>
+        <span style="font-size:10px;color:var(--text-hint);">${s.trigger_source||"—"}</span>
+        <span style="font-size:10px;color:${s.session_end?"var(--green-dark)":"var(--amber)"};">${s.session_end?"Complete":"Open"}</span>
+      </div>`;
+    }).join("")}`;
 }
 
+// ── CSV export ─────────────────────────────────────────────────────────────────────────────────────────────
 function exportRuntimeCSV() {
-  const rows = document.querySelectorAll(".rm-session-row:not(.rm-session-header)");
-  if (!rows.length) return;
-  const lines = ["Device,Start,End,Duration (min),Feed Start,Feed End,Feed Avg,Source"];
-  // Re-fetch last loaded sessions from DOM labels (simple export)
-  rows.forEach(r => {
-    const cells = r.querySelectorAll("span");
-    lines.push([...cells].map(c => `"${c.textContent.trim()}"`).join(","));
-  });
-  const blob = new Blob([lines.join("\n")], { type:"text/csv" });
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-  a.download = `runtime_sessions_${new Date().toISOString().split("T")[0]}.csv`; a.click();
+  const sessions = rmAnalyticsSessions;
+  if (!sessions.length) { setStatus("error","No data to export."); return; }
+  const headers = ["Device","Start","End","Duration (min)","Temp Avg (°F)","Heat Index Avg (°F)","Humidity Avg (%)","On-Peak","Source"];
+  const rows = sessions.map(s => [
+    unitName(s.device_uid)||s.device_uid,
+    s.session_start, s.session_end||"",
+    s.duration_minutes||"",
+    s.temp_avg||"", s.heat_index_avg||"", s.humidity_avg||"",
+    s.is_peak?"Yes":"No",
+    s.trigger_source||""
+  ].map(v=>`"${v}"`).join(","));
+  const csv  = [headers.join(","),...rows].join("\n");
+  const blob = new Blob([csv],{type:"text/csv"});
+  const a    = document.createElement("a");
+  const dev  = document.getElementById("rm-analytics-device")?.value;
+  a.href = URL.createObjectURL(blob);
+  a.download = `runtime_sessions_${unitName(dev)||dev||"all"}_${new Date().toISOString().split("T")[0]}.csv`;
+  a.click(); URL.revokeObjectURL(a.href);
+  setStatus("ready",`Exported ${sessions.length} sessions.`);
 }
+
+// ── Backfill
 
 // ── Backfill ──────────────────────────────────────────────────────────────────
 async function runRuntimeBackfill() {
@@ -12448,7 +12671,6 @@ async function runRuntimeBackfill() {
   if (progEl) progEl.style.display = "block";
   if (resultEl) resultEl.textContent = "Starting backfill…";
 
-  // Parse threshold as a float — rmSettings values are strings
   const onThreshold = parseFloat(rmSettings.current_on_threshold || "0.5");
   const feedKey     = rmSettings.feed_key || null;
   const fromISO     = fromDate + "T00:00:00.000Z";
@@ -12464,10 +12686,8 @@ async function runRuntimeBackfill() {
 
   if (!deviceUids.length) { if(resultEl) resultEl.textContent = "⚠ No devices found."; return; }
 
-  let totalSessions  = 0;
+  let totalSessions = 0;
   let totalProcessed = 0;
-  let totalErrors    = 0;
-  const errorLog     = [];
 
   for (let di = 0; di < deviceUids.length; di++) {
     const uid = deviceUids[di];
@@ -12475,43 +12695,31 @@ async function runRuntimeBackfill() {
     if (barEl)    barEl.style.width = pct + "%";
     if (statusEl) statusEl.textContent = `Scanning ${unitName(uid)||uid} (${di+1}/${deviceUids.length})…`;
 
-    // Use supabaseGetPaged to bypass the PostgREST row cap —
-    // limit=5000 in supabaseGet was silently clamped to ~1000 rows
+    // Fetch readings in chronological order for this device in range
     let readings = [];
     try {
-      readings = await supabaseGetPaged(
-        `device_readings?device_uid=eq.${encodeURIComponent(uid)}&recorded_at=gte.${fromISO}&recorded_at=lte.${toISO}&order=recorded_at.asc&select=recorded_at,current`,
-        20000
+      const rows = await supabaseGet(
+        `device_readings?device_uid=eq.${encodeURIComponent(uid)}&recorded_at=gte.${fromISO}&recorded_at=lte.${toISO}&order=recorded_at.asc&limit=5000&select=recorded_at,current`
       );
-    } catch(e) {
-      errorLog.push(`${uid}: failed to fetch readings — ${e.message}`);
-      continue;
-    }
+      readings = Array.isArray(rows) ? rows : [];
+    } catch(e) { continue; }
 
-    if (!readings.length) {
-      if (statusEl) statusEl.textContent = `No readings found for ${unitName(uid)||uid} in range.`;
-      continue;
-    }
+    if (!readings.length) continue;
 
-    // Log what we found for diagnostics
-    const nonZero = readings.filter(r => r.current != null && r.current > 0);
-    console.log(`[Backfill] ${uid}: ${readings.length} readings, ${nonZero.length} non-zero current, threshold=${onThreshold}A (raw >=${onThreshold*10})`);
-
-    // Delete existing backfill sessions for this device in range
+    // Delete existing sessions for this device in this range to avoid dupes
     try {
       await supabaseDelete("equipment_runtime_sessions",
         `device_uid=eq.${encodeURIComponent(uid)}&session_start=gte.${fromISO}&session_start=lte.${toISO}&trigger_source=eq.backfill`);
     } catch(e) {}
 
-    // Detect transitions — raw current is stored as tenths of an amp (×10)
+    // Detect transitions
     const sessions = [];
     let sessionStart = null;
     let prevOn = false;
 
     for (const row of readings) {
-      // current column is stored as raw value × 10 — divide to get amps
-      const amps = row.current != null ? parseFloat(row.current) / 10 : 0;
-      const isOn = amps >= onThreshold;
+      const amps  = row.current != null ? row.current / 10 : 0;
+      const isOn  = amps >= onThreshold;
       if (isOn && !prevOn) {
         sessionStart = row.recorded_at;
       } else if (!isOn && prevOn && sessionStart) {
@@ -12520,20 +12728,18 @@ async function runRuntimeBackfill() {
       }
       prevOn = isOn;
     }
-    // Still ON at end of range — open session
+    // If still ON at end of range, close with null end
     if (prevOn && sessionStart) sessions.push({ start: sessionStart, end: null });
-
-    console.log(`[Backfill] ${uid}: detected ${sessions.length} sessions`);
 
     // Fetch feed correlation if configured
     let feedReadings = [];
     if (feedKey) {
       try {
-        feedReadings = await supabaseGetPaged(
-          `monitor_feed_readings?feed_key=eq.${encodeURIComponent(feedKey)}&recorded_at=gte.${fromISO}&recorded_at=lte.${toISO}&order=recorded_at.asc&select=recorded_at,value`,
-          5000
+        const fr = await supabaseGet(
+          `monitor_feed_readings?feed_key=eq.${encodeURIComponent(feedKey)}&recorded_at=gte.${fromISO}&recorded_at=lte.${toISO}&order=recorded_at.asc&limit=2000&select=recorded_at,value`
         );
-      } catch(e) { console.warn("backfill feed fetch:", e.message); }
+        feedReadings = Array.isArray(fr) ? fr : [];
+      } catch(e) {}
     }
 
     const getFeedAtTime = (ts) => {
@@ -12541,8 +12747,7 @@ async function runRuntimeBackfill() {
       const target = new Date(ts).getTime();
       let closest = feedReadings[0];
       for (const fr of feedReadings) {
-        if (Math.abs(new Date(fr.recorded_at).getTime() - target) <
-            Math.abs(new Date(closest.recorded_at).getTime() - target)) closest = fr;
+        if (Math.abs(new Date(fr.recorded_at).getTime() - target) < Math.abs(new Date(closest.recorded_at).getTime() - target)) closest = fr;
       }
       return closest?.value != null ? parseFloat(closest.value) : null;
     };
@@ -12550,74 +12755,38 @@ async function runRuntimeBackfill() {
     const getAvgFeed = (startTs, endTs) => {
       if (!feedReadings.length || !startTs || !endTs) return null;
       const s = new Date(startTs).getTime(), e = new Date(endTs).getTime();
-      const inRange = feedReadings.filter(fr => {
-        const t = new Date(fr.recorded_at).getTime();
-        return t >= s && t <= e;
-      });
+      const inRange = feedReadings.filter(fr => { const t = new Date(fr.recorded_at).getTime(); return t >= s && t <= e; });
       if (!inRange.length) return null;
-      return inRange.reduce((a, fr) => a + parseFloat(fr.value||0), 0) / inRange.length;
+      return inRange.reduce((a,fr) => a + parseFloat(fr.value||0), 0) / inRange.length;
     };
 
-    // Write sessions — use return=representation to confirm insert
+    // Write sessions to Supabase
     for (const sess of sessions) {
-      const dur = sess.end
-        ? Math.round((new Date(sess.end) - new Date(sess.start)) / 60000)
-        : null;
+      const dur = sess.end ? Math.round((new Date(sess.end) - new Date(sess.start)) / 60000) : null;
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/equipment_runtime_sessions`, {
-          method: "POST",
-          headers: {
-            "apikey":        SUPABASE_KEY,
-            "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
-            "Content-Type":  "application/json",
-            "Prefer":        "return=representation"
-          },
-          body: JSON.stringify({
-            device_uid:       uid,
-            session_start:    sess.start,
-            session_end:      sess.end,
-            duration_minutes: dur,
-            feed_key:         feedKey,
-            feed_value_start: getFeedAtTime(sess.start),
-            feed_value_end:   sess.end ? getFeedAtTime(sess.end) : null,
-            feed_value_avg:   sess.end ? getAvgFeed(sess.start, sess.end) : null,
-            group_number:     null,
-            trigger_source:   "backfill",
-            created_at:       new Date().toISOString()
-          })
+        await supabasePost("equipment_runtime_sessions", {
+          device_uid:        uid,
+          session_start:     sess.start,
+          session_end:       sess.end,
+          duration_minutes:  dur,
+          feed_key:          feedKey,
+          feed_value_start:  getFeedAtTime(sess.start),
+          feed_value_end:    sess.end ? getFeedAtTime(sess.end) : null,
+          feed_value_avg:    sess.end ? getAvgFeed(sess.start, sess.end) : null,
+          group_number:      null,
+          trigger_source:    "backfill",
+          created_at:        new Date().toISOString()
         });
-        if (res.ok) {
-          totalSessions++;
-        } else {
-          const errText = await res.text();
-          totalErrors++;
-          errorLog.push(`Insert failed (${res.status}): ${errText.substring(0,100)}`);
-          console.warn("backfill insert failed:", res.status, errText);
-        }
-      } catch(e) {
-        totalErrors++;
-        errorLog.push(`Insert exception: ${e.message}`);
-        console.warn("backfill insert exception:", e.message);
-      }
+        totalSessions++;
+      } catch(e) { console.warn("backfill insert:", e.message); }
     }
     totalProcessed++;
   }
 
   if (barEl)    barEl.style.width = "100%";
   if (statusEl) statusEl.textContent = "Complete.";
-
-  let msg = `✓ Backfill complete — ${totalSessions} sessions written across ${totalProcessed} device(s).`;
-  if (totalErrors > 0) msg += ` ⚠ ${totalErrors} insert error(s) — check browser console for details.`;
-  if (totalSessions === 0 && totalErrors === 0) {
-    msg = `⚠ Backfill complete but 0 sessions detected. Check: (1) device has non-zero current readings in this date range, (2) Current ON Threshold (${parseFloat(rmSettings.current_on_threshold||0.5)}A) is appropriate for your equipment, (3) open browser console for diagnostic logs.`;
-  }
-  if (resultEl) resultEl.textContent = msg;
-  if (totalSessions > 0) {
-    setTimeout(() => { if(progEl) progEl.style.display = "none"; }, 2000);
-    await loadRuntimeAnalytics();
-  } else {
-    setTimeout(() => { if(progEl) progEl.style.display = "none"; }, 3000);
-  }
+  if (resultEl) resultEl.textContent = `✓ Backfill complete — ${totalSessions} sessions reconstructed across ${totalProcessed} device(s). Refresh Analytics to view.`;
+  setTimeout(() => { if(progEl) progEl.style.display = "none"; }, 3000);
 }
 
 // ── SQL DDL hint for new tables (logged to console on init) ───────────────────
@@ -24827,6 +24996,10 @@ let rmRuntimeChart       = null;
 const RM_SETTINGS_PREFIX  = "rm_";
 const RM_TRIGGERS_KEY     = "lcp_rm_triggers_v1";
 const RM_SCHEDULES_KEY    = "lcp_rm_schedules_v1";
+let rmChartMode           = "timeline";   // timeline | scatter | daily
+let rmChartCondition      = "temp";       // temp | heat | humidity
+let rmMainChart           = null;
+let rmAnalyticsSessions   = [];           // cached for chart switching without re-fetch
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function initBatteryTab() {
