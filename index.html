@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -4741,15 +4742,22 @@
         </div>
 
         <!-- Chart toggle -->
-        <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
-          <span style="font-size:11px;color:var(--text-hint);margin-right:4px;">Chart view:</span>
-          <button class="rm-chart-toggle active" id="rm-toggle-timeline" onclick="switchRmChart('timeline',this)">📅 Daily Timeline</button>
-          <button class="rm-chart-toggle" id="rm-toggle-scatter" onclick="switchRmChart('scatter',this)">🔵 Scatter — Duration vs Condition</button>
-          <button class="rm-chart-toggle" id="rm-toggle-daily" onclick="switchRmChart('daily',this)">📊 Daily Summary</button>
-          <span style="font-size:11px;color:var(--text-hint);margin-left:auto;">Condition:</span>
-          <button class="rm-chart-toggle active" id="rm-cond-temp" onclick="switchRmCondition('temp',this)">🌡️ Temp</button>
-          <button class="rm-chart-toggle" id="rm-cond-heat" onclick="switchRmCondition('heat',this)">🔥 Heat Index</button>
-          <button class="rm-chart-toggle" id="rm-cond-humidity" onclick="switchRmCondition('humidity',this)">💧 Humidity</button>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;">
+          <!-- Row 1: view mode + day/night -->
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <span style="font-size:11px;color:var(--text-hint);min-width:70px;">Chart view:</span>
+            <button class="rm-chart-toggle active" id="rm-toggle-timeline" onclick="switchRmChart('timeline',this)">📅 Daily Timeline</button>
+            <button class="rm-chart-toggle" id="rm-toggle-scatter" onclick="switchRmChart('scatter',this)">🔵 Scatter</button>
+            <button class="rm-chart-toggle" id="rm-toggle-daily" onclick="switchRmChart('daily',this)">📊 Daily Summary</button>
+            <button class="rm-chart-toggle" id="rm-toggle-daynight" onclick="switchRmDayNight(this)" title="Shade night periods on timeline chart" style="margin-left:12px;border-style:dashed;">🌙 Day/Night</button>
+          </div>
+          <!-- Row 2: condition -->
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <span style="font-size:11px;color:var(--text-hint);min-width:70px;">Condition:</span>
+            <button class="rm-chart-toggle active" id="rm-cond-temp" onclick="switchRmCondition('temp',this)">🌡️ Temperature</button>
+            <button class="rm-chart-toggle" id="rm-cond-heat" onclick="switchRmCondition('heat',this)">🔥 Heat Index</button>
+            <button class="rm-chart-toggle" id="rm-cond-humidity" onclick="switchRmCondition('humidity',this)">💧 Humidity</button>
+          </div>
         </div>
 
         <!-- Chart canvas -->
@@ -12334,7 +12342,133 @@ async function sendRmCmd(action, uid, source) {
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
 // ── Chart toggle controls ──────────────────────────────────────────────────────────────────────────────
-function switchRmChart(mode, el) {
+function switchRmDayNight(el) {
+  rmShowDayNight = !rmShowDayNight;
+  if (el) el.classList.toggle("active", rmShowDayNight);
+  renderRmMainChart(rmAnalyticsSessions);
+}
+
+// ── Solar position engine — no API required ───────────────────────────────────
+// Returns { sunrise, sunset } as Date objects for a given date and lat/lon.
+// Uses the NOAA solar calculation algorithm (accurate to ±1 minute).
+function getSunriseSunset(date, lat, lon) {
+  const rad   = Math.PI / 180;
+  const JD    = Math.floor(date.getTime() / 86400000) + 2440587.5;
+  const n     = JD - 2451545.0;
+  const L     = (280.46 + 0.9856474 * n) % 360;
+  const g     = (357.528 + 0.9856003 * n) % 360;
+  const lambda= L + 1.915 * Math.sin(g * rad) + 0.020 * Math.sin(2 * g * rad);
+  const e     = 23.439 - 0.0000004 * n;
+  const sinDec= Math.sin(e * rad) * Math.sin(lambda * rad);
+  const dec   = Math.asin(sinDec);
+  const cosHA = (Math.cos(90.833 * rad) - sinDec * Math.sin(lat * rad))
+              / (Math.cos(dec) * Math.cos(lat * rad));
+  // Clamp for polar day/night
+  const cosHAc = Math.max(-1, Math.min(1, cosHA));
+  const HA    = Math.acos(cosHAc) / rad;
+  const eqTime= 4 * (L - 0.0057183 - Math.atan2(
+    Math.cos(e * rad) * Math.sin(lambda * rad),
+    Math.cos(lambda * rad)
+  ) / rad + (lon < 0 ? 360 : 0)) - 60 * (lon / 15);
+
+  const y          = date.getUTCFullYear();
+  const m          = date.getUTCMonth();
+  const d          = date.getUTCDate();
+  const tzOffset   = date.getTimezoneOffset(); // minutes west of UTC
+  const solarNoon  = 720 - 4 * lon - eqTime - tzOffset;
+  const sunriseMin = solarNoon - HA * 4;
+  const sunsetMin  = solarNoon + HA * 4;
+
+  const toDate = mins => {
+    const base = new Date(y, m, d, 0, 0, 0);
+    base.setMinutes(base.getMinutes() + Math.round(mins));
+    return base;
+  };
+
+  return { sunrise: toDate(sunriseMin), sunset: toDate(sunsetMin) };
+}
+
+// Build an array of {start, end, isNight} bands covering the chart's time range
+function buildDayNightBands(sessions) {
+  if (!sessions.length) return [];
+  const lat = wxLocationData?.lat ?? 35.5;  // fallback to mid-US if not set
+  const lon = wxLocationData?.lon ?? -97.5;
+
+  const firstTs = new Date(sessions[0].session_start);
+  const lastTs  = new Date(sessions[sessions.length-1].session_end || sessions[sessions.length-1].session_start);
+
+  // Collect unique dates spanning the session range
+  const days = [];
+  const cur  = new Date(firstTs);
+  cur.setHours(0, 0, 0, 0);
+  const end  = new Date(lastTs);
+  end.setHours(0, 0, 0, 0);
+  while (cur <= end) {
+    days.push(new Date(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  const bands = [];
+  days.forEach((day, i) => {
+    const { sunrise, sunset } = getSunriseSunset(day, lat, lon);
+    const prevDay = new Date(day); prevDay.setDate(prevDay.getDate() - 1);
+    const { sunset: prevSunset } = i === 0 ? { sunset: new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0,0,0) } : getSunriseSunset(prevDay, lat, lon);
+
+    // Night: midnight → sunrise
+    bands.push({ start: new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0,0,0), end: sunrise,  isNight: true  });
+    // Day: sunrise → sunset
+    bands.push({ start: sunrise,  end: sunset,   isNight: false });
+    // Night: sunset → midnight
+    const nextMidnight = new Date(day.getFullYear(), day.getMonth(), day.getDate()+1, 0,0,0);
+    bands.push({ start: sunset, end: nextMidnight, isNight: true });
+  });
+
+  return bands;
+}
+
+// Convert bands into Chart.js annotation plugin boxes indexed by label
+function buildDayNightAnnotations(bands, xLabels) {
+  if (!bands.length || !xLabels.length) return {};
+  const annotations = {};
+  // We need to map time positions to x-axis label indices
+  // Each label represents a session start time — map label index to timestamp
+  const labelTimes = xLabels.map(l => new Date(l).getTime());
+
+  bands.forEach((band, i) => {
+    if (!band.isNight) return; // only shade night, leave day transparent
+    const bs = band.start.getTime();
+    const be = band.end.getTime();
+
+    // Find label indices that fall within this night band
+    const firstIdx = labelTimes.findIndex(t => t >= bs && t < be);
+    if (firstIdx === -1) return;
+    let lastIdx = firstIdx;
+    for (let j = firstIdx + 1; j < labelTimes.length; j++) {
+      if (labelTimes[j] < be) lastIdx = j;
+      else break;
+    }
+
+    annotations[`night_${i}`] = {
+      type:        "box",
+      xMin:        Math.max(0, firstIdx - 0.5),
+      xMax:        lastIdx + 0.5,
+      yMin:        0,
+      yMax:        "max",
+      backgroundColor: "rgba(30,30,60,0.10)",
+      borderWidth: 0,
+      label: {
+        display:    true,
+        content:    "🌙",
+        position:   { x: "start", y: "start" },
+        font:       { size: 10 },
+        color:      "rgba(100,100,160,0.5)",
+        padding:    2
+      }
+    };
+  });
+
+  return annotations;
+}
   rmChartMode = mode;
   document.querySelectorAll(".rm-chart-toggle[id^='rm-toggle']").forEach(b => b.classList.remove("active"));
   if (el) el.classList.add("active");
@@ -12540,11 +12674,21 @@ function renderRmMainChart(sessions) {
     });
 
   } else {
-    // Timeline
-    const labels   = complete.map(s => new Date(s.session_start).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}));
+    // Timeline — each cycle as a bar, condition overlaid as line
+    const labels  = complete.map(s => new Date(s.session_start).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}));
+    // Keep raw Date strings for day/night calculation
+    const labelISOs = complete.map(s => s.session_start);
     const durData  = complete.map(s => s.duration_minutes||0);
     const condData = complete.map(s => s[condKey]);
     const colors   = complete.map(s => s.is_peak ? "rgba(192,57,43,0.7)" : "rgba(29,158,117,0.6)");
+
+    // Build day/night annotations if toggle is on
+    let annotations = {};
+    if (rmShowDayNight) {
+      const bands = buildDayNightBands(complete);
+      annotations = buildDayNightAnnotations(bands, labelISOs);
+    }
+
     rmMainChart = new Chart(canvas, {
       type:"bar",
       data:{
@@ -12557,12 +12701,14 @@ function renderRmMainChart(sessions) {
       options:{
         responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
         plugins:{
+          annotation: { annotations },
           legend:{display:true,position:"top",labels:{font:{size:11},generateLabels:()=>[
             {text:"On-Peak cycle",fillStyle:"rgba(192,57,43,0.7)",strokeStyle:"rgba(192,57,43,0.7)",lineWidth:1},
             {text:"Off-Peak cycle",fillStyle:"rgba(29,158,117,0.6)",strokeStyle:"rgba(29,158,117,0.6)",lineWidth:1},
-            {text:condLabel,fillStyle:"transparent",strokeStyle:condColor,lineWidth:2}
+            {text:condLabel,fillStyle:"transparent",strokeStyle:condColor,lineWidth:2},
+            ...(rmShowDayNight ? [{text:"Night period",fillStyle:"rgba(30,30,60,0.10)",strokeStyle:"rgba(100,100,160,0.4)",lineWidth:1}] : [])
           ]}},
-          title:{display:true,text:"Cycle Timeline — Duration & "+condLabel,font:{size:12,weight:"500"},color:"#888780"},
+          title:{display:true,text:"Cycle Timeline — Duration & "+condLabel+(rmShowDayNight?" (🌙 day/night)":""),font:{size:12,weight:"500"},color:"#888780"},
           tooltip:{callbacks:{label:ctx=>ctx.datasetIndex===0?`Duration: ${ctx.parsed.y} min | ${complete[ctx.dataIndex]?.is_peak?"ON-PEAK":"Off-Peak"}`:`${condLabel}: ${ctx.parsed.y}`}}
         },
         scales:{
@@ -25015,6 +25161,7 @@ const RM_TRIGGERS_KEY     = "lcp_rm_triggers_v1";
 const RM_SCHEDULES_KEY    = "lcp_rm_schedules_v1";
 let rmChartMode           = "timeline";   // timeline | scatter | daily
 let rmChartCondition      = "temp";       // temp | heat | humidity
+let rmShowDayNight        = false;        // toggle day/night shading on timeline
 let rmMainChart           = null;
 let rmAnalyticsSessions   = [];           // cached for chart switching without re-fetch
 
