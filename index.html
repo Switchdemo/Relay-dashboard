@@ -4802,8 +4802,6 @@
               <option value="24" selected>Last 24 hours</option>
               <option value="72">Last 3 days</option>
               <option value="168">Last 7 days</option>
-              <option value="720">Last 30 days</option>
-              <option value="2160">Last 90 days</option>
             </select>
             <button class="queue-refresh" onclick="loadFeedChart()">Refresh</button>
           </div>
@@ -7215,30 +7213,27 @@ async function supabaseGet(query) {
 // default row cap (typically 1000). Fetches in pages of pageSize until either
 // all rows are returned or the maxRows ceiling is hit.
 async function supabaseGetPaged(query, maxRows = 20000, pageSize = 1000) {
-  // Supabase/PostgREST can silently ignore the Range header depending on
-  // server config. Use explicit limit= and offset= query parameters instead,
-  // which are always respected regardless of server-side max-rows settings.
   let allRows = [];
   let offset  = 0;
-  // Determine separator: if query already has a ?, append with &, else use ?
-  const sep = query.includes("?") ? "&" : "?";
-
   while (true) {
-    const pagedQuery = `${query}${sep}limit=${pageSize}&offset=${offset}`;
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${pagedQuery}`, {
+    const rangeEnd = offset + pageSize - 1;
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${query}`, {
       headers: {
         "apikey":        SUPABASE_KEY,
         "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+        "Range":         `${offset}-${rangeEnd}`,
+        "Range-Unit":    "items",
         "Prefer":        "count=none"
       }
     });
-    if (!res.ok) { console.warn("supabaseGetPaged HTTP error:", res.status, pagedQuery); break; }
+    // 416 = range not satisfiable (no more rows)
+    if (res.status === 416) break;
     const page = await res.json();
     if (!Array.isArray(page) || page.length === 0) break;
     allRows = allRows.concat(page);
-    // Fewer rows than pageSize = last page reached
+    // If we got fewer rows than the page size, we've reached the end
     if (page.length < pageSize) break;
-    // Hit caller's ceiling — stop and trim
+    // If we've hit the caller's max ceiling, stop
     if (allRows.length >= maxRows) { allRows = allRows.slice(0, maxRows); break; }
     offset += pageSize;
   }
@@ -12310,15 +12305,32 @@ async function loadRuntimeAnalytics() {
   const deviceFilter = document.getElementById("rm-analytics-device")?.value;
   const rangeDays    = parseInt(document.getElementById("rm-analytics-range")?.value || "7");
   const since        = new Date(Date.now() - rangeDays * 864e5).toISOString();
+  const tableEl      = document.getElementById("rm-sessions-table");
 
-  let query = `equipment_runtime_sessions?session_start=gte.${since}&order=session_start.desc&limit=500`;
+  if (tableEl) tableEl.innerHTML = '<div class="sched-empty">Loading…</div>';
+
+  let query = `equipment_runtime_sessions?session_start=gte.${since}&order=session_start.desc`;
   if (deviceFilter) query += `&device_uid=eq.${encodeURIComponent(deviceFilter)}`;
 
   let sessions = [];
   try {
-    const rows = await supabaseGet(query);
-    sessions = Array.isArray(rows) ? rows : [];
-  } catch(e) {}
+    sessions = await supabaseGetPaged(query, 5000);
+    if (!Array.isArray(sessions)) sessions = [];
+  } catch(e) {
+    if (tableEl) tableEl.innerHTML = `<div class="sched-empty">Error loading sessions: ${e.message}</div>`;
+    console.error("loadRuntimeAnalytics:", e);
+    return;
+  }
+
+  if (!sessions.length) {
+    if (tableEl) tableEl.innerHTML = '<div class="sched-empty">No sessions found. Run the Historical Backfill below to populate session data from device_readings.</div>';
+    // Still update KPIs to zero
+    const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+    set("rm-kpi-sessions", 0); set("rm-kpi-total-hrs", "0 h");
+    set("rm-kpi-avg-dur", "—"); set("rm-kpi-longest", "—");
+    set("rm-kpi-feed-avg", "—"); set("rm-kpi-devices", 0);
+    return;
+  }
 
   // KPIs
   const complete  = sessions.filter(s => s.session_end && s.duration_minutes != null);
@@ -12339,10 +12351,7 @@ async function loadRuntimeAnalytics() {
   set("rm-kpi-feed-avg",   avgFeed != null ? avgFeed.toFixed(1) + " " + feedUnit : "—");
   set("rm-kpi-devices",    devices);
 
-  // Chart — daily runtime hours per device
   await renderRmChart(sessions, rangeDays);
-
-  // Table
   renderRmSessionTable(sessions, feedLabel, feedUnit);
 }
 
@@ -12439,6 +12448,7 @@ async function runRuntimeBackfill() {
   if (progEl) progEl.style.display = "block";
   if (resultEl) resultEl.textContent = "Starting backfill…";
 
+  // Parse threshold as a float — rmSettings values are strings
   const onThreshold = parseFloat(rmSettings.current_on_threshold || "0.5");
   const feedKey     = rmSettings.feed_key || null;
   const fromISO     = fromDate + "T00:00:00.000Z";
@@ -12454,8 +12464,10 @@ async function runRuntimeBackfill() {
 
   if (!deviceUids.length) { if(resultEl) resultEl.textContent = "⚠ No devices found."; return; }
 
-  let totalSessions = 0;
+  let totalSessions  = 0;
   let totalProcessed = 0;
+  let totalErrors    = 0;
+  const errorLog     = [];
 
   for (let di = 0; di < deviceUids.length; di++) {
     const uid = deviceUids[di];
@@ -12463,31 +12475,43 @@ async function runRuntimeBackfill() {
     if (barEl)    barEl.style.width = pct + "%";
     if (statusEl) statusEl.textContent = `Scanning ${unitName(uid)||uid} (${di+1}/${deviceUids.length})…`;
 
-    // Fetch readings in chronological order for this device in range
+    // Use supabaseGetPaged to bypass the PostgREST row cap —
+    // limit=5000 in supabaseGet was silently clamped to ~1000 rows
     let readings = [];
     try {
-      const rows = await supabaseGet(
-        `device_readings?device_uid=eq.${encodeURIComponent(uid)}&recorded_at=gte.${fromISO}&recorded_at=lte.${toISO}&order=recorded_at.asc&limit=5000&select=recorded_at,current`
+      readings = await supabaseGetPaged(
+        `device_readings?device_uid=eq.${encodeURIComponent(uid)}&recorded_at=gte.${fromISO}&recorded_at=lte.${toISO}&order=recorded_at.asc&select=recorded_at,current`,
+        20000
       );
-      readings = Array.isArray(rows) ? rows : [];
-    } catch(e) { continue; }
+    } catch(e) {
+      errorLog.push(`${uid}: failed to fetch readings — ${e.message}`);
+      continue;
+    }
 
-    if (!readings.length) continue;
+    if (!readings.length) {
+      if (statusEl) statusEl.textContent = `No readings found for ${unitName(uid)||uid} in range.`;
+      continue;
+    }
 
-    // Delete existing sessions for this device in this range to avoid dupes
+    // Log what we found for diagnostics
+    const nonZero = readings.filter(r => r.current != null && r.current > 0);
+    console.log(`[Backfill] ${uid}: ${readings.length} readings, ${nonZero.length} non-zero current, threshold=${onThreshold}A (raw >=${onThreshold*10})`);
+
+    // Delete existing backfill sessions for this device in range
     try {
       await supabaseDelete("equipment_runtime_sessions",
         `device_uid=eq.${encodeURIComponent(uid)}&session_start=gte.${fromISO}&session_start=lte.${toISO}&trigger_source=eq.backfill`);
     } catch(e) {}
 
-    // Detect transitions
+    // Detect transitions — raw current is stored as tenths of an amp (×10)
     const sessions = [];
     let sessionStart = null;
     let prevOn = false;
 
     for (const row of readings) {
-      const amps  = row.current != null ? row.current / 10 : 0;
-      const isOn  = amps >= onThreshold;
+      // current column is stored as raw value × 10 — divide to get amps
+      const amps = row.current != null ? parseFloat(row.current) / 10 : 0;
+      const isOn = amps >= onThreshold;
       if (isOn && !prevOn) {
         sessionStart = row.recorded_at;
       } else if (!isOn && prevOn && sessionStart) {
@@ -12496,18 +12520,20 @@ async function runRuntimeBackfill() {
       }
       prevOn = isOn;
     }
-    // If still ON at end of range, close with null end
+    // Still ON at end of range — open session
     if (prevOn && sessionStart) sessions.push({ start: sessionStart, end: null });
+
+    console.log(`[Backfill] ${uid}: detected ${sessions.length} sessions`);
 
     // Fetch feed correlation if configured
     let feedReadings = [];
     if (feedKey) {
       try {
-        const fr = await supabaseGet(
-          `monitor_feed_readings?feed_key=eq.${encodeURIComponent(feedKey)}&recorded_at=gte.${fromISO}&recorded_at=lte.${toISO}&order=recorded_at.asc&limit=2000&select=recorded_at,value`
+        feedReadings = await supabaseGetPaged(
+          `monitor_feed_readings?feed_key=eq.${encodeURIComponent(feedKey)}&recorded_at=gte.${fromISO}&recorded_at=lte.${toISO}&order=recorded_at.asc&select=recorded_at,value`,
+          5000
         );
-        feedReadings = Array.isArray(fr) ? fr : [];
-      } catch(e) {}
+      } catch(e) { console.warn("backfill feed fetch:", e.message); }
     }
 
     const getFeedAtTime = (ts) => {
@@ -12515,7 +12541,8 @@ async function runRuntimeBackfill() {
       const target = new Date(ts).getTime();
       let closest = feedReadings[0];
       for (const fr of feedReadings) {
-        if (Math.abs(new Date(fr.recorded_at).getTime() - target) < Math.abs(new Date(closest.recorded_at).getTime() - target)) closest = fr;
+        if (Math.abs(new Date(fr.recorded_at).getTime() - target) <
+            Math.abs(new Date(closest.recorded_at).getTime() - target)) closest = fr;
       }
       return closest?.value != null ? parseFloat(closest.value) : null;
     };
@@ -12523,38 +12550,74 @@ async function runRuntimeBackfill() {
     const getAvgFeed = (startTs, endTs) => {
       if (!feedReadings.length || !startTs || !endTs) return null;
       const s = new Date(startTs).getTime(), e = new Date(endTs).getTime();
-      const inRange = feedReadings.filter(fr => { const t = new Date(fr.recorded_at).getTime(); return t >= s && t <= e; });
+      const inRange = feedReadings.filter(fr => {
+        const t = new Date(fr.recorded_at).getTime();
+        return t >= s && t <= e;
+      });
       if (!inRange.length) return null;
-      return inRange.reduce((a,fr) => a + parseFloat(fr.value||0), 0) / inRange.length;
+      return inRange.reduce((a, fr) => a + parseFloat(fr.value||0), 0) / inRange.length;
     };
 
-    // Write sessions to Supabase
+    // Write sessions — use return=representation to confirm insert
     for (const sess of sessions) {
-      const dur = sess.end ? Math.round((new Date(sess.end) - new Date(sess.start)) / 60000) : null;
+      const dur = sess.end
+        ? Math.round((new Date(sess.end) - new Date(sess.start)) / 60000)
+        : null;
       try {
-        await supabasePost("equipment_runtime_sessions", {
-          device_uid:        uid,
-          session_start:     sess.start,
-          session_end:       sess.end,
-          duration_minutes:  dur,
-          feed_key:          feedKey,
-          feed_value_start:  getFeedAtTime(sess.start),
-          feed_value_end:    sess.end ? getFeedAtTime(sess.end) : null,
-          feed_value_avg:    sess.end ? getAvgFeed(sess.start, sess.end) : null,
-          group_number:      null,
-          trigger_source:    "backfill",
-          created_at:        new Date().toISOString()
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/equipment_runtime_sessions`, {
+          method: "POST",
+          headers: {
+            "apikey":        SUPABASE_KEY,
+            "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+            "Content-Type":  "application/json",
+            "Prefer":        "return=representation"
+          },
+          body: JSON.stringify({
+            device_uid:       uid,
+            session_start:    sess.start,
+            session_end:      sess.end,
+            duration_minutes: dur,
+            feed_key:         feedKey,
+            feed_value_start: getFeedAtTime(sess.start),
+            feed_value_end:   sess.end ? getFeedAtTime(sess.end) : null,
+            feed_value_avg:   sess.end ? getAvgFeed(sess.start, sess.end) : null,
+            group_number:     null,
+            trigger_source:   "backfill",
+            created_at:       new Date().toISOString()
+          })
         });
-        totalSessions++;
-      } catch(e) { console.warn("backfill insert:", e.message); }
+        if (res.ok) {
+          totalSessions++;
+        } else {
+          const errText = await res.text();
+          totalErrors++;
+          errorLog.push(`Insert failed (${res.status}): ${errText.substring(0,100)}`);
+          console.warn("backfill insert failed:", res.status, errText);
+        }
+      } catch(e) {
+        totalErrors++;
+        errorLog.push(`Insert exception: ${e.message}`);
+        console.warn("backfill insert exception:", e.message);
+      }
     }
     totalProcessed++;
   }
 
   if (barEl)    barEl.style.width = "100%";
   if (statusEl) statusEl.textContent = "Complete.";
-  if (resultEl) resultEl.textContent = `✓ Backfill complete — ${totalSessions} sessions reconstructed across ${totalProcessed} device(s). Refresh Analytics to view.`;
-  setTimeout(() => { if(progEl) progEl.style.display = "none"; }, 3000);
+
+  let msg = `✓ Backfill complete — ${totalSessions} sessions written across ${totalProcessed} device(s).`;
+  if (totalErrors > 0) msg += ` ⚠ ${totalErrors} insert error(s) — check browser console for details.`;
+  if (totalSessions === 0 && totalErrors === 0) {
+    msg = `⚠ Backfill complete but 0 sessions detected. Check: (1) device has non-zero current readings in this date range, (2) Current ON Threshold (${parseFloat(rmSettings.current_on_threshold||0.5)}A) is appropriate for your equipment, (3) open browser console for diagnostic logs.`;
+  }
+  if (resultEl) resultEl.textContent = msg;
+  if (totalSessions > 0) {
+    setTimeout(() => { if(progEl) progEl.style.display = "none"; }, 2000);
+    await loadRuntimeAnalytics();
+  } else {
+    setTimeout(() => { if(progEl) progEl.style.display = "none"; }, 3000);
+  }
 }
 
 // ── SQL DDL hint for new tables (logged to console on init) ───────────────────
@@ -17965,86 +18028,54 @@ async function loadFeedChart() {
   const def   = FEED_DEFS[feedKey] || {};
   const since = new Date(Date.now() - rangeHrs * 60 * 60 * 1000).toISOString();
 
-  if (metaEl) metaEl.textContent = "Loading…";
+  if (metaEl) metaEl.textContent = "Loading...";
 
   try {
-    // Use supabaseGetPaged to bypass PostgREST's server-side row cap.
-    // Without this, requests with limit=2000 are silently clamped to ~1000
-    // rows by the server, making 7-day and longer ranges appear truncated.
-    const maxRows = rangeHrs <= 24 ? 500 : rangeHrs <= 168 ? 3000 : 12000;
+    // For SCADA feeds pull from scada_readings table, otherwise monitor_feed_readings
     let rows;
-
     if (feedKey.startsWith("scada_")) {
       const pointId = feedKey.replace("scada_", "");
-      rows = await supabaseGetPaged(
-        `scada_readings?point_id=eq.${encodeURIComponent(pointId)}&recorded_at=gte.${since}&order=recorded_at.asc`,
-        maxRows
+      rows = await supabaseGet(
+        `scada_readings?point_id=eq.${encodeURIComponent(pointId)}&recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=2000`
       );
     } else {
-      rows = await supabaseGetPaged(
-        `monitor_feed_readings?feed_key=eq.${encodeURIComponent(feedKey)}&recorded_at=gte.${since}&order=recorded_at.asc`,
-        maxRows
+      rows = await supabaseGet(
+        `monitor_feed_readings?feed_key=eq.${encodeURIComponent(feedKey)}&recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=2000`
       );
     }
 
     if (!Array.isArray(rows) || !rows.length) {
-      if (metaEl) metaEl.textContent = `No data for "${def.label||feedKey}" in the selected range.`;
+      if (metaEl) metaEl.textContent = `No data for "${def.label}" in the last ${rangeHrs} hours. Data is collected every 5 minutes during monitor cycles.`;
       if (feedChartInstance) { feedChartInstance.destroy(); feedChartInstance = null; }
       await loadFeedRules(feedKey);
       return;
     }
 
-    // Downsample to ~500 points for chart performance on long ranges.
-    // Bucket-average so the shape of the curve is preserved.
-    let chartRows = rows;
-    const TARGET_POINTS = 500;
-    if (rows.length > TARGET_POINTS) {
-      const bucketSize = Math.ceil(rows.length / TARGET_POINTS);
-      const bucketed = [];
-      for (let i = 0; i < rows.length; i += bucketSize) {
-        const bucket    = rows.slice(i, i + bucketSize);
-        const validVals = bucket.map(r => r.value).filter(v => v != null);
-        if (!validVals.length) continue;
-        const avg = validVals.reduce((a, b) => a + b, 0) / validVals.length;
-        bucketed.push({
-          recorded_at: bucket[Math.floor(bucket.length / 2)].recorded_at,
-          value: parseFloat(avg.toFixed(2))
-        });
-      }
-      chartRows = bucketed;
-    }
-
-    const labels = chartRows.map(r => {
+    const labels = rows.map(r => {
       const d = new Date(r.recorded_at);
       return rangeHrs <= 24
-        ? d.toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" })
-        : rangeHrs <= 168
-          ? d.toLocaleDateString([], { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" })
-          : d.toLocaleDateString([], { month:"short", day:"numeric" });
+        ? d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})
+        : d.toLocaleDateString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
     });
-    const data = chartRows.map(r => r.value);
+    const data = rows.map(r => r.value);
 
-    const validData = data.filter(v => v != null);
-    const min  = Math.min(...validData);
-    const max  = Math.max(...validData);
-    const avg  = (validData.reduce((a, b) => a + b, 0) / validData.length).toFixed(1);
-    const last = data[data.length - 1];
-
-    const downsampleNote = rows.length !== chartRows.length
-      ? ` <span style="color:var(--text-hint);">(${chartRows.length} plotted, ${rows.length} total — averaged)</span>`
-      : "";
+    const min   = Math.min(...data.filter(v=>v!=null));
+    const max   = Math.max(...data.filter(v=>v!=null));
+    const avg   = (data.filter(v=>v!=null).reduce((a,b)=>a+b,0)/data.length).toFixed(1);
+    const last  = data[data.length-1];
 
     if (metaEl) metaEl.innerHTML = `
       <span style="margin-right:16px;"><strong>Latest:</strong> ${last} ${def.unit||""}</span>
       <span style="margin-right:16px;"><strong>Min:</strong> ${min} ${def.unit||""}</span>
       <span style="margin-right:16px;"><strong>Max:</strong> ${max} ${def.unit||""}</span>
       <span><strong>Avg:</strong> ${avg} ${def.unit||""}</span>
-      <span style="margin-left:16px;color:var(--text-hint);">${rows.length} readings${downsampleNote}</span>`;
+      <span style="margin-left:16px;color:var(--text-hint);">${rows.length} readings</span>`;
 
-    const color = feedKey.includes("temp") || feedKey.includes("heat") ? "#e67e22"
-      : feedKey.includes("lmp")      ? "#c0392b"
+    // Color by feed type
+    const color = feedKey.includes("temp")||feedKey.includes("heat") ? "#e67e22"
+      : feedKey.includes("lmp") ? "#c0392b"
       : feedKey.includes("humidity") ? "#2980b9"
-      : feedKey.includes("uv")       ? "#8e44ad"
+      : feedKey.includes("uv")  ? "#8e44ad"
       : "#1a5f4a";
 
     if (feedChartInstance) { feedChartInstance.destroy(); feedChartInstance = null; }
@@ -18053,12 +18084,12 @@ async function loadFeedChart() {
       data: {
         labels,
         datasets: [{
-          label: `${def.label||feedKey}${def.unit ? " ("+def.unit+")" : ""}`,
+          label: `${def.label}${def.unit?" ("+def.unit+")":""}`,
           data,
           borderColor: color,
           backgroundColor: color + "18",
-          borderWidth: 1.5,
-          pointRadius: chartRows.length > 200 ? 0 : 3,
+          borderWidth: 2,
+          pointRadius: rows.length > 100 ? 0 : 3,
           tension: 0.3,
           fill: true
         }]
@@ -18068,21 +18099,22 @@ async function loadFeedChart() {
         maintainAspectRatio: false,
         interaction: { mode:"index", intersect:false },
         plugins: {
-          legend: { display: false },
+          legend: { display:false },
           tooltip: { callbacks: { label: ctx => `${ctx.parsed.y} ${def.unit||""}` } }
         },
         scales: {
-          x: { ticks: { maxTicksLimit:10, font:{ size:10 }, color:"#888780" }, grid:{ color:"rgba(0,0,0,0.05)" } },
+          x: { ticks: { maxTicksLimit:10, font:{size:10}, color:"#888780" }, grid:{color:"rgba(0,0,0,0.05)"} },
           y: {
-            ticks: { font:{ size:10 }, color:"#888780" },
+            ticks: { font:{size:10}, color:"#888780" },
             grid:  { color:"rgba(0,0,0,0.05)" },
-            title: { display: true, text: def.unit||"", font:{ size:10 }, color:"#888780" }
+            title: { display:true, text: def.unit||"", font:{size:10}, color:"#888780" }
           }
         }
       }
     });
     if (chartInstances) chartInstances["feed-data-chart"] = feedChartInstance;
 
+    // Load rules for this feed below the chart
     await loadFeedRules(feedKey);
 
   } catch(e) {
@@ -22843,12 +22875,12 @@ async function loadCorrelationChart() {
   try {
     // Fetch outage readings
     const outageRows = await supabaseGet(
-      `outage_readings?recorded_at=gte.${since}&order=recorded_at.asc&limit=2000`
+      `outage_readings?recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=2000`
     ).catch(() => []);
 
     // Fetch device health (offline events — no report in 2+ hours)
     const healthRows = await supabaseGet(
-      `device_health?recorded_at=gte.${since}&order=recorded_at.asc&limit=2000`
+      `device_health?recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=2000`
     ).catch(() => []);
 
     if (!Array.isArray(outageRows) || !outageRows.length) {
@@ -23445,7 +23477,7 @@ async function refreshSCADADisplay() {
   const since = new Date(Date.now() - 20 * 60 * 1000).toISOString(); // last 20 min
   try {
     const rows = await supabaseGet(
-      `scada_readings?recorded_at=gte.${since}&order=recorded_at.desc&limit=500`
+      `scada_readings?recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.desc&limit=500`
     );
     if (Array.isArray(rows)) {
       rows.forEach(r => {
@@ -23658,9 +23690,8 @@ async function loadSCADATrend() {
   if (metaEl) metaEl.textContent = "Loading...";
 
   try {
-    const rows = await supabaseGetPaged(
-      `scada_readings?point_id=eq.${encodeURIComponent(pointId)}&recorded_at=gte.${since}&order=recorded_at.asc`,
-      rangeHrs <= 24 ? 500 : rangeHrs <= 168 ? 3000 : 12000
+    const rows = await supabaseGet(
+      `scada_readings?point_id=eq.${encodeURIComponent(pointId)}&recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=2000`
     );
     const point = scadaPoints.find(p => p.point_id === pointId);
 
@@ -23840,7 +23871,7 @@ async function refreshEVStatus() {
   // Fetch latest status from Supabase ev_sessions table
   try {
     const since = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // last 1 hour
-    const rows  = await supabaseGet(`ev_sessions?updated_at=gte.${since}&order=updated_at.desc&limit=200`);
+    const rows  = await supabaseGet(`ev_sessions?updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=200`);
     if (Array.isArray(rows)) {
       rows.forEach(r => {
         if (!evSessions[r.station_id] || new Date(r.updated_at) > new Date(evSessions[r.station_id].updated_at || 0)) {
@@ -24097,7 +24128,7 @@ async function loadEVSessionLog() {
   const rangeHrs = parseInt(document.getElementById("ev-log-range")?.value || "24");
   const since  = new Date(Date.now() - rangeHrs * 60 * 60 * 1000).toISOString();
   try {
-    const rows = await supabaseGet(`ev_sessions?updated_at=gte.${since}&order=updated_at.desc&limit=100`);
+    const rows = await supabaseGet(`ev_sessions?updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=100`);
     if (!Array.isArray(rows) || !rows.length) {
       list.innerHTML = '<div class="sched-empty">No sessions in this period. Sessions are recorded as chargers connect and report via OCPP.</div>';
       return;
@@ -28908,7 +28939,7 @@ async function exportFeedCSV(feedKey, feedLabel) {
   const since = new Date(Date.now() - 30 * 86400000).toISOString();
   try {
     // Try weather_readings first
-    const wr = await supabaseGet(`weather_readings?recorded_at=gte.${since}&order=recorded_at.asc&limit=10000`).catch(() => []);
+    const wr = await supabaseGet(`weather_readings?recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=10000`).catch(() => []);
     if (Array.isArray(wr) && wr.length && wr[0][feedKey] !== undefined) {
       rows = wr.filter(r => r[feedKey] != null).map(r => ({ time: r.recorded_at, value: r[feedKey] }));
     }
@@ -28916,7 +28947,7 @@ async function exportFeedCSV(feedKey, feedLabel) {
   if (!rows.length) {
     // Try SCADA readings
     try {
-      const sr = await supabaseGet(`scada_readings?feed_key=eq.${encodeURIComponent(feedKey)}&recorded_at=gte.${since}&order=recorded_at.asc&limit=10000`).catch(() => []);
+      const sr = await supabaseGet(`scada_readings?feed_key=eq.${encodeURIComponent(feedKey)}&recorded_at=gte.${encodeURIComponent(since)}&order=recorded_at.asc&limit=10000`).catch(() => []);
       if (Array.isArray(sr)) rows = sr.map(r => ({ time: r.recorded_at, value: r.value }));
     } catch(e) {}
   }
@@ -29104,7 +29135,7 @@ async function refreshEVLiveMonitor() {
   // Pull fresh session data
   try {
     const since = new Date(Date.now() - 24 * 3600000).toISOString();
-    const rows  = await supabaseGet(`ev_sessions?updated_at=gte.${since}&order=updated_at.desc&limit=500`);
+    const rows  = await supabaseGet(`ev_sessions?updated_at=gte.${encodeURIComponent(since)}&order=updated_at.desc&limit=500`);
     if (Array.isArray(rows)) {
       rows.forEach(r => {
         if (!evSessions[r.station_id] || new Date(r.updated_at) > new Date(evSessions[r.station_id]?.updated_at || 0))
