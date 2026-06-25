@@ -10968,6 +10968,44 @@ const ROLE_LABELS = {
   readonly:      "Read Only"
 };
 
+// ── Proactive token refresh ───────────────────────────────────────────────────
+// Checks every 60 seconds whether the current JWT is within 5 minutes of
+// expiry and silently refreshes it. This keeps the dashboard session alive
+// indefinitely without interrupting the user, even if the tab is idle.
+let _tokenRefreshTimer = null;
+
+function startTokenRefreshPoller() {
+  if (_tokenRefreshTimer) clearInterval(_tokenRefreshTimer);
+  _tokenRefreshTimer = setInterval(async () => {
+    try {
+      const { data: { session }, error } = await supabaseClient.auth.getSession();
+      if (error || !session) return; // not logged in — don't interfere
+
+      const expiresAt  = session.expires_at;       // Unix timestamp (seconds)
+      const nowSecs    = Math.floor(Date.now() / 1000);
+      const secsLeft   = expiresAt - nowSecs;
+
+      // Refresh proactively when less than 5 minutes remain
+      if (secsLeft < 300) {
+        console.log(`[Auth] Token expiring in ${secsLeft}s — refreshing proactively`);
+        const { data, error: refreshErr } = await supabaseClient.auth.refreshSession();
+        if (refreshErr) {
+          console.warn("[Auth] Token refresh failed:", refreshErr.message);
+        } else if (data?.session) {
+          currentSession = data.session;
+          console.log("[Auth] Token refreshed — new expiry:", new Date(data.session.expires_at * 1000).toLocaleTimeString());
+        }
+      }
+    } catch(e) {
+      console.warn("[Auth] Token refresh poller error:", e.message);
+    }
+  }, 60000); // check every 60 seconds
+}
+
+function stopTokenRefreshPoller() {
+  if (_tokenRefreshTimer) { clearInterval(_tokenRefreshTimer); _tokenRefreshTimer = null; }
+}
+
 // ── Init Auth on page load ────────────────────────────────────────────────────
 async function initAuth() {
   // Always show login screen — sign out any existing session first
@@ -10979,6 +11017,7 @@ async function initAuth() {
     if (event === "SIGNED_IN" && session) {
       await onSignedIn(session);
     } else if (event === "SIGNED_OUT") {
+      stopTokenRefreshPoller();
       currentUser = null; currentUserRole = null;
       showLoginOverlay();
     } else if (event === "PASSWORD_RECOVERY") {
@@ -11005,6 +11044,10 @@ async function initAuth() {
 async function onSignedIn(session) {
   currentSession = session;
   currentUser    = session.user;
+
+  // Start proactive token refresh — refreshes 5 minutes before expiry
+  // so the session never lapses even if the tab is idle
+  startTokenRefreshPoller();
 
   // Load user profile (role)
   const { data: profile } = await supabaseClient
