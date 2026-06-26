@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -998,12 +998,12 @@
       <!-- Stats Row -->
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
         <div class="sched-card" style="text-align:center;padding:1rem;">
-          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;">Enrolled Assets</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;">Enrolled</div>
           <div id="stat-enrolled" style="font-size:32px;font-weight:700;color:var(--text-primary);margin:6px 0;">—</div>
           <div style="font-size:11px;color:var(--text-hint);">Total Assets</div>
         </div>
         <div class="sched-card" style="text-align:center;padding:1rem;">
-          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;">Online Cellular Switches</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;">Online</div>
           <div id="stat-online" style="font-size:32px;font-weight:700;color:var(--green);margin:6px 0;">—</div>
           <div style="font-size:11px;color:var(--text-hint);">Reported &lt; 1 hr</div>
         </div>
@@ -8700,13 +8700,14 @@ function buildAssignBubbleUpHex(minutes) {
 
 function buildCurrentChangeFlagHex(enable) {
   // Assignment Command 0x1A, Designator 0x03 = Assign Bubble Flag register
-  // Bit 8 (0x80) = current-change bubble-up reporting
-  //   enable=true  → set   bit 8: flag byte = 0x80
-  //   enable=false → clear bit 8: flag byte = 0x00
-  // Reading the existing flag value first is not possible over this channel,
-  // so we write only the current-change bit — all other flag bits remain at 0.
-  // If the firmware team identifies additional flag bits in future, update here.
-  const flagByte = enable ? 0x80 : 0x00;
+  //   enable=true  → 0x80 — set   bit 8: current-change bubble-up ON
+  //                  result: A1 05 00 1A 03 80 [checksum]
+  //   enable=false → 0x02 — clear bit 8, keep flag field present in payload
+  //                  result: A1 05 00 1A 03 02 BF
+  //   NOTE: 0x00 was incorrect — it caused the device to drop 1 byte from
+  //   the bubble-up payload (60 chars instead of 62). 0x02 keeps the field
+  //   present while disabling current-change reporting. Confirmed by firmware team.
+  const flagByte = enable ? 0x80 : 0x02;
   const bytes = [0xA1, 0x05, 0x00, 0x1A, 0x03, flagByte];
   let checksum = 0;
   bytes.forEach(b => { checksum ^= b; });
