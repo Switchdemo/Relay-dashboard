@@ -884,10 +884,10 @@
       <div class="history-table-wrap" style="max-height:400px;overflow-y:auto;border:0.5px solid var(--border-md);border-radius:var(--radius-sm);">
         <table style="width:100%;border-collapse:collapse;">
           <thead style="position:sticky;top:0;z-index:2;background:var(--surface2);">
-            <tr><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);white-space:nowrap;">Time</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">Device</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">R1</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">R2</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">R3</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">R4</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">Voltage</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">Current</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">Watts</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">PF</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">Comfort</th></tr>
+            <tr><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);white-space:nowrap;">Time</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">Device</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">R1</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">R2</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">R3</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">R4</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">Voltage</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">Current</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">Watts</th><th style="padding:8px 10px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border-md);">Comfort</th></tr>
           </thead>
           <tbody id="history-body">
-            <tr><td colspan="11" class="no-data">Select a device and click "Load"</td></tr>
+            <tr><td colspan="10" class="no-data">Select a device and click "Load"</td></tr>
           </tbody>
         </table>
       </div>
@@ -956,7 +956,6 @@
           <button class="chart-tab-btn active" data-chart="voltage" onclick="selectChart('voltage',this)">⚡ Voltage</button>
           <button class="chart-tab-btn" data-chart="current" onclick="selectChart('current',this)">〜 Current</button>
           <button class="chart-tab-btn" data-chart="watts"   onclick="selectChart('watts',this)">💡 Watts</button>
-          <button class="chart-tab-btn" data-chart="pf"      onclick="selectChart('pf',this)">📐 Power Factor</button>
         </div>
 
         <!-- Individual chart panels -->
@@ -972,10 +971,8 @@
           <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Power (W)</div>
           <div style="position:relative;height:300px;width:100%;overflow:hidden;"><canvas id="chart-watts" style="max-width:100%;"></canvas></div>
         </div>
-        <div id="chart-panel-pf" class="chart-panel" style="display:none;width:100%;overflow:hidden;">
-          <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Power Factor</div>
-          <div style="position:relative;height:300px;width:100%;overflow:hidden;"><canvas id="chart-pf" style="max-width:100%;"></canvas></div>
-        </div>
+        <!-- Power Factor chart panel intentionally removed from UI — sensor data not yet meaningful (always reads 1.0).
+             power_factor remains tracked in the database / CSV exports for when accurate readings are available. -->
 
         <div id="charts-empty" style="text-align:center;padding:1rem;color:var(--text-hint);font-size:13px;display:none;">No data available for selected range.</div>
       </div>
@@ -9450,7 +9447,7 @@ async function loadCharts() {
 
   const rows = await supabaseGet(query);
   if (!Array.isArray(rows) || rows.length === 0) {
-    ["chart-voltage","chart-current","chart-watts","chart-pf"].forEach(id => destroyChart(id));
+    ["chart-voltage","chart-current","chart-watts"].forEach(id => destroyChart(id));
     if (empty) empty.style.display = "block";
     document.querySelectorAll(".chart-panel").forEach(p => p.style.display = "none");
     return;
@@ -9476,7 +9473,7 @@ async function loadCharts() {
   buildChart("chart-voltage", "Voltage (V)",    labels, rows.map(r => r.voltage != null ? r.voltage / 10 : null),        "#378ADD");
   buildChart("chart-current", "Current (A)",    labels, rows.map(r => r.current != null ? r.current / 10 : null),        "#1D9E75");
   buildChart("chart-watts",   "Power (W)",      labels, rows.map(r => r.watts_consumed ?? null), "#BA7517");
-  buildChart("chart-pf",      "Power Factor",   labels, rows.map(r => r.power_factor != null ? r.power_factor / 1000 : null),   "#7C3AED");
+  // chart-pf intentionally not built — canvas removed from UI (power factor sensor not yet meaningful)
 
   // Resize active chart after a frame to ensure proper fit
   requestAnimationFrame(() => {
@@ -16254,7 +16251,6 @@ async function loadLatestDevice(deviceId) {
       <div class="data-field"><span class="data-field-name">Voltage</span><span class="data-field-value">${r.voltage ? (r.voltage/10).toFixed(1) + " V" : "—"}</span></div>
       <div class="data-field"><span class="data-field-name">Current</span><span class="data-field-value">${r.current ? (r.current/10).toFixed(1) + " A" : "—"}</span></div>
       <div class="data-field"><span class="data-field-name">Watts</span><span class="data-field-value">${r.watts_consumed ? r.watts_consumed + " W" : "—"}</span></div>
-      <div class="data-field"><span class="data-field-name">Power Factor</span><span class="data-field-value">${r.power_factor != null ? (r.power_factor/1000).toFixed(3) : "—"}</span></div>
       <div class="data-field"><span class="data-field-name">Comfort</span><span class="data-field-value">${r.customer_comfort > 0 ? "On" : "Off"}</span></div>
       <div class="data-field"><span class="data-field-name">Location</span><span class="data-field-value">${r.location ?? "—"}</span></div>
     </div>`;
@@ -16391,20 +16387,20 @@ async function loadHistory() {
   const tbody    = document.getElementById("history-body");
   const limitEl  = document.getElementById("history-limit");
   const maxRows  = parseInt(limitEl?.value || "1000");
-  tbody.innerHTML = `<tr><td colspan="11" class="no-data">Loading… (fetching in pages, please wait)</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="10" class="no-data">Loading… (fetching in pages, please wait)</td></tr>`;
   try {
     // Strip any limit= from the query — pagination handles the ceiling
     const query = buildHistoryQuery("device_readings", maxRows).replace(/&limit=\d+/, "");
     const rows  = await supabaseGetPaged(query, maxRows, 1000);
     if (!rows || rows.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="11" class="no-data">No history found for the selected range</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10" class="no-data">No history found for the selected range</td></tr>`;
       return;
     }
     const capWarning = rows.length >= maxRows
-      ? `<tr><td colspan="11" style="padding:6px 10px;font-size:10px;color:var(--amber);background:var(--amber-bg);text-align:center;font-family:monospace;">
+      ? `<tr><td colspan="10" style="padding:6px 10px;font-size:10px;color:var(--amber);background:var(--amber-bg);text-align:center;font-family:monospace;">
            ⚠ Result capped at ${maxRows.toLocaleString()} rows — increase the row limit or narrow the date range to see all records
          </td></tr>`
-      : `<tr><td colspan="11" style="padding:4px 10px;font-size:10px;color:var(--text-hint);background:var(--surface2);text-align:right;font-family:monospace;">
+      : `<tr><td colspan="10" style="padding:4px 10px;font-size:10px;color:var(--text-hint);background:var(--surface2);text-align:right;font-family:monospace;">
            ${rows.length.toLocaleString()} records — oldest: ${new Date(rows[rows.length-1].recorded_at).toLocaleString()}
          </td></tr>`;
     tbody.innerHTML = capWarning + rows.map(r => {
@@ -16416,12 +16412,11 @@ async function loadHistory() {
         <td>${r.voltage       != null ? (r.voltage/10).toFixed(1)+"V"        : "—"}</td>
         <td>${r.current       != null ? (r.current/10).toFixed(1)+"A"        : "—"}</td>
         <td>${r.watts_consumed != null ? r.watts_consumed+"W"                 : "—"}</td>
-        <td>${r.power_factor   != null ? (r.power_factor/1000).toFixed(3)    : "—"}</td>
         <td>${r.customer_comfort > 0 ? "On" : "Off"}</td>
       </tr>`;
     }).join("");
   } catch(e) {
-    tbody.innerHTML = `<tr><td colspan="11" class="no-data">Error loading history: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="no-data">Error loading history: ${e.message}</td></tr>`;
     console.error("loadHistory:", e);
   }
 }
