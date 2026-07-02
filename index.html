@@ -15153,22 +15153,53 @@ async function saveVTNConfig() {
     updated_at:      new Date().toISOString()
   };
   const statusEl = document.getElementById("oadr-config-status");
+
+  // Write each key to program_settings — Worker reads from here via loadVTNConfig()
+  const pairs = [
+    ["vtn_url",        config.vtn_url        || ""],
+    ["vtn_id",         config.vtn_id         || ""],
+    ["ven_id",         config.ven_id         || ""],
+    ["ven_name",       config.ven_id         || ""],  // use VEN ID as name too
+    ["oadr_transport", config.transport      || "rest"],
+    ["oadr_reg_id",    config.registration_id|| ""],
+    ["oadr_auth_mode", config.auth_mode      || "none"],
+  ];
+
   try {
-    if (oadrVTNConfig?.id) {
-      await supabasePatch(`openadr_vtn_config?id=eq.${oadrVTNConfig.id}`, config);
-    } else {
-      await fetch(`${SUPABASE_URL}/rest/v1/openadr_vtn_config`, {
+    for (const [key, value] of pairs) {
+      await fetch(`${SUPABASE_URL}/rest/v1/program_settings`, {
         method: "POST",
-        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
-          "Content-Type": "application/json", "Prefer": "return=minimal" },
-        body: JSON.stringify(config)
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+          "Content-Type": "application/json",
+          "Prefer": "resolution=merge-duplicates"
+        },
+        body: JSON.stringify({ setting_key: key, setting_value: value })
       });
     }
-    oadrVTNConfig = config;
+
+    // Also save to openadr_vtn_config for dashboard display (if table exists)
+    try {
+      if (oadrVTNConfig?.id) {
+        await supabasePatch(`openadr_vtn_config?id=eq.${oadrVTNConfig.id}`, config);
+      } else {
+        await fetch(`${SUPABASE_URL}/rest/v1/openadr_vtn_config`, {
+          method: "POST",
+          headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+            "Content-Type": "application/json", "Prefer": "return=minimal" },
+          body: JSON.stringify(config)
+        });
+      }
+    } catch(e2) { console.warn("openadr_vtn_config table may not exist yet:", e2.message); }
+
+    oadrVTNConfig = { ...oadrVTNConfig, ...config };
     if (statusEl) { statusEl.textContent = "✅ VTN config saved."; statusEl.style.color = "var(--green-dark)"; statusEl.style.display = "block"; }
     setTimeout(() => { if (statusEl) statusEl.style.display = "none"; }, 3000);
+
   } catch(e) {
-    if (statusEl) { statusEl.textContent = `Error: ${e.message}`; statusEl.style.color = "var(--red)"; statusEl.style.display = "block"; }
+    if (statusEl) { statusEl.textContent = `Error saving: ${e.message}`; statusEl.style.color = "var(--red)"; statusEl.style.display = "block"; }
+    console.error("saveVTNConfig:", e);
   }
 }
 
@@ -18932,36 +18963,38 @@ async function verifyMTLSCert() {
 }
 
 async function testVTNConnection() {
-  const vtnUrl  = document.getElementById("oadr-vtn-url")?.value?.trim();
+  const vtnUrl   = document.getElementById("oadr-vtn-url")?.value?.trim();
+  const venId    = document.getElementById("oadr-ven-id")?.value?.trim() || "E545300JH";
+  const vtnId    = document.getElementById("oadr-vtn-id")?.value?.trim() || "";
   const statusEl = document.getElementById("oadr-config-status");
+
   if (!vtnUrl) {
-    if (statusEl) { statusEl.textContent = "Enter a VTN URL first."; statusEl.style.color = "var(--red)"; statusEl.style.display = "block"; }
+    if (statusEl) { statusEl.textContent = "Enter a VTN URL first then click Save before testing."; statusEl.style.color = "var(--red)"; statusEl.style.display = "block"; }
     return;
   }
-  if (statusEl) { statusEl.textContent = "Testing connection via Worker..."; statusEl.style.color = "var(--text-hint)"; statusEl.style.display = "block"; }
+  if (statusEl) { statusEl.textContent = "Saving config then testing connection via mTLS Worker…"; statusEl.style.color = "var(--text-hint)"; statusEl.style.display = "block"; }
+
+  // Always save first so the Worker has current values
+  await saveVTNConfig();
+
+  if (statusEl) { statusEl.textContent = "Testing connection via Worker (mTLS)…"; statusEl.style.color = "var(--text-hint)"; statusEl.style.display = "block"; }
 
   try {
-    const authMode = document.querySelector(".oadr-auth-btn.active")?.dataset?.mode || "none";
-    const res = await fetch(PROXY_URL + "openadr/test", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        vtn_url:   vtnUrl,
-        auth_mode: authMode,
-        api_key:   authMode === "apikey" ? document.getElementById("oadr-api-key")?.value?.trim() : null,
-        use_mtls:  authMode === "mtls"
-      })
+    const res  = await fetch(PROXY_URL + "openadr/test", {
+      method: "GET",
+      headers: { "Content-Type": "application/json" }
     });
     const data = await res.json();
-    if (data.ok) {
-      if (statusEl) { statusEl.textContent = `✅ Connection successful — ${data.status} ${data.message||""}`; statusEl.style.color = "var(--green-dark)"; }
+    if (data.success) {
+      if (statusEl) { statusEl.textContent = `✅ Connected — HTTP ${data.http_status} · Cert: ${data.cert_used ? "mTLS ✓" : "no cert"} · VTN response: ${data.response_code||"ok"}`; statusEl.style.color = "var(--green-dark)"; }
     } else {
-      if (statusEl) { statusEl.textContent = `⚠️ Connection failed: ${data.error||data.status||"Unknown error"}`; statusEl.style.color = "var(--amber)"; }
+      if (statusEl) { statusEl.textContent = `⚠️ Connection failed: ${data.error || "HTTP "+data.http_status}`; statusEl.style.color = "var(--amber)"; }
     }
+    console.log("VTN test result:", data);
   } catch(e) {
     if (statusEl) { statusEl.textContent = `Error: ${e.message}`; statusEl.style.color = "var(--red)"; }
   }
-  setTimeout(() => { if (statusEl) statusEl.style.display = "none"; }, 6000);
+  setTimeout(() => { if (statusEl) statusEl.style.display = "none"; }, 8000);
 }
 
 
