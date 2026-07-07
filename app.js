@@ -24595,6 +24595,37 @@ function loraStyleChannel(ch, cb) {
   if (!label) return;
   label.style.border    = cb.checked ? '1.5px solid var(--green)' : '1.5px solid var(--border-md)';
   label.style.background = cb.checked ? 'var(--green-bg)' : 'var(--surface)';
+  // Sync the All button state
+  const allChecked = ['f1','f2','f3','f4'].every(c => document.getElementById('lora-'+c)?.checked);
+  const allLabel = document.getElementById('lora-ch-all');
+  const allCb    = document.getElementById('lora-f-all');
+  if (allLabel) { allLabel.style.border = allChecked ? '1.5px solid var(--amber)' : '1.5px solid var(--border-md)'; allLabel.style.background = allChecked ? 'var(--amber-bg)' : 'var(--surface)'; }
+  if (allCb)    allCb.checked = allChecked;
+  const out = document.getElementById('lora-output-area');
+  if (out) out.style.display = 'none';
+}
+
+function loraSelectAllChannels() {
+  const allCb = document.getElementById('lora-f-all');
+  const isChecked = allCb?.checked;
+  // Toggle: if all are already checked, uncheck all; otherwise check all
+  const channels = ['f1','f2','f3','f4'];
+  const allChecked = channels.every(ch => document.getElementById('lora-'+ch)?.checked);
+  const newState = !allChecked;
+
+  channels.forEach(ch => {
+    const cb = document.getElementById('lora-'+ch);
+    if (cb) { cb.checked = newState; loraStyleChannel(ch, cb); }
+  });
+
+  // Style the All button
+  const allLabel = document.getElementById('lora-ch-all');
+  if (allLabel) {
+    allLabel.style.border     = newState ? '1.5px solid var(--amber)' : '1.5px solid var(--border-md)';
+    allLabel.style.background = newState ? 'var(--amber-bg)' : 'var(--surface)';
+  }
+  if (allCb) allCb.checked = newState;
+
   const out = document.getElementById('lora-output-area');
   if (out) out.style.display = 'none';
 }
