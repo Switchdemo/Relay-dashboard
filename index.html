@@ -747,6 +747,7 @@
     <button class="tab-btn" id="main-devices" onclick="switchMain('devices', this)">Devices</button>
     <button class="tab-btn" id="main-weather" onclick="switchMain('weather', this)">Weather</button>
     <button class="tab-btn" id="main-vp" onclick="switchMain('vp', this)">Virtual Peaker</button>
+    <button class="tab-btn" id="main-lora" onclick="switchMain('lora', this)">📡 LoRa</button>
     <button class="tab-btn" id="main-monitor" onclick="switchMain('monitor', this)">Monitor</button>
     <button class="tab-btn" id="main-admin" onclick="switchMain('admin', this)" style="display:none;">Admin</button>
   </div>
@@ -4292,6 +4293,233 @@
 
 
 <!-- ── MONITOR TRIGGERS TAB (main tab alias) ── -->
+<!-- ═══════════════════════════════════════════════════════════ LoRa Command Generator ══ -->
+<div class="tab-pane" id="tab-lora">
+  <div class="scroll-content">
+    <div style="max-width:780px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
+
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">📡 EnTek ATC1000 LoRa Command Generator</div>
+        </div>
+        <p style="font-size:12px;color:var(--text-hint);margin-bottom:16px;">
+          Builds Load Control JSON for LoRa master/slave dispatch. Output is sent to the device via Notehub as a <code>note.add</code> command.
+        </p>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+
+          <!-- Left column: Control Strategy -->
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Control Strategy</div>
+
+            <!-- Control Type -->
+            <div style="margin-bottom:12px;">
+              <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px;">Control Type</label>
+              <div style="display:flex;gap:12px;">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                  <input type="radio" name="lora-ctrl-type" id="lora-ctrl-dlc" value="dlc" checked onchange="loraUpdatePreview()"> DLC
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                  <input type="radio" name="lora-ctrl-type" id="lora-ctrl-di" value="di" onchange="loraUpdatePreview()"> DI
+                </label>
+              </div>
+            </div>
+
+            <!-- Command Mode -->
+            <div style="margin-bottom:12px;">
+              <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px;">Command Mode</label>
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                  <input type="radio" name="lora-mode" id="lora-mode-shed" value="shed" checked onchange="loraUpdatePreview()"> Shed
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                  <input type="radio" name="lora-mode" id="lora-mode-graceful" value="gracefulRestore" onchange="loraUpdatePreview()"> Graceful Restore
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                  <input type="radio" name="lora-mode" id="lora-mode-abrupt" value="abruptRestore" onchange="loraUpdatePreview()"> Abrupt Restore
+                </label>
+              </div>
+            </div>
+
+            <!-- F-Channels -->
+            <div style="margin-bottom:12px;">
+              <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px;">F-Channels</label>
+              <div style="display:flex;gap:12px;">
+                <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;"><input type="checkbox" id="lora-f1" checked onchange="loraUpdatePreview()"> F1</label>
+                <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;"><input type="checkbox" id="lora-f2" onchange="loraUpdatePreview()"> F2</label>
+                <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;"><input type="checkbox" id="lora-f3" onchange="loraUpdatePreview()"> F3</label>
+                <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;"><input type="checkbox" id="lora-f4" onchange="loraUpdatePreview()"> F4</label>
+              </div>
+            </div>
+
+            <!-- Strategy -->
+            <div style="margin-bottom:12px;" id="lora-strategy-row">
+              <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px;">Shed Strategy (On / Period)</label>
+              <select id="lora-strategy" onchange="loraUpdatePreview()" style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <optgroup label="7.5 min period">
+                  <option value="1">7.5 / 7.5 Minutes</option>
+                </optgroup>
+                <optgroup label="15 min period">
+                  <option value="2">7.5 / 15 Minutes</option>
+                </optgroup>
+                <optgroup label="20 min period">
+                  <option value="3">5 / 20 Minutes</option>
+                  <option value="4">10 / 20 Minutes</option>
+                  <option value="5">6.6 / 20 Minutes</option>
+                  <option value="6">8 / 20 Minutes</option>
+                  <option value="7">11 / 20 Minutes</option>
+                  <option value="8">12 / 20 Minutes</option>
+                  <option value="9">13 / 20 Minutes</option>
+                  <option value="10">14 / 20 Minutes</option>
+                  <option value="11">15 / 20 Minutes</option>
+                  <option value="12">16 / 20 Minutes</option>
+                  <option value="13">17 / 20 Minutes</option>
+                  <option value="14">18 / 20 Minutes</option>
+                  <option value="15">19 / 20 Minutes</option>
+                  <option value="16">20 / 20 Minutes</option>
+                </optgroup>
+                <optgroup label="30 min period">
+                  <option value="17">5 / 30 Minutes</option>
+                  <option value="18">7.5 / 30 Minutes</option>
+                  <option value="19">10 / 30 Minutes</option>
+                  <option value="20">12 / 30 Minutes</option>
+                  <option value="21">13.5 / 30 Minutes</option>
+                  <option value="22">15 / 30 Minutes</option>
+                  <option value="23">16.5 / 30 Minutes</option>
+                  <option value="24">18 / 30 Minutes</option>
+                  <option value="25">19.5 / 30 Minutes</option>
+                  <option value="26">21 / 30 Minutes</option>
+                  <option value="27">22.5 / 30 Minutes</option>
+                  <option value="28">24 / 30 Minutes</option>
+                  <option value="29">25.5 / 30 Minutes</option>
+                  <option value="30">27 / 30 Minutes</option>
+                  <option value="31">28.5 / 30 Minutes</option>
+                  <option value="32">30 / 30 Minutes</option>
+                </optgroup>
+                <optgroup label="60 min period">
+                  <option value="33">5 / 60 Minutes</option>
+                  <option value="34">10 / 60 Minutes</option>
+                  <option value="35">15 / 60 Minutes</option>
+                  <option value="36">20 / 60 Minutes</option>
+                  <option value="37">24 / 60 Minutes</option>
+                  <option value="38">27 / 60 Minutes</option>
+                  <option value="39">30 / 60 Minutes</option>
+                  <option value="40">33 / 60 Minutes</option>
+                  <option value="41">36 / 60 Minutes</option>
+                  <option value="42">39 / 60 Minutes</option>
+                  <option value="43">42 / 60 Minutes</option>
+                  <option value="44">45 / 60 Minutes</option>
+                  <option value="45">48 / 60 Minutes</option>
+                  <option value="46">51 / 60 Minutes</option>
+                  <option value="47">54 / 60 Minutes</option>
+                  <option value="48">57 / 60 Minutes</option>
+                  <option value="49">60 / 60 Minutes</option>
+                </optgroup>
+              </select>
+            </div>
+
+            <!-- Repetitions -->
+            <div style="margin-bottom:12px;" id="lora-reps-row">
+              <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px;">Repetitions</label>
+              <input type="number" id="lora-reps" value="0" min="0" max="255" onchange="loraUpdatePreview()" oninput="loraUpdatePreview()"
+                style="width:80px;padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+            </div>
+          </div>
+
+          <!-- Right column: Addressing & Timing -->
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Addressing & Timing</div>
+
+            <!-- Addressing -->
+            <div style="margin-bottom:12px;">
+              <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px;">Addressing</label>
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                  <input type="radio" name="lora-addr" id="lora-addr-broadcast" value="broadcast" checked onchange="loraToggleAddressing()"> Send to All Addresses (Broadcast)
+                </label>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                    <input type="radio" name="lora-addr" id="lora-addr-individual" value="individual" onchange="loraToggleAddressing()"> Send to Individual Address
+                  </label>
+                  <input type="number" id="lora-addr-num" value="1" min="1" max="255" disabled
+                    onchange="loraUpdatePreview()" oninput="loraUpdatePreview()"
+                    style="width:60px;padding:4px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                </div>
+              </div>
+            </div>
+
+            <!-- Event ID -->
+            <div style="margin-bottom:12px;" id="lora-eventid-row">
+              <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px;">Event ID <span style="font-size:10px;color:var(--text-hint);font-weight:400;">(must change for each event)</span></label>
+              <input type="number" id="lora-event-id" value="0" min="0" max="255" onchange="loraUpdatePreview()" oninput="loraUpdatePreview()"
+                style="width:80px;padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+            </div>
+
+            <!-- Start Time -->
+            <div style="margin-bottom:12px;">
+              <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px;">Start Time</label>
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                  <input type="radio" name="lora-start" id="lora-start-now" value="now" checked onchange="loraToggleStartTime()"> Start Now
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                  <input type="radio" name="lora-start" id="lora-start-later" value="later" onchange="loraToggleStartTime()"> Schedule Later
+                </label>
+                <input type="datetime-local" id="lora-scheduled-time" disabled
+                  onchange="loraUpdatePreview()"
+                  style="padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;color:var(--text-hint);">
+              </div>
+            </div>
+
+            <!-- Device selector for dispatch -->
+            <div style="margin-bottom:12px;">
+              <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px;">Dispatch Via Device</label>
+              <select id="lora-device-uid" style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="">— Select device —</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Output preview -->
+        <div style="margin-top:16px;border-top:0.5px solid var(--border-md);padding-top:16px;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Generated Command</div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div>
+              <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">LC Command String</label>
+              <input type="text" id="lora-hex-preview" readonly
+                style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;font-family:monospace;color:var(--text-primary);">
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:4px;">JSON String</label>
+              <input type="text" id="lora-json-preview" readonly
+                style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;font-family:monospace;color:var(--text-primary);">
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:12px;">
+            <button class="primary-btn" onclick="loraDispatch()" id="lora-dispatch-btn">
+              📡 Send to Device
+            </button>
+            <button class="queue-refresh" onclick="loraCopyHex()">📋 Copy Hex</button>
+            <button class="queue-refresh" onclick="loraCopyJson()">📋 Copy JSON</button>
+            <span id="lora-status" style="font-size:12px;color:var(--text-hint);align-self:center;"></span>
+          </div>
+        </div>
+
+        <!-- Dispatch log -->
+        <div style="margin-top:16px;border-top:0.5px solid var(--border-md);padding-top:16px;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Dispatch Log</div>
+          <div id="lora-dispatch-log" style="font-size:11px;font-family:monospace;color:var(--text-secondary);max-height:160px;overflow-y:auto;background:var(--surface2);border-radius:var(--radius-sm);padding:10px;border:0.5px solid var(--border-md);">
+            <span style="color:var(--text-hint);">No commands sent yet.</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<!-- ══════════════════════════════════════════════════════════════════════════════════════ -->
+
 <div class="tab-pane" id="tab-monitor-triggers">
   <div class="scroll-content">
     <div style="max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
