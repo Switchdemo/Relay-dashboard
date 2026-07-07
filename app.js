@@ -24381,20 +24381,28 @@ function loraGenerate() {
   try {
     const opts = loraGetOpts();
     if (!opts.channels.f1 && !opts.channels.f2 && !opts.channels.f3 && !opts.channels.f4) {
-      loraStatus('Select at least one relay channel', true); return;
+      loraGenStatus('⚠️ Select at least one relay channel', true); return;
     }
     const result  = buildLoRaCommand(opts);
     const hexEl   = document.getElementById('lora-hex-preview');
     const jsonEl  = document.getElementById('lora-json-preview');
     const outArea = document.getElementById('lora-output-area');
-    if (hexEl)   { hexEl.value  = result.hex;  hexEl.dataset.generated = '1'; }
-    if (jsonEl)  { jsonEl.value = result.json; jsonEl.dataset.generated = '1'; }
+    if (hexEl)   hexEl.value  = result.hex;
+    if (jsonEl)  jsonEl.value = result.json;
     if (outArea) outArea.style.display = '';
-    loraStatus('✅ Command generated', false);
+    loraGenStatus('✅ Command generated', false);
   } catch(e) {
-    loraStatus('Error: ' + e.message, true);
+    loraGenStatus('Error: ' + e.message, true);
     console.error('loraGenerate error:', e);
   }
+}
+
+function loraGenStatus(msg, isError) {
+  const el = document.getElementById('lora-gen-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = isError ? 'var(--red)' : 'var(--green-dark)';
+  if (!isError) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 4000);
 }
 
 function loraToggleAddressing() {
@@ -24534,4 +24542,59 @@ function loraToggleChannel(ch, cb) {
   label.style.border    = cb.checked ? '1.5px solid var(--green)' : '1.5px solid var(--border-md)';
   label.style.background = cb.checked ? 'var(--green-bg)' : 'var(--surface)';
   loraUpdatePreview();
+}
+
+// ── LoRa UI state helpers (new radio-button layout) ───────────────────────────
+function loraOnModeChange() {
+  const mode = document.querySelector('input[name="lora-mode"]:checked')?.value || 'shed';
+  const map  = { shed:'lora-radio-shed', gracefulRestore:'lora-radio-graceful', abruptRestore:'lora-radio-abrupt' };
+  Object.entries(map).forEach(([m, id]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.border     = m === mode ? '1.5px solid var(--green)' : '1.5px solid var(--border-md)';
+    el.style.background = m === mode ? 'var(--green-bg)' : 'var(--surface)';
+  });
+  const shedOpts = document.getElementById('lora-shed-options');
+  if (shedOpts) shedOpts.style.display = mode === 'shed' ? '' : 'none';
+  // Clear generated output on setting change
+  const out = document.getElementById('lora-output-area');
+  if (out) out.style.display = 'none';
+}
+
+function loraOnAddrChange() {
+  const type = document.querySelector('input[name="lora-addr"]:checked')?.value || 'broadcast';
+  const bEl  = document.getElementById('lora-radio-broadcast');
+  const iEl  = document.getElementById('lora-radio-individual');
+  if (bEl) { bEl.style.border = type === 'broadcast' ? '1.5px solid var(--green)' : '1.5px solid var(--border-md)'; bEl.style.background = type === 'broadcast' ? 'var(--green-bg)' : 'var(--surface)'; }
+  if (iEl) { iEl.style.border = type === 'individual' ? '1.5px solid var(--green)' : '1.5px solid var(--border-md)'; iEl.style.background = type === 'individual' ? 'var(--green-bg)' : 'var(--surface)'; }
+  const addrNum = document.getElementById('lora-addr-num');
+  if (addrNum) addrNum.disabled = type !== 'individual';
+  const evRow = document.getElementById('lora-eventid-row');
+  if (evRow) evRow.style.display = type === 'individual' ? '' : 'none';
+  const out = document.getElementById('lora-output-area');
+  if (out) out.style.display = 'none';
+}
+
+function loraOnStartChange() {
+  const isLater = document.getElementById('lora-start-later')?.checked;
+  const dtInput = document.getElementById('lora-scheduled-time');
+  if (dtInput) {
+    dtInput.disabled    = !isLater;
+    dtInput.style.color = isLater ? 'var(--text-primary)' : 'var(--text-hint)';
+    if (isLater && !dtInput.value) {
+      const d = new Date(Date.now() + 3600000);
+      dtInput.value = d.toISOString().slice(0, 16);
+    }
+  }
+  const out = document.getElementById('lora-output-area');
+  if (out) out.style.display = 'none';
+}
+
+function loraStyleChannel(ch, cb) {
+  const label = document.getElementById('lora-ch-' + ch);
+  if (!label) return;
+  label.style.border    = cb.checked ? '1.5px solid var(--green)' : '1.5px solid var(--border-md)';
+  label.style.background = cb.checked ? 'var(--green-bg)' : 'var(--surface)';
+  const out = document.getElementById('lora-output-area');
+  if (out) out.style.display = 'none';
 }
