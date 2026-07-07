@@ -267,7 +267,8 @@ function switchMain(main, btn) {
   else if (main === "events")  { const s = currentSub.events||"scheduler";  activatePane(s); activateSubBtn("events",s); }
   else if (main === "devices") { const s = currentSub.devices||"data"; activatePane(s); activateSubBtn("devices",s); }
   else if (main === "monitor") { const s = currentSub.monitor||"monitor-triggers"; activatePane(s); activateSubBtn("monitor",s); }
-  else if (main === "vp") { activatePane("vp"); initVPTab(); }
+  else if (main === "vp")   { activatePane("vp"); initVPTab(); }
+  else if (main === "lora") { activatePane("lora"); loraInit(); }
 }
 
 function switchSub(main, sub, btn) {
@@ -8308,6 +8309,8 @@ async function logOADRDispatch(evt, device, relayNum, relayAction, architecture,
 }
 
 async function checkAndFirePendingEvents() {
+  // Don't run without a valid session — avoids 401 errors during page load
+  if (!currentSession?.access_token) return;
   const now = new Date().toISOString();
 
   // ── Cleanup: mark expired active events as completed and send restore ──
@@ -9711,6 +9714,8 @@ function updateHeaderNWSTemp(tempF, desc) {
 // Save 15-minute observation snapshot to Supabase
 async function saveNWSObservationToSupabase() {
   if (!nwsObsData || !wxLocationData) return;
+  // Don't attempt save without a valid session — avoids JWT expired errors
+  if (!currentSession?.access_token) return;
   const p = nwsObsData;
   const record = {
     station_id:   nwsStationId,
@@ -9734,7 +9739,24 @@ async function saveNWSObservationToSupabase() {
   };
   try {
     await supabasePost("weather_readings", record);
-  } catch(e) { console.warn("NWS Supabase save failed:", e.message); }
+  } catch(e) { console.warn("NWS weather_readings save failed:", e.message); }
+
+  // ── Also write to monitor_feed_readings ───────────────────────────────────
+  // This ensures weather data is available for runtime analytics correlation
+  // even when the Monitor tab is not active (NWS poller runs independently
+  // every 15 min regardless of which tab is open — backup mechanism for Azure)
+  const now = new Date().toISOString();
+  const feedWrites = [];
+  if (record.temp_f        != null) feedWrites.push({ feed_key: "nws_temp",       value: record.temp_f,        unit: "°F", recorded_at: now });
+  if (record.humidity_pct  != null) feedWrites.push({ feed_key: "nws_humidity",   value: record.humidity_pct,  unit: "%",  recorded_at: now });
+  if (record.heat_index_f  != null) feedWrites.push({ feed_key: "nws_heat_index", value: record.heat_index_f,  unit: "°F", recorded_at: now });
+  if (record.dewpoint_f    != null) feedWrites.push({ feed_key: "nws_dewpoint",   value: record.dewpoint_f,    unit: "°F", recorded_at: now });
+  if (record.wind_mph      != null) feedWrites.push({ feed_key: "nws_wind_mph",   value: record.wind_mph,      unit: "mph",recorded_at: now });
+  if (record.pressure_inhg != null) feedWrites.push({ feed_key: "nws_pressure",   value: record.pressure_inhg, unit: "inHg",recorded_at: now });
+
+  for (const fw of feedWrites) {
+    try { await supabasePost("monitor_feed_readings", fw); } catch(e) {}
+  }
 }
 
 // Start 15-minute NWS polling (called after location is set and on login)
@@ -24228,4 +24250,231 @@ function vpReset() {
   const btn = document.querySelector('#tab-vp .sched-submit-btn');
   if (btn) { btn.disabled = false; btn.textContent = '▶ Simulate VP dispatch'; }
   vpDispatchRunning = false;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTEK ATC1000 LORA COMMAND GENERATOR
+// Reverse-engineered from vendor tool analysis — 9 verified examples
+// Protocol: EnTek "Format 305" LoRa Load Control command
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Command Builder ───────────────────────────────────────────────────────────
+function buildLoRaCommand(opts) {
+  const {
+    mode,           // 'shed' | 'gracefulRestore' | 'abruptRestore'
+    addressing,     // 'broadcast' | 'individual'
+    address,        // 1-255 (individual only)
+    strategyIndex,  // 1-49 (shed only)
+    channels,       // { f1, f2, f3, f4 } booleans
+    repetitions,    // 0-255
+    eventId,        // 0-255 (individual only — must change per event)
+    startNow,       // true | false
+    scheduledTime   // Date (only used if !startNow)
+  } = opts;
+
+  // Checksum helpers
+  const xorAll       = bytes => bytes.reduce((a, b) => a ^ b, 0);
+  const swapNibbles  = b => ((b & 0x0F) << 4) | ((b & 0xF0) >> 4);
+
+  let bytes = [];
+
+  if (addressing === 'broadcast') {
+    // BROADCAST FORMAT (13 bytes):
+    // A1 0B 00 00 [S1] 10 [Reps×0x10] 00 00 00 00 00 [CS]
+    // S1 = 0x08 | (strategyIndex << 4)  — confirmed on 2 examples
+    // CS = nibble-swap of XOR of bytes 0–11
+    const s1   = (0x08 | (strategyIndex << 4)) & 0xFF;
+    const reps = ((repetitions || 0) * 0x10) & 0xFF;
+    bytes = [0xA1, 0x0B, 0x00, 0x00, s1, 0x10, reps, 0x00, 0x00, 0x00, 0x00, 0x00];
+    bytes.push(swapNibbles(xorAll(bytes)));
+
+  } else {
+    // INDIVIDUAL/UNICAST FORMAT (14 bytes):
+    // A1 0C 01 [Addr] 00 [Byte5] [FChan] [Reps] [EventID] [TS×4 BE] [CS]
+    // Byte5: shed=strategyIndex, gracefulRestore=0x3D, abruptRestore=0x3E
+    // FChan: bit7=shed(always), bit3=F4, bit2=F3, bit1=F2, bit0=F1
+    // CS   = XOR of all 13 preceding bytes
+    const fChan = 0x80
+      | (channels.f1 ? 0x01 : 0)
+      | (channels.f2 ? 0x02 : 0)
+      | (channels.f3 ? 0x04 : 0)
+      | (channels.f4 ? 0x08 : 0);
+
+    const byte5 = mode === 'shed'
+      ? (strategyIndex & 0xFF)
+      : mode === 'gracefulRestore' ? 0x3D
+      : 0x3E; // abruptRestore (0x3E tentative — confirm with vendor)
+
+    let ts = 0;
+    if (!startNow && scheduledTime instanceof Date) {
+      ts = Math.floor(scheduledTime.getTime() / 1000);
+    }
+
+    bytes = [
+      0xA1, 0x0C, 0x01, (address || 1) & 0xFF,
+      0x00, byte5, fChan,
+      (repetitions || 0) & 0xFF,
+      (eventId || 0) & 0xFF,
+      (ts >> 24) & 0xFF, (ts >> 16) & 0xFF, (ts >> 8) & 0xFF, ts & 0xFF
+    ];
+    bytes.push(xorAll(bytes));
+  }
+
+  const hex  = bytes.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join('');
+  const json = JSON.stringify({ req: "note.add", body: { LC: hex }, sync: true });
+  return { hex, json, bytes };
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+function loraGetOpts() {
+  const mode        = document.querySelector('input[name="lora-mode"]:checked')?.value || 'shed';
+  const addrType    = document.querySelector('input[name="lora-addr"]:checked')?.value || 'broadcast';
+  const address     = parseInt(document.getElementById('lora-addr-num')?.value || '1', 10);
+  const stratIdx    = parseInt(document.getElementById('lora-strategy')?.value || '1', 10);
+  const reps        = parseInt(document.getElementById('lora-reps')?.value || '0', 10);
+  const eventId     = parseInt(document.getElementById('lora-event-id')?.value || '0', 10);
+  const startType   = document.querySelector('input[name="lora-start"]:checked')?.value || 'now';
+  const schedVal    = document.getElementById('lora-scheduled-time')?.value;
+  const scheduledTime = (startType === 'later' && schedVal) ? new Date(schedVal) : null;
+
+  return {
+    mode,
+    addressing:    addrType,
+    address,
+    strategyIndex: stratIdx,
+    channels: {
+      f1: document.getElementById('lora-f1')?.checked || false,
+      f2: document.getElementById('lora-f2')?.checked || false,
+      f3: document.getElementById('lora-f3')?.checked || false,
+      f4: document.getElementById('lora-f4')?.checked || false,
+    },
+    repetitions: isNaN(reps) ? 0 : reps,
+    eventId:     isNaN(eventId) ? 0 : eventId,
+    startNow:    startType === 'now',
+    scheduledTime
+  };
+}
+
+function loraUpdatePreview() {
+  try {
+    const opts   = loraGetOpts();
+    const result = buildLoRaCommand(opts);
+    const hexEl  = document.getElementById('lora-hex-preview');
+    const jsonEl = document.getElementById('lora-json-preview');
+    if (hexEl)  hexEl.value  = result.hex;
+    if (jsonEl) jsonEl.value = result.json;
+
+    // Show/hide strategy row for restore modes
+    const isShed = opts.mode === 'shed';
+    const stratRow = document.getElementById('lora-strategy-row');
+    const repsRow  = document.getElementById('lora-reps-row');
+    const evIdRow  = document.getElementById('lora-eventid-row');
+    if (stratRow) stratRow.style.display = isShed ? '' : 'none';
+    if (evIdRow)  evIdRow.style.display  = opts.addressing === 'individual' ? '' : 'none';
+  } catch(e) {
+    console.warn('loraUpdatePreview error:', e.message);
+  }
+}
+
+function loraToggleAddressing() {
+  const isIndividual = document.getElementById('lora-addr-individual')?.checked;
+  const addrInput    = document.getElementById('lora-addr-num');
+  if (addrInput) addrInput.disabled = !isIndividual;
+  loraUpdatePreview();
+}
+
+function loraToggleStartTime() {
+  const isLater = document.getElementById('lora-start-later')?.checked;
+  const dtInput = document.getElementById('lora-scheduled-time');
+  if (dtInput) {
+    dtInput.disabled = !isLater;
+    dtInput.style.color = isLater ? 'var(--text-primary)' : 'var(--text-hint)';
+    // Default to 1 hour from now
+    if (isLater && !dtInput.value) {
+      const d = new Date(Date.now() + 3600000);
+      dtInput.value = d.toISOString().slice(0, 16);
+    }
+  }
+  loraUpdatePreview();
+}
+
+function loraInit() {
+  // Populate device selector from current device list
+  const sel = document.getElementById('lora-device-uid');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— Select device —</option>';
+  (lcpDevices || []).forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d.device_uid;
+    opt.textContent = (d.nickname || d.label || d.device_uid);
+    if (d.device_uid === current) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  loraUpdatePreview();
+}
+
+async function loraDispatch() {
+  const deviceUID = document.getElementById('lora-device-uid')?.value;
+  if (!deviceUID) { loraStatus('Select a device first', true); return; }
+
+  const opts   = loraGetOpts();
+  const result = buildLoRaCommand(opts);
+  const btn    = document.getElementById('lora-dispatch-btn');
+  const logEl  = document.getElementById('lora-dispatch-log');
+
+  btn.disabled    = true;
+  btn.textContent = '⏳ Sending…';
+  loraStatus('Sending…');
+
+  try {
+    const res = await fetch(PROXY_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Device-UID': deviceUID },
+      body:    JSON.stringify({ LC: result.hex })
+    });
+    const data = await res.json();
+
+    const success = res.ok;
+    const ts      = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const modeLabel = opts.mode === 'shed' ? 'SHED' : opts.mode === 'gracefulRestore' ? 'GRACEFUL RESTORE' : 'ABRUPT RESTORE';
+    const addrLabel = opts.addressing === 'broadcast' ? 'BROADCAST' : `ADDR ${opts.address}`;
+
+    const logLine = document.createElement('div');
+    logLine.style.cssText = 'padding:3px 0;border-bottom:0.5px solid var(--border);color:' + (success ? 'var(--green-dark)' : 'var(--red)');
+    logLine.innerHTML = `<span style="color:var(--text-hint)">${ts}</span> ${success ? '✅' : '❌'} `
+      + `<strong>${modeLabel}</strong> ${addrLabel} — ${result.hex}`;
+    if (logEl) {
+      if (logEl.querySelector('.sched-empty') || logEl.textContent.includes('No commands')) logEl.innerHTML = '';
+      logEl.prepend(logLine);
+    }
+
+    loraStatus(success ? '✅ Sent' : '❌ Failed: ' + (data?.err || res.status), !success);
+  } catch(e) {
+    loraStatus('❌ Error: ' + e.message, true);
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = '📡 Send to Device';
+  }
+}
+
+function loraStatus(msg, isError = false) {
+  const el = document.getElementById('lora-status');
+  if (!el) return;
+  el.textContent  = msg;
+  el.style.color  = isError ? 'var(--red)' : 'var(--green-dark)';
+  if (!isError) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 4000);
+}
+
+function loraCopyHex() {
+  const el = document.getElementById('lora-hex-preview');
+  if (!el?.value) return;
+  navigator.clipboard.writeText(el.value).then(() => loraStatus('Hex copied'));
+}
+
+function loraCopyJson() {
+  const el = document.getElementById('lora-json-preview');
+  if (!el?.value) return;
+  navigator.clipboard.writeText(el.value).then(() => loraStatus('JSON copied'));
 }
