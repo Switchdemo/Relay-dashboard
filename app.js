@@ -24357,23 +24357,43 @@ function loraGetOpts() {
 }
 
 function loraUpdatePreview() {
-  try {
-    const opts   = loraGetOpts();
-    const result = buildLoRaCommand(opts);
-    const hexEl  = document.getElementById('lora-hex-preview');
-    const jsonEl = document.getElementById('lora-json-preview');
-    if (hexEl)  hexEl.value  = result.hex;
-    if (jsonEl) jsonEl.value = result.json;
+  // Show/hide conditional fields based on current selections
+  const mode       = document.querySelector('input[name="lora-mode"]:checked')?.value || 'shed';
+  const addrType   = document.querySelector('input[name="lora-addr"]:checked')?.value || 'broadcast';
+  const isShed     = mode === 'shed';
+  const isIndiv    = addrType === 'individual';
 
-    // Show/hide strategy row for restore modes
-    const isShed = opts.mode === 'shed';
-    const stratRow = document.getElementById('lora-strategy-row');
-    const repsRow  = document.getElementById('lora-reps-row');
-    const evIdRow  = document.getElementById('lora-eventid-row');
-    if (stratRow) stratRow.style.display = isShed ? '' : 'none';
-    if (evIdRow)  evIdRow.style.display  = opts.addressing === 'individual' ? '' : 'none';
+  const stratRow   = document.getElementById('lora-strategy-row');
+  const evIdRow    = document.getElementById('lora-eventid-row');
+  const addrNumRow = document.getElementById('lora-addr-num');
+  if (stratRow)   stratRow.style.display  = isShed   ? '' : 'none';
+  if (evIdRow)    evIdRow.style.display   = isIndiv  ? '' : 'none';
+  if (addrNumRow) addrNumRow.disabled     = !isIndiv;
+
+  // Clear preview when settings change so user must re-generate
+  const hexEl  = document.getElementById('lora-hex-preview');
+  const jsonEl = document.getElementById('lora-json-preview');
+  if (hexEl  && hexEl.dataset.generated)  { hexEl.value  = ''; hexEl.dataset.generated = ''; }
+  if (jsonEl && jsonEl.dataset.generated) { jsonEl.value = ''; jsonEl.dataset.generated = ''; }
+}
+
+function loraGenerate() {
+  try {
+    const opts = loraGetOpts();
+    if (!opts.channels.f1 && !opts.channels.f2 && !opts.channels.f3 && !opts.channels.f4) {
+      loraStatus('Select at least one relay channel', true); return;
+    }
+    const result  = buildLoRaCommand(opts);
+    const hexEl   = document.getElementById('lora-hex-preview');
+    const jsonEl  = document.getElementById('lora-json-preview');
+    const outArea = document.getElementById('lora-output-area');
+    if (hexEl)   { hexEl.value  = result.hex;  hexEl.dataset.generated = '1'; }
+    if (jsonEl)  { jsonEl.value = result.json; jsonEl.dataset.generated = '1'; }
+    if (outArea) outArea.style.display = '';
+    loraStatus('✅ Command generated', false);
   } catch(e) {
-    console.warn('loraUpdatePreview error:', e.message);
+    loraStatus('Error: ' + e.message, true);
+    console.error('loraGenerate error:', e);
   }
 }
 
@@ -24400,16 +24420,16 @@ function loraToggleStartTime() {
 }
 
 function loraInit() {
-  // Populate device selector from current device list
+  // Populate device selector from global DEVICES array
   const sel = document.getElementById('lora-device-uid');
   if (!sel) return;
   const current = sel.value;
-  sel.innerHTML = '<option value="">— Select device —</option>';
-  (lcpDevices || []).forEach(d => {
+  sel.innerHTML = '<option value="">— Select device to dispatch —</option>';
+  (DEVICES || []).filter(d => d.uid && !d.uid.startsWith('therm_')).forEach(d => {
     const opt = document.createElement('option');
-    opt.value = d.device_uid;
-    opt.textContent = (d.nickname || d.label || d.device_uid);
-    if (d.device_uid === current) opt.selected = true;
+    opt.value = d.uid;
+    opt.textContent = d.name || d.uid;
+    if (d.uid === current) opt.selected = true;
     sel.appendChild(opt);
   });
   loraUpdatePreview();
@@ -24477,4 +24497,41 @@ function loraCopyJson() {
   const el = document.getElementById('lora-json-preview');
   if (!el?.value) return;
   navigator.clipboard.writeText(el.value).then(() => loraStatus('JSON copied'));
+}
+
+
+function loraSelectMode(mode) {
+  document.querySelector(`input[name="lora-mode"][value="${mode}"]`).checked = true;
+  const cards = { shed: 'lora-mode-card-shed', gracefulRestore: 'lora-mode-card-graceful', abruptRestore: 'lora-mode-card-abrupt' };
+  Object.entries(cards).forEach(([m, id]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const active = m === mode;
+    el.style.border = active ? '2px solid var(--green)' : '1.5px solid var(--border-md)';
+    el.style.background = active ? 'var(--green-bg)' : 'var(--surface)';
+  });
+  const shedSettings = document.getElementById('lora-shed-settings');
+  if (shedSettings) shedSettings.style.display = mode === 'shed' ? '' : 'none';
+  loraUpdatePreview();
+}
+
+function loraSelectAddr(type) {
+  document.querySelector(`input[name="lora-addr"][value="${type}"]`).checked = true;
+  const bCard = document.getElementById('lora-addr-broadcast-card');
+  const iCard = document.getElementById('lora-addr-individual-card');
+  if (bCard) { bCard.style.border = type === 'broadcast' ? '2px solid var(--green)' : '1.5px solid var(--border-md)'; bCard.style.background = type === 'broadcast' ? 'var(--green-bg)' : 'var(--surface)'; }
+  if (iCard) { iCard.style.border = type === 'individual' ? '2px solid var(--green)' : '1.5px solid var(--border-md)'; iCard.style.background = type === 'individual' ? 'var(--green-bg)' : 'var(--surface)'; }
+  const addrNum = document.getElementById('lora-addr-num');
+  if (addrNum) addrNum.disabled = type !== 'individual';
+  const evRow = document.getElementById('lora-eventid-row');
+  if (evRow) evRow.style.display = type === 'individual' ? '' : 'none';
+  loraUpdatePreview();
+}
+
+function loraToggleChannel(ch, cb) {
+  const label = document.getElementById(`lora-${ch}-label`);
+  if (!label) return;
+  label.style.border    = cb.checked ? '1.5px solid var(--green)' : '1.5px solid var(--border-md)';
+  label.style.background = cb.checked ? 'var(--green-bg)' : 'var(--surface)';
+  loraUpdatePreview();
 }
