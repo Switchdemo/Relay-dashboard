@@ -5832,18 +5832,36 @@ function renderRmDailySummary(sessions, rangeDays) {
 }
 
 // ── Session detail table ───────────────────────────────────────────────────────────────────────────────
-function renderRmSessionTable(sessions) {
-  const el = document.getElementById("rm-sessions-table");
+function renderRmSessionTable(sessions, limitOverride) {
+  const el       = document.getElementById("rm-sessions-table");
+  const countEl  = document.getElementById("rm-sessions-count");
+  const sliderEl = document.getElementById("rm-sessions-slider");
   if (!el) return;
   if (!sessions.length) { el.innerHTML = '<div class="sched-empty">No sessions found.</div>'; return; }
+
+  // Respect slider value (default 50); caller can override for re-renders
+  const limit   = limitOverride ?? parseInt(sliderEl?.value || "50");
+  const sorted  = sessions.slice().reverse();         // newest first
+  const visible = sorted.slice(0, limit);
+  const total   = sorted.length;
+
+  // Update slider bounds to match actual session count
+  if (sliderEl) {
+    sliderEl.max = Math.max(total, 10);
+    // Snap max option to total so user can always show all
+    if (parseInt(sliderEl.value) > total) sliderEl.value = total;
+  }
+  if (countEl) countEl.textContent = `${visible.length} of ${total} session${total !== 1 ? "s" : ""}`;
+
   const fmtDur = m => m==null?"—":m<60?`${Math.round(m)} min`:`${(m/60).toFixed(1)} h`;
   const fmtTs  = ts => ts?new Date(ts).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}):"—";
   const fmtF   = (v,u) => v!=null?parseFloat(v).toFixed(1)+u:"—";
+
   el.innerHTML = `
     <div class="rm-session-row rm-session-header">
       <span>Start</span><span>Duration</span><span>Temp °F</span><span>Heat Idx</span><span>Humidity</span><span>TOU</span><span>Source</span><span>Status</span>
     </div>
-    ${sessions.slice().reverse().slice(0,200).map(s => {
+    ${visible.map(s => {
       const dur=s.duration_minutes;
       const dc=dur==null?"var(--text-hint)":dur>30?"var(--red)":dur>15?"var(--amber)":"var(--text-primary)";
       const pk=s.is_peak
@@ -5860,6 +5878,17 @@ function renderRmSessionTable(sessions) {
         <span style="font-size:10px;color:${s.session_end?"var(--green-dark)":"var(--amber)"};">${s.session_end?"Complete":"Open"}</span>
       </div>`;
     }).join("")}`;
+}
+
+// Slider oninput handler — re-renders the table at the new row count without
+// re-fetching from Supabase (uses the already-loaded rmAnalyticsSessions array)
+function rmUpdateSessionSlider(val) {
+  const labelEl = document.getElementById("rm-sessions-slider-label");
+  const n = parseInt(val);
+  if (labelEl) labelEl.textContent = n >= (rmAnalyticsSessions?.length || 0) ? "All" : `${n} rows`;
+  if (Array.isArray(rmAnalyticsSessions) && rmAnalyticsSessions.length) {
+    renderRmSessionTable(rmAnalyticsSessions, n);
+  }
 }
 
 // ── CSV export ─────────────────────────────────────────────────────────────────────────────────────────────
