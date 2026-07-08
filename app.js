@@ -3285,6 +3285,24 @@ async function exportEventHistory() {
 
 async function initWeatherTab() {
   await initWeather();
+  // Set default date range for backfill picker: yesterday → today
+  const fromEl = document.getElementById("backfill-from");
+  const toEl   = document.getElementById("backfill-to");
+  if (fromEl && !fromEl.value) {
+    const today     = new Date();
+    const yesterday = new Date(today - 24 * 60 * 60 * 1000);
+    const fmt = d => d.toISOString().split("T")[0];
+    // Min = 7 days ago, max = today
+    const minDate = fmt(new Date(today - 7 * 24 * 60 * 60 * 1000));
+    fromEl.value = fmt(yesterday);
+    fromEl.min   = minDate;
+    fromEl.max   = fmt(today);
+    if (toEl) {
+      toEl.value = fmt(today);
+      toEl.min   = minDate;
+      toEl.max   = fmt(today);
+    }
+  }
 }
 
 async function initSettingsTab() {
@@ -4002,6 +4020,8 @@ async function onSignedIn(session) {
   startOADRPoller();
   // Start NWS weather poller if location is already saved
   if (wxLocationData) startNWSPoller();
+  // Auto-backfill last 48 hours of missing weather observations (silent, background)
+  setTimeout(() => autoBackfillWeather(), 5000);
   // Apply saved theme and font size
   initTheme();
   initFontSize();
@@ -9766,6 +9786,212 @@ function startNWSPoller() {
   fetchNWSObservations();
   nwsPollTimer = setInterval(() => fetchNWSObservations(), 15 * 60 * 1000);
   console.log("NWS weather poller started (15 min interval)");
+}
+
+// ── Weather History Backfill ──────────────────────────────────────────────────
+// Core function: fetch NWS historical observations for a time window and
+// insert any that are missing from weather_readings. Idempotent — safe to
+// run repeatedly; skips hours already in the DB.
+//
+// fromISO / toISO : ISO 8601 strings (e.g. "2026-07-01T00:00:00Z")
+// opts.silent     : suppress UI updates (used by auto-backfill on login)
+// opts.logEl      : element to write progress lines into
+// opts.progressEl : { bar, label, pct, wrap } progress bar elements
+async function backfillWeather(fromISO, toISO, opts = {}) {
+  const station = nwsStationId || "KTIK";
+  const { silent = false, logEl = null, progressEl = null } = opts;
+
+  const log = (msg, color) => {
+    if (silent) { console.log("[weather backfill]", msg); return; }
+    if (!logEl) return;
+    const line = document.createElement("div");
+    line.style.color = color || "var(--text-hint)";
+    line.textContent = msg;
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+  };
+
+  const setProgress = (pct, label) => {
+    if (silent || !progressEl) return;
+    progressEl.wrap.style.display = "";
+    progressEl.bar.style.width    = pct + "%";
+    progressEl.label.textContent  = label;
+    progressEl.pct.textContent    = Math.round(pct) + "%";
+  };
+
+  try {
+    // 1. Fetch existing recorded_at timestamps in the window from Supabase
+    log(`Checking existing records ${fromISO.slice(0,10)} → ${toISO.slice(0,10)}…`);
+    const existingRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/weather_readings?recorded_at=gte.${encodeURIComponent(fromISO)}&recorded_at=lte.${encodeURIComponent(toISO)}&select=observed_at&limit=5000`,
+      { headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}` } }
+    );
+    const existing = await existingRes.json();
+
+    // Build a set of hours already covered (round to the hour)
+    const coveredHours = new Set(
+      (Array.isArray(existing) ? existing : []).map(r => {
+        const d = new Date(r.observed_at || 0);
+        d.setMinutes(0, 0, 0);
+        return d.toISOString();
+      })
+    );
+    log(`Found ${coveredHours.size} existing hourly observation(s) in range.`);
+
+    // 2. Fetch NWS historical observations for the window
+    setProgress(10, "Fetching NWS observations…");
+    log(`Fetching NWS observations from station ${station}…`);
+    const nwsUrl = `https://api.weather.gov/stations/${station}/observations?start=${encodeURIComponent(fromISO)}&end=${encodeURIComponent(toISO)}&limit=500`;
+    const nwsRes = await fetch(nwsUrl, {
+      headers: { "User-Agent": NWS_USER_AGENT, "Accept": "application/json" }
+    });
+    if (!nwsRes.ok) throw new Error(`NWS API returned ${nwsRes.status}`);
+    const nwsData = await nwsRes.json();
+    const features = nwsData?.features || [];
+    log(`NWS returned ${features.length} observation(s).`);
+
+    if (features.length === 0) {
+      log("No NWS observations available for this range.", "var(--amber)");
+      setProgress(100, "Done — no observations found");
+      return { inserted: 0, skipped: 0 };
+    }
+
+    // 3. For each observation, check if the hour is covered; insert if not
+    let inserted = 0, skipped = 0;
+    for (let i = 0; i < features.length; i++) {
+      const p          = features[i]?.properties;
+      if (!p) continue;
+      const obsTime    = p.timestamp;
+      const obsHour    = new Date(obsTime);
+      obsHour.setMinutes(0, 0, 0);
+      const hourKey    = obsHour.toISOString();
+
+      setProgress(10 + (i / features.length) * 85, `Processing ${obsTime?.slice(0,16) || i}…`);
+
+      if (coveredHours.has(hourKey)) {
+        skipped++;
+        continue;
+      }
+
+      // Build record matching saveNWSObservationToSupabase exactly
+      const record = {
+        station_id:    station,
+        station_name:  nwsStationName || station,
+        location_name: wxLocationData?.name || null,
+        lat:           wxLocationData?.lat   || null,
+        lon:           wxLocationData?.lon   || null,
+        observed_at:   obsTime,
+        recorded_at:   new Date().toISOString(),
+        temp_f:        cToF(p.temperature?.value),
+        dewpoint_f:    cToF(p.dewpoint?.value),
+        humidity_pct:  p.relativeHumidity?.value != null ? Math.round(p.relativeHumidity.value) : null,
+        wind_mph:      msToMph(p.windSpeed?.value),
+        wind_dir_deg:  p.windDirection?.value != null ? Math.round(p.windDirection.value) : null,
+        wind_gust_mph: msToMph(p.windGust?.value),
+        pressure_inhg: paToInHg(p.barometricPressure?.value) ? parseFloat(paToInHg(p.barometricPressure.value)) : null,
+        visibility_mi: p.visibility?.value != null ? parseFloat((p.visibility.value / 1609.34).toFixed(2)) : null,
+        heat_index_f:  heatIndex(cToF(p.temperature?.value), p.relativeHumidity?.value != null ? Math.round(p.relativeHumidity.value) : null),
+        description:   p.textDescription || null,
+        raw_station_id: station
+      };
+
+      const dbRes = await supabasePost("weather_readings", record);
+      if (dbRes.ok) {
+        inserted++;
+        coveredHours.add(hourKey); // prevent re-insert if NWS returns same hour twice
+        log(`  ✅ Inserted ${obsTime?.slice(0,16)} — ${record.temp_f}°F ${record.description || ""}`, "var(--green-dark)");
+
+        // Also backfill monitor_feed_readings for analytics correlation
+        const feedWrites = [];
+        if (record.temp_f        != null) feedWrites.push({ feed_key: "nws_temp",       value: record.temp_f,        unit: "°F",  recorded_at: obsTime });
+        if (record.humidity_pct  != null) feedWrites.push({ feed_key: "nws_humidity",   value: record.humidity_pct,  unit: "%",   recorded_at: obsTime });
+        if (record.heat_index_f  != null) feedWrites.push({ feed_key: "nws_heat_index", value: record.heat_index_f,  unit: "°F",  recorded_at: obsTime });
+        if (record.dewpoint_f    != null) feedWrites.push({ feed_key: "nws_dewpoint",   value: record.dewpoint_f,    unit: "°F",  recorded_at: obsTime });
+        if (record.wind_mph      != null) feedWrites.push({ feed_key: "nws_wind_mph",   value: record.wind_mph,      unit: "mph", recorded_at: obsTime });
+        if (record.pressure_inhg != null) feedWrites.push({ feed_key: "nws_pressure",   value: record.pressure_inhg, unit: "inHg",recorded_at: obsTime });
+        for (const fw of feedWrites) {
+          try { await supabasePost("monitor_feed_readings", fw); } catch(e) {}
+        }
+      } else {
+        log(`  ⚠ Failed to insert ${obsTime?.slice(0,16)}: ${await dbRes.text()}`, "var(--amber)");
+      }
+    }
+
+    setProgress(100, "Complete");
+    const summary = `Done — ${inserted} inserted, ${skipped} already existed.`;
+    log(summary, inserted > 0 ? "var(--green-dark)" : "var(--text-hint)");
+    return { inserted, skipped };
+
+  } catch(e) {
+    log(`❌ Backfill error: ${e.message}`, "var(--red)");
+    console.error("backfillWeather:", e);
+    return { inserted: 0, skipped: 0, error: e.message };
+  }
+}
+
+// Manual backfill — called from the Weather tab UI button
+async function runWeatherBackfill() {
+  const fromEl  = document.getElementById("backfill-from");
+  const toEl    = document.getElementById("backfill-to");
+  const logEl   = document.getElementById("backfill-log");
+  const btn     = document.getElementById("backfill-btn");
+  const progWrap = document.getElementById("backfill-progress");
+  const progBar  = document.getElementById("backfill-progress-bar");
+  const progLbl  = document.getElementById("backfill-progress-label");
+  const progPct  = document.getElementById("backfill-progress-pct");
+
+  if (!fromEl?.value || !toEl?.value) {
+    if (logEl) logEl.textContent = "⚠ Please select both a From and To date.";
+    return;
+  }
+
+  // Enforce 7-day max
+  const fromD = new Date(fromEl.value);
+  const toD   = new Date(toEl.value + "T23:59:59Z");
+  const diffDays = (toD - fromD) / (1000 * 60 * 60 * 24);
+  if (diffDays > 7) {
+    if (logEl) logEl.textContent = "⚠ Range cannot exceed 7 days. Please narrow the selection.";
+    return;
+  }
+  if (fromD > toD) {
+    if (logEl) logEl.textContent = "⚠ From date must be before To date.";
+    return;
+  }
+
+  btn.disabled    = true;
+  btn.textContent = "Working…";
+  if (logEl) { logEl.textContent = ""; }
+
+  const fromISO = fromEl.value + "T00:00:00Z";
+  const toISO   = toEl.value   + "T23:59:59Z";
+
+  await backfillWeather(fromISO, toISO, {
+    silent:     false,
+    logEl,
+    progressEl: { wrap: progWrap, bar: progBar, label: progLbl, pct: progPct }
+  });
+
+  btn.disabled    = false;
+  btn.textContent = "⬇ Backfill";
+}
+
+// Auto-backfill on login — silently fills last 48 hours of gaps
+async function autoBackfillWeather() {
+  if (!currentSession?.access_token) return;
+  const statusEl = document.getElementById("backfill-auto-status");
+  if (statusEl) statusEl.textContent = "Auto-filling last 48 hrs…";
+  const toISO   = new Date().toISOString();
+  const fromISO = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  const result  = await backfillWeather(fromISO, toISO, { silent: true });
+  if (statusEl) {
+    statusEl.textContent = result.error
+      ? "Auto-fill failed"
+      : result.inserted > 0
+        ? `Auto-filled ${result.inserted} missing observation(s)`
+        : "Weather data up to date";
+    setTimeout(() => { if (statusEl) statusEl.textContent = ""; }, 8000);
+  }
+  console.log("Auto weather backfill:", result);
 }
 
 function stopNWSPoller() {
