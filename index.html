@@ -1979,6 +1979,48 @@
         <div id="nws-last-updated" style="font-size:10px;color:var(--text-hint);margin-top:8px;text-align:right;display:none;"></div>
       </div>
 
+      <!-- Weather Data Backfill -->
+      <div class="sched-card" id="weather-backfill-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">🕓 Weather History Backfill
+            <span style="font-family:'DM Mono',monospace;font-size:9px;font-weight:500;color:var(--text-hint);margin-left:6px;">KTIK · up to 7 days</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span id="backfill-auto-status" style="font-size:10px;color:var(--text-hint);font-family:monospace;"></span>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-bottom:12px;">
+          <div>
+            <label style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px;">From</label>
+            <input type="date" id="backfill-from"
+              style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;color:var(--text-primary);" />
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px;">To</label>
+            <input type="date" id="backfill-to"
+              style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;color:var(--text-primary);" />
+          </div>
+          <button class="history-load-btn" id="backfill-btn" onclick="runWeatherBackfill()" style="white-space:nowrap;">
+            ⬇ Backfill
+          </button>
+        </div>
+        <!-- Progress bar -->
+        <div id="backfill-progress" style="display:none;margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+            <span id="backfill-progress-label" style="font-size:11px;color:var(--text-hint);font-family:monospace;"></span>
+            <span id="backfill-progress-pct" style="font-size:11px;color:var(--text-hint);font-family:monospace;"></span>
+          </div>
+          <div style="height:4px;background:var(--border-md);border-radius:2px;overflow:hidden;">
+            <div id="backfill-progress-bar" style="height:100%;background:var(--blue-dark);border-radius:2px;width:0%;transition:width .3s;"></div>
+          </div>
+        </div>
+        <!-- Log output -->
+        <div id="backfill-log"
+          style="font-size:11px;font-family:monospace;color:var(--text-hint);background:var(--surface2);border-radius:var(--radius-sm);padding:8px 10px;min-height:36px;max-height:180px;overflow-y:auto;border:0.5px solid var(--border-md);white-space:pre-wrap;">
+          Select a date range and click Backfill to retrieve missing weather observations.
+        </div>
+      </div>
+
       <!-- Weather Forecast -->
       <div class="sched-card" id="weather-card">
         <div class="sched-card-header">
