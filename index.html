@@ -805,6 +805,12 @@
 <!-- ── CONTROLS TAB ── -->
 <div class="tab-pane" id="tab-controls">
   <div class="scroll-content">
+    <div style="max-width:1200px;margin:0 auto;padding:0.75rem 1rem 0;">
+      <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-bottom:10px;">
+        <span id="controls-last-refreshed" style="font-size:10px;color:var(--text-hint);font-family:monospace;"></span>
+        <button class="queue-refresh" onclick="buildControls(); buildDataCards(); loadLatest(); document.getElementById('controls-last-refreshed').textContent = 'Refreshed ' + new Date().toLocaleTimeString();">🔄 Refresh</button>
+      </div>
+    </div>
     <div class="devices-grid" id="devices-grid"></div>
   </div>
 </div>
@@ -878,7 +884,8 @@
             <option value="2000">2 000 rows</option>
             <option value="5000">5 000 rows</option>
           </select>
-          <button class="history-load-btn" onclick="loadHistory()">Load</button>
+          <button class="history-load-btn" onclick="loadHistory(); document.getElementById('history-last-refreshed').textContent = 'Refreshed ' + new Date().toLocaleTimeString();">🔄 Refresh</button>
+          <span id="history-last-refreshed" style="font-size:10px;color:var(--text-hint);font-family:monospace;align-self:center;"></span>
           <button class="history-load-btn" style="color:var(--green-dark);border-color:var(--green);" onclick="exportHistory()">Export CSV</button>
         </div>
       </div>
