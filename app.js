@@ -20320,72 +20320,23 @@ function renderPelicanSites() {
         <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:center;font-weight:${(s.thermostats_in_setback||0)>0?"700":"400"};color:${(s.thermostats_in_setback||0)>0?"var(--amber)":"inherit"};">${s.thermostats_in_setback ?? 0}</td>
         <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:center;color:var(--text-hint);font-size:11px;">${pollStr}</td>
         <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:right;">
-          <div style="display:flex;gap:6px;justify-content:flex-end;align-items:flex-start;flex-direction:column;">
-            <div style="display:flex;gap:6px;justify-content:flex-end;">
-              <button onclick="pelicanShowShedOptions('${s.site_name}','${s.auth_mode}',${s.dr_level_default||2})"
-                style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--red);background:rgba(220,38,38,0.08);color:var(--red);font-size:10px;font-weight:600;cursor:pointer;">
-                Shed ▾
-              </button>
-              <button onclick="pelicanRestoreSingle('${s.site_name}','${s.auth_mode}')"
-                style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--green-dark);background:var(--green-bg);color:var(--green-dark);font-size:10px;font-weight:600;cursor:pointer;">
-                Restore
-              </button>
-              <button onclick="pelicanPollSingle('${s.site_name}','${s.auth_mode}')" title="Refresh thermostat status"
-                style="padding:4px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:10px;cursor:pointer;">
-                Status
-              </button>
-              <button onclick="removePelicanSite('${s.site_name}')"
-                style="padding:4px 8px;border-radius:4px;border:0.5px solid var(--red);background:transparent;color:var(--red);font-size:10px;cursor:pointer;">
-                ✕
-              </button>
-            </div>
-            <!-- Inline shed options panel (hidden by default) -->
-            <div id="pelican-shed-opts-${s.site_name}" style="display:none;background:var(--surface2);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:10px 12px;width:260px;">
-              <div style="font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Shed Options — ${s.display_name}</div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-                <div>
-                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">DR Level</label>
-                  <select id="pelican-shed-level-${s.site_name}"
-                    style="width:100%;font-size:11px;padding:4px 6px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);">
-                    <option value="0">0 — Normal</option>
-                    <option value="1">1 — Moderate</option>
-                    <option value="2" ${(s.dr_level_default||2)===2?"selected":""}>2 — High</option>
-                    <option value="3" ${(s.dr_level_default||2)===3?"selected":""}>3 — Special</option>
-                  </select>
-                </div>
-                <div>
-                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Duration (min)</label>
-                  <input type="number" id="pelican-shed-dur-${s.site_name}" value="60" min="5" max="480"
-                    style="width:100%;font-size:11px;padding:4px 6px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);" />
-                </div>
-              </div>
-              <div style="margin-bottom:8px;">
-                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Setpoint Override (optional)</label>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                  <div>
-                    <label style="font-size:9px;color:var(--text-hint);display:block;margin-bottom:2px;">Cool To (°F)</label>
-                    <input type="number" id="pelican-shed-cool-${s.site_name}" placeholder="e.g. 78" min="60" max="95"
-                      style="width:100%;font-size:11px;padding:4px 6px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);" />
-                  </div>
-                  <div>
-                    <label style="font-size:9px;color:var(--text-hint);display:block;margin-bottom:2px;">Heat To (°F)</label>
-                    <input type="number" id="pelican-shed-heat-${s.site_name}" placeholder="e.g. 65" min="50" max="80"
-                      style="width:100%;font-size:11px;padding:4px 6px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);" />
-                  </div>
-                </div>
-                <div style="font-size:9px;color:var(--text-hint);margin-top:3px;">Leave blank to use Pelican's built-in DR setback</div>
-              </div>
-              <div style="display:flex;gap:6px;">
-                <button onclick="pelicanShedWithOptions('${s.site_name}','${s.auth_mode}')"
-                  style="flex:1;padding:5px;border-radius:var(--radius-sm);border:none;background:var(--red);color:white;font-size:11px;font-weight:600;cursor:pointer;">
-                  Send Shed
-                </button>
-                <button onclick="document.getElementById('pelican-shed-opts-${s.site_name}').style.display='none'"
-                  style="padding:5px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:transparent;font-size:11px;cursor:pointer;">
-                  Cancel
-                </button>
-              </div>
-            </div>
+          <div style="display:flex;gap:6px;justify-content:flex-end;">
+            <button onclick="pelicanShedSingle('${s.site_name}','${s.auth_mode}',${s.dr_level_default||2})"
+              style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--red);background:rgba(220,38,38,0.08);color:var(--red);font-size:10px;font-weight:600;cursor:pointer;">
+              Shed
+            </button>
+            <button onclick="pelicanRestoreSingle('${s.site_name}','${s.auth_mode}')"
+              style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--green-dark);background:var(--green-bg);color:var(--green-dark);font-size:10px;font-weight:600;cursor:pointer;">
+              Restore
+            </button>
+            <button onclick="pelicanPollSingle('${s.site_name}','${s.auth_mode}')"
+              style="padding:4px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:10px;cursor:pointer;">
+              📊
+            </button>
+            <button onclick="removePelicanSite('${s.site_name}')"
+              style="padding:4px 8px;border-radius:4px;border:0.5px solid var(--red);background:transparent;color:var(--red);font-size:10px;cursor:pointer;">
+              ✕
+            </button>
           </div>
         </td>
       </tr>`;
@@ -20452,81 +20403,6 @@ async function removePelicanSite(siteName) {
 function setPelicanStatus(msg, color = "var(--text-secondary)") {
   const el = document.getElementById("pelican-dispatch-status");
   if (el) { el.textContent = msg; el.style.color = color; }
-}
-
-function pelicanShowShedOptions(siteName, authMode, defaultLevel) {
-  // Close any other open shed panels first
-  document.querySelectorAll("[id^='pelican-shed-opts-']").forEach(el => el.style.display = "none");
-  const panel = document.getElementById(`pelican-shed-opts-${siteName}`);
-  if (!panel) return;
-  // Pre-set the level select to the site default
-  const levelSel = document.getElementById(`pelican-shed-level-${siteName}`);
-  if (levelSel) levelSel.value = defaultLevel;
-  // Pre-fill duration from the global dispatch panel if available
-  const globalDur = document.getElementById("pelican-dispatch-duration")?.value;
-  const durEl = document.getElementById(`pelican-shed-dur-${siteName}`);
-  if (durEl && globalDur) durEl.value = globalDur;
-  panel.style.display = panel.style.display === "none" ? "" : "none";
-}
-
-async function pelicanShedWithOptions(siteName, authMode) {
-  const level    = parseInt(document.getElementById(`pelican-shed-level-${siteName}`)?.value || "2");
-  const duration = parseInt(document.getElementById(`pelican-shed-dur-${siteName}`)?.value || "60");
-  const coolTo   = document.getElementById(`pelican-shed-cool-${siteName}`)?.value;
-  const heatTo   = document.getElementById(`pelican-shed-heat-${siteName}`)?.value;
-
-  // Close the panel
-  const panel = document.getElementById(`pelican-shed-opts-${siteName}`);
-  if (panel) panel.style.display = "none";
-
-  // Send the DR shed event
-  setPelicanStatus(`Sending DR level ${level} to ${siteName}…`, "var(--amber)");
-  try {
-    const res = await fetch(PROXY_URL.replace(/\/$/, "") + "/pelican/shed", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        site_name: siteName, auth_mode: authMode,
-        duration_minutes: duration, level,
-        fired_by: currentSession?.user?.email
-      })
-    });
-    const data = await res.json();
-    if (!data.success) {
-      setPelicanStatus(`⚠ Shed error: ${JSON.stringify(data.data)}`, "var(--red)");
-      return;
-    }
-    setPelicanStatus(`✅ DR level ${level} sent to ${siteName}`, "var(--green-dark)");
-
-    // If setpoint override specified, send it now
-    if (coolTo || heatTo) {
-      setPelicanStatus(`Applying setpoint override to ${siteName}…`, "var(--amber)");
-      try {
-        const spRes = await fetch(PROXY_URL.replace(/\/$/, "") + "/pelican/setpoint", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            site_name:  siteName,
-            auth_mode:  authMode,
-            cool_to:    coolTo ? parseInt(coolTo) : null,
-            heat_to:    heatTo ? parseInt(heatTo) : null,
-            fired_by:   currentSession?.user?.email
-          })
-        });
-        const spData = await spRes.json();
-        if (spData.success) {
-          setPelicanStatus(`✅ DR level ${level} + setpoint override applied to ${siteName}`, "var(--green-dark)");
-        } else {
-          setPelicanStatus(`✅ DR sent but setpoint override failed: ${spData.error || JSON.stringify(spData)}`, "var(--amber)");
-        }
-      } catch(e) {
-        setPelicanStatus(`✅ DR sent but setpoint override error: ${e.message}`, "var(--amber)");
-      }
-    }
-
-    await loadPelicanSites();
-    await loadPelicanLog();
-  } catch(e) { setPelicanStatus(`Error: ${e.message}`, "var(--red)"); }
 }
 
 async function pelicanShedSingle(siteName, authMode, level = 2) {
@@ -24820,6 +24696,387 @@ function loraInit() {
     sel.appendChild(opt);
   });
   loraUpdatePreview();
+
+  // Also populate TC250 target device selector
+  const tc250Sel = document.getElementById('tc250-target-device');
+  if (tc250Sel) {
+    const cur = tc250Sel.value;
+    tc250Sel.innerHTML = '<option value="">— Select target device —</option>';
+    (DEVICES || []).filter(d => d.uid && !d.uid.startsWith('therm_')).forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d.uid;
+      opt.textContent = d.name || d.uid;
+      if (d.uid === cur) opt.selected = true;
+      tc250Sel.appendChild(opt);
+    });
+  }
+
+  // Initialize time preview
+  tc250UpdateTimePreview();
+  setInterval(tc250UpdateTimePreview, 1000);
+}
+
+// ── TC250 Configuration Commands ──────────────────────────────────────────────
+
+function tc250TargetUID() {
+  const uid = document.getElementById('tc250-target-device')?.value;
+  if (!uid) { alert('Please select a target device first.'); return null; }
+  return uid;
+}
+
+function tc250SetStatus(elId, msg, color) {
+  const el = document.getElementById(elId);
+  if (el) { el.textContent = msg; el.style.color = color || 'var(--text-hint)'; }
+  const globalEl = document.getElementById('tc250-global-status');
+  if (globalEl) { globalEl.textContent = msg; globalEl.style.color = color || 'var(--text-hint)'; }
+}
+
+function tc250Checksum(bytes) {
+  return bytes.reduce((a, b) => a ^ b, 0);
+}
+
+function tc250HexStr(bytes) {
+  return bytes.map(b => b.toString(16).toUpperCase().padStart(2,'0')).join('');
+}
+
+async function tc250SendCommand(uid, hexStr, statusElId) {
+  try {
+    const res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Device-UID': uid },
+      body: JSON.stringify({ body: { LC: hexStr }, req: 'note.add', sync: true })
+    });
+    if (res.ok) {
+      tc250SetStatus(statusElId, `✅ Sent [${hexStr}] at ${new Date().toLocaleTimeString()}`, 'var(--green-dark)');
+    } else {
+      tc250SetStatus(statusElId, `⚠ Worker returned ${res.status}`, 'var(--amber)');
+    }
+  } catch(e) {
+    tc250SetStatus(statusElId, `❌ ${e.message}`, 'var(--red)');
+  }
+}
+
+// ── 1. Set Current Time (0x05) ────────────────────────────────────────────────
+function tc250UpdateTimePreview() {
+  const auto = document.getElementById('tc250-time-auto')?.checked;
+  const manualEl = document.getElementById('tc250-time-manual');
+  const previewEl = document.getElementById('tc250-time-preview');
+  if (manualEl) manualEl.disabled = !!auto;
+  const ts = auto ? Math.floor(Date.now() / 1000)
+    : manualEl?.value ? Math.floor(new Date(manualEl.value).getTime() / 1000) : 0;
+  if (previewEl) previewEl.textContent = `Unix: ${ts} (${new Date(ts * 1000).toLocaleString()})`;
+}
+
+async function tc250SendSetTime() {
+  const uid = tc250TargetUID(); if (!uid) return;
+  const auto = document.getElementById('tc250-time-auto')?.checked;
+  const manualEl = document.getElementById('tc250-time-manual');
+  const ts = auto ? Math.floor(Date.now() / 1000)
+    : manualEl?.value ? Math.floor(new Date(manualEl.value).getTime() / 1000) : Math.floor(Date.now() / 1000);
+
+  // Command: A1 [len] 00 05 [ts4bytes] [cs]
+  const b3 = (ts >>> 24) & 0xFF, b2 = (ts >>> 16) & 0xFF,
+        b1 = (ts >>> 8) & 0xFF,  b0 = ts & 0xFF;
+  const bytes = [0xA1, 0x07, 0x00, 0x05, b3, b2, b1, b0];
+  bytes.push(tc250Checksum(bytes));
+  await tc250SendCommand(uid, tc250HexStr(bytes), 'tc250-time-status');
+}
+
+// ── 2. Min/Max Voltage Alert (0x0D) ──────────────────────────────────────────
+function tc250VoltHexPreview() {
+  const enable = document.getElementById('tc250-volt-enable')?.checked ? 1 : 0;
+  const maxV   = parseInt(document.getElementById('tc250-volt-max')?.value || '1320');
+  const minV   = parseInt(document.getElementById('tc250-volt-min')?.value || '1080');
+  const bytes  = [0xA1, 0x08, 0x00, 0x0D, enable,
+    (maxV >> 8) & 0xFF, maxV & 0xFF,
+    (minV >> 8) & 0xFF, minV & 0xFF];
+  bytes.push(tc250Checksum(bytes));
+  const el = document.getElementById('tc250-volt-hex');
+  if (el) el.textContent = tc250HexStr(bytes);
+  return bytes;
+}
+
+async function tc250SendVoltageAlert() {
+  const uid = tc250TargetUID(); if (!uid) return;
+  const bytes = tc250VoltHexPreview();
+  await tc250SendCommand(uid, tc250HexStr(bytes), 'tc250-volt-status');
+}
+
+// ── 3. Cold Load Pickup (0x06) ────────────────────────────────────────────────
+async function tc250SendCLP() {
+  const uid = tc250TargetUID(); if (!uid) return;
+  const f1 = parseInt(document.getElementById('tc250-clp-f1')?.value || '0') & 0xFF;
+  const f2 = parseInt(document.getElementById('tc250-clp-f2')?.value || '0') & 0xFF;
+  const f3 = parseInt(document.getElementById('tc250-clp-f3')?.value || '0') & 0xFF;
+  const f4 = parseInt(document.getElementById('tc250-clp-f4')?.value || '0') & 0xFF;
+  // Command: A1 [len] 00 06 [f1 f2 f3 f4] [cs]
+  const bytes = [0xA1, 0x07, 0x00, 0x06, f1, f2, f3, f4];
+  bytes.push(tc250Checksum(bytes));
+  await tc250SendCommand(uid, tc250HexStr(bytes), 'tc250-clp-status');
+}
+
+// ── 4. Relay Map (0x07) ───────────────────────────────────────────────────────
+function tc250RelayMapBytes() {
+  // Spec: 2 bytes — MSB covers F3/F4, LSB covers F1/F2
+  // Bit layout per spec table (bits 0-15):
+  // Bit 0 = F1→R1, Bit 1 = F1→R2, Bit 2 = F1→R3, Bit 3 = F1→R4
+  // Bit 4 = F2→R1, Bit 5 = F2→R2, Bit 6 = F2→R3, Bit 7 = F2→R4
+  // Bit 8 = F3→R1, ...  Bit 15 = F4→R4
+  let word = 0;
+  for (let f = 1; f <= 4; f++) {
+    for (let r = 1; r <= 4; r++) {
+      const el = document.getElementById(`tc250-rm-f${f}r${r}`);
+      if (el?.checked) word |= (1 << ((f-1)*4 + (r-1)));
+    }
+  }
+  const msb = (word >> 8) & 0xFF, lsb = word & 0xFF;
+  const el = document.getElementById('tc250-rm-hex');
+  if (el) el.textContent = `0x${msb.toString(16).toUpperCase().padStart(2,'0')} 0x${lsb.toString(16).toUpperCase().padStart(2,'0')}`;
+  return [msb, lsb];
+}
+
+async function tc250SendRelayMap() {
+  const uid = tc250TargetUID(); if (!uid) return;
+  const [msb, lsb] = tc250RelayMapBytes();
+  const bytes = [0xA1, 0x05, 0x00, 0x07, msb, lsb];
+  bytes.push(tc250Checksum(bytes));
+  await tc250SendCommand(uid, tc250HexStr(bytes), 'tc250-rm-status');
+}
+
+// ── 5. Override Timer (0x08) ──────────────────────────────────────────────────
+async function tc250SendOverrideTimer() {
+  const uid = tc250TargetUID(); if (!uid) return;
+  const secs = parseInt(document.getElementById('tc250-override-secs')?.value || '0') & 0xFFFF;
+  const msb = (secs >> 8) & 0xFF, lsb = secs & 0xFF;
+  const bytes = [0xA1, 0x05, 0x00, 0x08, msb, lsb];
+  bytes.push(tc250Checksum(bytes));
+  await tc250SendCommand(uid, tc250HexStr(bytes), 'tc250-override-status');
+}
+
+// ── 6. Time to Record (0x0A) + Report Offset (0x0B) ──────────────────────────
+async function tc250SendBubbleTiming() {
+  const uid = tc250TargetUID(); if (!uid) return;
+  const mins   = parseInt(document.getElementById('tc250-record-mins')?.value || '15') & 0xFF;
+  const offset = parseInt(document.getElementById('tc250-report-offset')?.value || '0') & 0xFFFF;
+  const offMsb = (offset >> 8) & 0xFF, offLsb = offset & 0xFF;
+
+  // Send Time to Record (0x0A)
+  const b1 = [0xA1, 0x04, 0x00, 0x0A, mins]; b1.push(tc250Checksum(b1));
+  await tc250SendCommand(uid, tc250HexStr(b1), 'tc250-bubble-status');
+  await new Promise(r => setTimeout(r, 300));
+
+  // Send Report Offset (0x0B)
+  const b2 = [0xA1, 0x05, 0x00, 0x0B, offMsb, offLsb]; b2.push(tc250Checksum(b2));
+  await tc250SendCommand(uid, tc250HexStr(b2), 'tc250-bubble-status');
+  tc250SetStatus('tc250-bubble-status', `✅ Both sent — record every ${mins} min, offset ${offset} sec`, 'var(--green-dark)');
+}
+
+// ── 7. Data Request (0x0C) ────────────────────────────────────────────────────
+async function tc250DataRequest(requestByte) {
+  const uid = tc250TargetUID(); if (!uid) return;
+  // Command: A1 [len] 00 0C [request] [cs]
+  const bytes = [0xA1, 0x04, 0x00, 0x0C, requestByte];
+  bytes.push(tc250Checksum(bytes));
+  const hex = tc250HexStr(bytes);
+  tc250SetStatus('tc250-req-status', `Sending request 0x${requestByte.toString(16).toUpperCase().padStart(2,'0')}…`, 'var(--amber)');
+  try {
+    const res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Device-UID': uid },
+      body: JSON.stringify({ body: { LC: hex }, req: 'note.add', sync: true })
+    });
+    tc250SetStatus('tc250-req-status',
+      res.ok ? `✅ Request [${hex}] sent at ${new Date().toLocaleTimeString()}` : `⚠ Worker ${res.status}`,
+      res.ok ? 'var(--green-dark)' : 'var(--amber)');
+  } catch(e) {
+    tc250SetStatus('tc250-req-status', `❌ ${e.message}`, 'var(--red)');
+  }
+}
+
+// ── 8. Response Parser ────────────────────────────────────────────────────────
+const TC250_RESPONSE_TYPES = {
+  0x00: 'Address', 0x01: 'Serial Number', 0x02: 'CLP Timeout',
+  0x03: 'Time of Day', 0x04: 'Relay Map', 0x05: 'Relay Status',
+  0x06: 'Time Since Last Current', 0x07: 'Total Time in Service',
+  0x08: 'LC Event Queue', 0x09: 'Report Provisioning', 0x0A: 'Override Timer',
+  0x0B: 'Power Measurement', 0x0C: 'Last Touch Pad', 0x0D: 'Time to Record',
+  0x0E: 'Reporting Offset', 0x0F: 'Voltage Alert Settings'
+};
+
+function tc250ParseResponse() {
+  const hex = (document.getElementById('tc250-response-hex')?.value || '').trim().replace(/\s/g,'').toUpperCase();
+  const resultEl = document.getElementById('tc250-response-result');
+  if (!resultEl) return;
+  resultEl.style.display = 'block';
+
+  if (hex.length < 8) { resultEl.textContent = '⚠ Too short to parse.'; return; }
+
+  const b = (i) => parseInt(hex.slice(i*2, i*2+2), 16);
+  const w = (i) => (b(i) << 8) | b(i+1);
+  const totalBytes = hex.length / 2;
+
+  const header  = b(0);
+  const length  = b(1);
+  const msgType = b(2) & 0x7F; // mask off response bit
+  const typeName = TC250_RESPONSE_TYPES[msgType] || `Unknown (0x${msgType.toString(16).toUpperCase()})`;
+
+  // Validate checksum
+  let xor = 0;
+  for (let i = 0; i < totalBytes - 1; i++) xor ^= b(i);
+  const csOk = xor === b(totalBytes - 1);
+
+  let body = `Header:    0x${b(0).toString(16).toUpperCase()} ${header === 0x51 ? '✅ Response' : '⚠ Expected 0x51'}\n`;
+  body += `Length:    ${length}\n`;
+  body += `Type:      0x${msgType.toString(16).toUpperCase().padStart(2,'0')} — ${typeName}\n`;
+  body += `Checksum:  ${csOk ? '✅ Valid' : '❌ Invalid'}\n\n`;
+
+  // Type-specific parsing
+  if (msgType === 0x05) { // Relay Status
+    const labels = ['R1','R2','R3','R4'];
+    for (let i = 0; i < 4; i++) {
+      const byte = b(3 + i);
+      const active = (byte >> 3) & 1, load = byte & 1;
+      body += `${labels[i]}: ${active ? '● ON' : load ? '○ OFF (load present)' : '○ OFF'}\n`;
+    }
+  } else if (msgType === 0x0B) { // Power Measurement
+    body += `Voltage:     ${w(3) / 10} V\n`;
+    body += `Current:     ${w(5) / 10} A\n`;
+    body += `Power Factor:${(w(7) / 1000).toFixed(3)}\n`;
+    const watts = (b(9) << 24) | (b(10) << 16) | (b(11) << 8) | b(12);
+    body += `Watts:       ${watts} W\n`;
+  } else if (msgType === 0x06) { // Time Since Last Current
+    const labels = ['R1 (30A)','R2 (5A)','R3 (5A)','R4 (5A)'];
+    for (let i = 0; i < 4; i++) {
+      const mins = w(3 + i*2);
+      body += `${labels[i]}: ${mins} min${mins >= 64800 ? ' (max — ≥45 days)' : ''}\n`;
+    }
+  } else if (msgType === 0x07) { // Total Time in Service
+    const secs = (b(3)<<24)|(b(4)<<16)|(b(5)<<8)|b(6);
+    body += `Total: ${secs} seconds (${(secs/3600).toFixed(1)} hours)\n`;
+  } else if (msgType === 0x0A) { // Override Timer
+    body += `Remaining: ${w(3)} seconds\n`;
+  } else if (msgType === 0x03) { // Time of Day
+    const ts = (b(3)<<24)|(b(4)<<16)|(b(5)<<8)|b(6);
+    body += `Time: ${new Date(ts * 1000).toLocaleString()} (Unix: ${ts})\n`;
+  } else if (msgType === 0x04) { // Relay Map
+    const word = w(3);
+    body += 'Active mappings:\n';
+    for (let f = 1; f <= 4; f++)
+      for (let r = 1; r <= 4; r++)
+        if (word & (1 << ((f-1)*4+(r-1)))) body += `  F${f} → Relay ${r}\n`;
+  } else if (msgType === 0x0F) { // Voltage Alert
+    body += `Enabled: ${b(3) & 1 ? 'Yes' : 'No'}\n`;
+    body += `Max: ${w(4) / 10} V\n`;
+    body += `Min: ${w(6) / 10} V\n`;
+  } else if (msgType === 0x0C) { // Last Touch Pad
+    const cmd = b(3) & 0x03;
+    const ts  = (b(4)<<24)|(b(5)<<16)|(b(6)<<8)|b(7);
+    body += `Command: ${cmd === 1 ? 'Override' : cmd === 2 ? 'Override Canceled' : `Unknown (${cmd})`}\n`;
+    body += `Time:    ${new Date(ts * 1000).toLocaleString()}\n`;
+  } else if (msgType === 0x01) { // Serial Number
+    const sn = ((b(3) & 0x3F) << 16) | (b(4) << 8) | b(5);
+    body += `Serial: ${sn}\n`;
+  } else if (msgType === 0x09) { // Report Provisioning
+    const cfg = w(3);
+    body += `Relay Status:        ${cfg & 0x01 ? 'Yes' : 'No'}\n`;
+    body += `Time Since Current:  ${cfg & 0x02 ? 'Yes' : 'No'}\n`;
+    body += `Override Timer:      ${cfg & 0x04 ? 'Yes' : 'No'}\n`;
+    body += `Power Measurement:   ${cfg & 0x08 ? 'Yes' : 'No'}\n`;
+    body += `Last Touch Pad:      ${cfg & 0x10 ? 'Yes' : 'No'}\n`;
+  }
+
+  resultEl.textContent = body;
+}
+
+// ── 9. Variable-length Bubble-Up Parser ───────────────────────────────────────
+function tc250ParseBubbleUp() {
+  const hex = (document.getElementById('tc250-bu-input')?.value || '').trim().replace(/\s/g,'').toUpperCase();
+  const resultEl = document.getElementById('tc250-bu-result');
+  if (!resultEl) return;
+  if (hex.length < 10) { resultEl.style.display = 'none'; return; }
+  resultEl.style.display = 'block';
+
+  const b    = (i) => parseInt(hex.slice(i*2, i*2+2), 16);
+  const w    = (i) => (b(i) << 8) | b(i+1);
+  const totalBytes = hex.length / 2;
+
+  const header  = b(0);
+  const length  = b(1);
+  const msgType = b(2);
+
+  // Validate checksum
+  let xor = 0;
+  for (let i = 0; i < totalBytes - 1; i++) xor ^= b(i);
+  const csOk = xor === b(totalBytes - 1);
+
+  let out = `Header:   0x${b(0).toString(16).toUpperCase()} ${header === 0x51 ? '✅' : '⚠ Expected 0x51'}\n`;
+  out += `Type:     0x${msgType.toString(16).toUpperCase()} ${msgType === 0x10 ? '(Bubble Up ✅)' : msgType === 0x11 ? '(Touch Pad Alert)' : msgType === 0x12 ? '(Min/Max Voltage Alert)' : '(Unknown)'}\n`;
+  out += `Length:   ${length} bytes\n`;
+  out += `Checksum: ${csOk ? '✅ Valid' : '❌ Invalid'}\n\n`;
+
+  if (msgType === 0x10) {
+    // Variable bubble-up — read config bits then parse fields in order
+    const cfgWord = w(3);
+    const hasRelay    = !!(cfgWord & 0x01);
+    const hasCurrent  = !!(cfgWord & 0x02);
+    const hasOverride = !!(cfgWord & 0x04);
+    const hasPower    = !!(cfgWord & 0x08);
+    const hasTouch    = !!(cfgWord & 0x10);
+
+    out += `Config:   Relay=${hasRelay?'Y':'N'} Current=${hasCurrent?'Y':'N'} Override=${hasOverride?'Y':'N'} Power=${hasPower?'Y':'N'} Touch=${hasTouch?'Y':'N'}\n\n`;
+
+    let ptr = 5; // after header(0) length(1) msgType(2) cfg(3,4)
+
+    if (hasRelay) {
+      const labels = ['R1','R2','R3','R4'];
+      for (let i = 0; i < 4 && ptr < totalBytes; i++, ptr++) {
+        const byte = b(ptr);
+        const active = (byte >> 3) & 1, load = byte & 1;
+        out += `${labels[i]}: ${active ? '● ON' : load ? '○ OFF (load present)' : '○ OFF'}\n`;
+      }
+      out += '\n';
+    }
+
+    if (hasCurrent && ptr + 7 < totalBytes) {
+      const labels = ['R1 (30A)','R2 (5A)','R3 (5A)','R4 (5A)'];
+      out += 'Time Since Last Current:\n';
+      for (let i = 0; i < 4; i++, ptr += 2) {
+        out += `  ${labels[i]}: ${w(ptr)} min\n`;
+      }
+      out += '\n';
+    }
+
+    if (hasOverride && ptr + 1 < totalBytes) {
+      out += `Override Timer: ${w(ptr)} sec remaining\n\n`;
+      ptr += 2;
+    }
+
+    if (hasTouch && ptr + 5 < totalBytes) {
+      const cmd = b(ptr) & 0x03; ptr++;
+      const ts  = (b(ptr)<<24)|(b(ptr+1)<<16)|(b(ptr+2)<<8)|b(ptr+3); ptr += 4;
+      out += `Touch Pad: ${cmd === 1 ? 'Override' : 'Override Canceled'} at ${new Date(ts*1000).toLocaleString()}\n\n`;
+    }
+
+    if (hasPower && ptr + 9 < totalBytes) {
+      out += `Voltage:     ${w(ptr) / 10} V\n`; ptr += 2;
+      out += `Current:     ${w(ptr) / 10} A\n`; ptr += 2;
+      out += `Power Factor:${(w(ptr) / 1000).toFixed(3)}\n`; ptr += 2;
+      const watts = (b(ptr)<<24)|(b(ptr+1)<<16)|(b(ptr+2)<<8)|b(ptr+3); ptr += 4;
+      out += `Watts:       ${watts} W\n`;
+    }
+
+  } else if (msgType === 0x11) { // Touch Pad Sense Alert
+    const cmd = b(3);
+    const ts  = (b(4)<<24)|(b(5)<<16)|(b(6)<<8)|b(7);
+    out += `Touch Pad: ${cmd === 1 ? 'Override' : 'Override Canceled'}\n`;
+    out += `Time: ${new Date(ts * 1000).toLocaleString()}\n`;
+
+  } else if (msgType === 0x12) { // Min/Max Voltage Alert
+    out += `Max Voltage: ${w(3) / 10} V at ${new Date(((b(5)<<24)|(b(6)<<16)|(b(7)<<8)|b(8)) * 1000).toLocaleString()}\n`;
+    out += `Min Voltage: ${w(9) / 10} V at ${new Date(((b(11)<<24)|(b(12)<<16)|(b(13)<<8)|b(14)) * 1000).toLocaleString()}\n`;
+  }
+
+  resultEl.textContent = out;
 }
 
 async function loraDispatch() {
