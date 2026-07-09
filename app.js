@@ -20320,23 +20320,72 @@ function renderPelicanSites() {
         <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:center;font-weight:${(s.thermostats_in_setback||0)>0?"700":"400"};color:${(s.thermostats_in_setback||0)>0?"var(--amber)":"inherit"};">${s.thermostats_in_setback ?? 0}</td>
         <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:center;color:var(--text-hint);font-size:11px;">${pollStr}</td>
         <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);text-align:right;">
-          <div style="display:flex;gap:6px;justify-content:flex-end;">
-            <button onclick="pelicanShedSingle('${s.site_name}','${s.auth_mode}',${s.dr_level_default||2})"
-              style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--red);background:rgba(220,38,38,0.08);color:var(--red);font-size:10px;font-weight:600;cursor:pointer;">
-              Shed
-            </button>
-            <button onclick="pelicanRestoreSingle('${s.site_name}','${s.auth_mode}')"
-              style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--green-dark);background:var(--green-bg);color:var(--green-dark);font-size:10px;font-weight:600;cursor:pointer;">
-              Restore
-            </button>
-            <button onclick="pelicanPollSingle('${s.site_name}','${s.auth_mode}')"
-              style="padding:4px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:10px;cursor:pointer;">
-              📊
-            </button>
-            <button onclick="removePelicanSite('${s.site_name}')"
-              style="padding:4px 8px;border-radius:4px;border:0.5px solid var(--red);background:transparent;color:var(--red);font-size:10px;cursor:pointer;">
-              ✕
-            </button>
+          <div style="display:flex;gap:6px;justify-content:flex-end;align-items:flex-start;flex-direction:column;">
+            <div style="display:flex;gap:6px;justify-content:flex-end;">
+              <button onclick="pelicanShowShedOptions('${s.site_name}','${s.auth_mode}',${s.dr_level_default||2})"
+                style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--red);background:rgba(220,38,38,0.08);color:var(--red);font-size:10px;font-weight:600;cursor:pointer;">
+                Shed ▾
+              </button>
+              <button onclick="pelicanRestoreSingle('${s.site_name}','${s.auth_mode}')"
+                style="padding:4px 10px;border-radius:4px;border:0.5px solid var(--green-dark);background:var(--green-bg);color:var(--green-dark);font-size:10px;font-weight:600;cursor:pointer;">
+                Restore
+              </button>
+              <button onclick="pelicanPollSingle('${s.site_name}','${s.auth_mode}')" title="Refresh thermostat status"
+                style="padding:4px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:10px;cursor:pointer;">
+                Status
+              </button>
+              <button onclick="removePelicanSite('${s.site_name}')"
+                style="padding:4px 8px;border-radius:4px;border:0.5px solid var(--red);background:transparent;color:var(--red);font-size:10px;cursor:pointer;">
+                ✕
+              </button>
+            </div>
+            <!-- Inline shed options panel (hidden by default) -->
+            <div id="pelican-shed-opts-${s.site_name}" style="display:none;background:var(--surface2);border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:10px 12px;width:260px;">
+              <div style="font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Shed Options — ${s.display_name}</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">DR Level</label>
+                  <select id="pelican-shed-level-${s.site_name}"
+                    style="width:100%;font-size:11px;padding:4px 6px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);">
+                    <option value="0">0 — Normal</option>
+                    <option value="1">1 — Moderate</option>
+                    <option value="2" ${(s.dr_level_default||2)===2?"selected":""}>2 — High</option>
+                    <option value="3" ${(s.dr_level_default||2)===3?"selected":""}>3 — Special</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Duration (min)</label>
+                  <input type="number" id="pelican-shed-dur-${s.site_name}" value="60" min="5" max="480"
+                    style="width:100%;font-size:11px;padding:4px 6px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);" />
+                </div>
+              </div>
+              <div style="margin-bottom:8px;">
+                <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Setpoint Override (optional)</label>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                  <div>
+                    <label style="font-size:9px;color:var(--text-hint);display:block;margin-bottom:2px;">Cool To (°F)</label>
+                    <input type="number" id="pelican-shed-cool-${s.site_name}" placeholder="e.g. 78" min="60" max="95"
+                      style="width:100%;font-size:11px;padding:4px 6px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);" />
+                  </div>
+                  <div>
+                    <label style="font-size:9px;color:var(--text-hint);display:block;margin-bottom:2px;">Heat To (°F)</label>
+                    <input type="number" id="pelican-shed-heat-${s.site_name}" placeholder="e.g. 65" min="50" max="80"
+                      style="width:100%;font-size:11px;padding:4px 6px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);" />
+                  </div>
+                </div>
+                <div style="font-size:9px;color:var(--text-hint);margin-top:3px;">Leave blank to use Pelican's built-in DR setback</div>
+              </div>
+              <div style="display:flex;gap:6px;">
+                <button onclick="pelicanShedWithOptions('${s.site_name}','${s.auth_mode}')"
+                  style="flex:1;padding:5px;border-radius:var(--radius-sm);border:none;background:var(--red);color:white;font-size:11px;font-weight:600;cursor:pointer;">
+                  Send Shed
+                </button>
+                <button onclick="document.getElementById('pelican-shed-opts-${s.site_name}').style.display='none'"
+                  style="padding:5px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:transparent;font-size:11px;cursor:pointer;">
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         </td>
       </tr>`;
@@ -20403,6 +20452,59 @@ async function removePelicanSite(siteName) {
 function setPelicanStatus(msg, color = "var(--text-secondary)") {
   const el = document.getElementById("pelican-dispatch-status");
   if (el) { el.textContent = msg; el.style.color = color; }
+}
+
+function pelicanShowShedOptions(siteName, authMode, defaultLevel) {
+  document.querySelectorAll("[id^='pelican-shed-opts-']").forEach(el => el.style.display = "none");
+  const panel = document.getElementById(`pelican-shed-opts-${siteName}`);
+  if (!panel) return;
+  const levelSel = document.getElementById(`pelican-shed-level-${siteName}`);
+  if (levelSel) levelSel.value = defaultLevel;
+  const globalDur = document.getElementById("pelican-dispatch-duration")?.value;
+  const durEl = document.getElementById(`pelican-shed-dur-${siteName}`);
+  if (durEl && globalDur) durEl.value = globalDur;
+  panel.style.display = panel.style.display === "none" ? "" : "none";
+}
+
+async function pelicanShedWithOptions(siteName, authMode) {
+  const level    = parseInt(document.getElementById(`pelican-shed-level-${siteName}`)?.value || "2");
+  const duration = parseInt(document.getElementById(`pelican-shed-dur-${siteName}`)?.value || "60");
+  const coolTo   = document.getElementById(`pelican-shed-cool-${siteName}`)?.value;
+  const heatTo   = document.getElementById(`pelican-shed-heat-${siteName}`)?.value;
+
+  const panel = document.getElementById(`pelican-shed-opts-${siteName}`);
+  if (panel) panel.style.display = "none";
+
+  setPelicanStatus(`Sending DR level ${level} to ${siteName}…`, "var(--amber)");
+  try {
+    const res = await fetch(PROXY_URL.replace(/\/$/, "") + "/pelican/shed", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ site_name: siteName, auth_mode: authMode, duration_minutes: duration, level, fired_by: currentSession?.user?.email })
+    });
+    const data = await res.json();
+    if (!data.success) { setPelicanStatus(`⚠ Shed error: ${JSON.stringify(data.data)}`, "var(--red)"); return; }
+    setPelicanStatus(`✅ DR level ${level} sent to ${siteName}`, "var(--green-dark)");
+
+    if (coolTo || heatTo) {
+      setPelicanStatus(`Applying setpoint override to ${siteName}…`, "var(--amber)");
+      try {
+        const spRes = await fetch(PROXY_URL.replace(/\/$/, "") + "/pelican/setpoint", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ site_name: siteName, auth_mode: authMode, cool_to: coolTo ? parseInt(coolTo) : null, heat_to: heatTo ? parseInt(heatTo) : null, fired_by: currentSession?.user?.email })
+        });
+        const spData = await spRes.json();
+        setPelicanStatus(spData.success
+          ? `✅ DR level ${level} + setpoint override applied to ${siteName}`
+          : `✅ DR sent but setpoint override failed: ${spData.error || JSON.stringify(spData)}`,
+          spData.success ? "var(--green-dark)" : "var(--amber)");
+      } catch(e) { setPelicanStatus(`✅ DR sent but setpoint override error: ${e.message}`, "var(--amber)"); }
+    }
+
+    await loadPelicanSites();
+    await loadPelicanLog();
+  } catch(e) { setPelicanStatus(`Error: ${e.message}`, "var(--red)"); }
 }
 
 async function pelicanShedSingle(siteName, authMode, level = 2) {
