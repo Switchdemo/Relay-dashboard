@@ -4519,10 +4519,10 @@
         </div>
 
       </div>
-      <!-- ── TC250 Device Configuration ──────────────────────────────────── -->
+      <!-- ── LoRa Device Configuration ──────────────────────────────────── -->
       <div style="padding:18px 0 14px;margin-top:8px;">
-        <div style="font-size:17px;font-weight:700;color:var(--text-primary);">⚙️ TC250 Device Configuration</div>
-        <div style="font-size:12px;color:var(--text-hint);margin-top:3px;">Send configuration commands directly to a TC250 device. Select the target device below and use each card to configure that parameter.</div>
+        <div style="font-size:17px;font-weight:700;color:var(--text-primary);">⚙️ LoRa Device Configuration</div>
+        <div style="font-size:12px;color:var(--text-hint);margin-top:3px;">Send configuration commands directly to a LoRa device. Select the target device below and use each card to configure that parameter.</div>
       </div>
 
       <!-- Target device selector (shared by all config cards) -->
@@ -4540,7 +4540,7 @@
           <div class="sched-card-title">🕐 Set Current Time <span style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;">Cmd 0x05</span></div>
           <button class="queue-refresh" onclick="tc250SendSetTime()">Send</button>
         </div>
-        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Syncs the TC250's internal clock to the current Unix timestamp. Required for scheduled events and data timestamping.</div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Syncs the LoRa device's internal clock to the current Unix timestamp. Required for scheduled events and data timestamping.</div>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
           <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:8px 14px;font-family:monospace;font-size:13px;font-weight:600;" id="tc250-time-preview">—</div>
           <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
@@ -4558,7 +4558,7 @@
           <div class="sched-card-title">⚡ Voltage Alert Thresholds <span style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;">Cmd 0x0D</span></div>
           <button class="queue-refresh" onclick="tc250SendVoltageAlert()">Send</button>
         </div>
-        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Configure the TC250 to send an alert when voltage exceeds max or falls below min. Voltage is in tenths (e.g. 1260 = 126.0V).</div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Configure the LoRa device to send an alert when voltage exceeds max or falls below min. Voltage is in tenths (e.g. 1260 = 126.0V).</div>
         <div style="display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:10px;align-items:end;">
           <div>
             <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Enable Alerts</label>
@@ -4652,7 +4652,7 @@
           <div class="sched-card-title">⏱ Override Timer <span style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;">Cmd 0x08</span></div>
           <button class="queue-refresh" onclick="tc250SendOverrideTimer()">Send</button>
         </div>
-        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Sets time (in seconds) for the TC250 to ignore load control commands. 255 = permanent override until changed. 0 = clear override.</div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Sets time (in seconds) for the LoRa device to ignore load control commands. 255 = permanent override until changed. 0 = clear override.</div>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
           <div>
             <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Duration (seconds)</label>
@@ -4676,7 +4676,7 @@
           <div class="sched-card-title">📊 Bubble-Up Timing <span style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;">Cmd 0x0A / 0x0B</span></div>
           <button class="queue-refresh" onclick="tc250SendBubbleTiming()">Send Both</button>
         </div>
-        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Controls when the TC250 captures data (Time to Record) and how long it waits before transmitting the bubble-up (Report Offset). Recommended: record every 15 min, offset &lt; record interval.</div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Controls when the LoRa device captures data (Time to Record) and how long it waits before transmitting the bubble-up (Report Offset). Recommended: record every 15 min, offset &lt; record interval.</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
           <div>
             <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Time to Record (minutes) <span style="font-family:monospace;">0x0A</span></label>
@@ -4696,7 +4696,7 @@
 
       <!-- ── Data Requests ─────────────────────────────────────────────────── -->
       <div style="padding:18px 0 14px;margin-top:8px;">
-        <div style="font-size:17px;font-weight:700;color:var(--text-primary);">📥 TC250 Data Requests</div>
+        <div style="font-size:17px;font-weight:700;color:var(--text-primary);">📥 LoRa Data Requests</div>
         <div style="font-size:12px;color:var(--text-hint);margin-top:3px;">Request data from the device. Responses are returned via the next bubble-up or inbound note and displayed below.</div>
       </div>
 
@@ -4721,7 +4721,7 @@
         </div>
         <div style="font-size:10px;color:var(--text-hint);margin-bottom:6px;">Response hex (paste from device log):</div>
         <div style="display:flex;gap:8px;align-items:flex-start;">
-          <textarea id="tc250-response-hex" rows="3" placeholder="Paste TC250 response hex here to parse…"
+          <textarea id="tc250-response-hex" rows="3" placeholder="Paste LoRa device response hex here to parse…"
             style="flex:1;padding:8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;resize:vertical;"></textarea>
           <button class="queue-refresh" onclick="tc250ParseResponse()">Parse</button>
         </div>
