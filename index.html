@@ -4519,6 +4519,230 @@
         </div>
 
       </div>
+      <!-- ── TC250 Device Configuration ──────────────────────────────────── -->
+      <div style="padding:18px 0 14px;margin-top:8px;">
+        <div style="font-size:17px;font-weight:700;color:var(--text-primary);">⚙️ TC250 Device Configuration</div>
+        <div style="font-size:12px;color:var(--text-hint);margin-top:3px;">Send configuration commands directly to a TC250 device. Select the target device below and use each card to configure that parameter.</div>
+      </div>
+
+      <!-- Target device selector (shared by all config cards) -->
+      <div class="sched-card" style="padding:12px 16px;">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <span style="font-size:12px;font-weight:600;color:var(--text-secondary);white-space:nowrap;">Target Device</span>
+          <select id="tc250-target-device" style="flex:1;min-width:200px;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"></select>
+          <span id="tc250-global-status" style="font-size:11px;font-family:monospace;color:var(--text-hint);"></span>
+        </div>
+      </div>
+
+      <!-- 1. Set Current Time -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">🕐 Set Current Time <span style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;">Cmd 0x05</span></div>
+          <button class="queue-refresh" onclick="tc250SendSetTime()">Send</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Syncs the TC250's internal clock to the current Unix timestamp. Required for scheduled events and data timestamping.</div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:8px 14px;font-family:monospace;font-size:13px;font-weight:600;" id="tc250-time-preview">—</div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+            <input type="checkbox" id="tc250-time-auto" checked onchange="tc250UpdateTimePreview()"> Auto (now)
+          </label>
+          <input type="datetime-local" id="tc250-time-manual" disabled
+            style="padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" onchange="tc250UpdateTimePreview()">
+        </div>
+        <div id="tc250-time-status" style="margin-top:8px;font-size:11px;font-family:monospace;color:var(--text-hint);min-height:16px;"></div>
+      </div>
+
+      <!-- 2. Min/Max Voltage Alert -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">⚡ Voltage Alert Thresholds <span style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;">Cmd 0x0D</span></div>
+          <button class="queue-refresh" onclick="tc250SendVoltageAlert()">Send</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Configure the TC250 to send an alert when voltage exceeds max or falls below min. Voltage is in tenths (e.g. 1260 = 126.0V).</div>
+        <div style="display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:10px;align-items:end;">
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Enable Alerts</label>
+            <input type="checkbox" id="tc250-volt-enable" checked style="width:18px;height:18px;accent-color:var(--blue-dark);">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Max Voltage (tenths)</label>
+            <input type="number" id="tc250-volt-max" value="1320" min="0" max="9999"
+              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+            <div style="font-size:9px;color:var(--text-hint);margin-top:2px;">e.g. 1320 = 132.0V</div>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Min Voltage (tenths)</label>
+            <input type="number" id="tc250-volt-min" value="1080" min="0" max="9999"
+              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+            <div style="font-size:9px;color:var(--text-hint);margin-top:2px;">e.g. 1080 = 108.0V</div>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Hex Preview</label>
+            <div id="tc250-volt-hex" style="font-family:monospace;font-size:11px;color:var(--text-hint);padding:6px 8px;background:var(--surface2);border-radius:var(--radius-sm);">—</div>
+          </div>
+        </div>
+        <div id="tc250-volt-status" style="margin-top:8px;font-size:11px;font-family:monospace;color:var(--text-hint);min-height:16px;"></div>
+      </div>
+
+      <!-- 3. Cold Load Pickup -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">🔌 Cold Load Pickup (CLP) <span style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;">Cmd 0x06</span></div>
+          <button class="queue-refresh" onclick="tc250SendCLP()">Send</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Sets how long each relay stays activated after a power outage restore. Protects compressors from hard-start conditions. Value in seconds per function.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">F1 (sec)</label>
+            <input type="number" id="tc250-clp-f1" value="0" min="0" max="255"
+              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;text-align:center;">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">F2 (sec)</label>
+            <input type="number" id="tc250-clp-f2" value="0" min="0" max="255"
+              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;text-align:center;">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">F3 (sec)</label>
+            <input type="number" id="tc250-clp-f3" value="0" min="0" max="255"
+              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;text-align:center;">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">F4 (sec)</label>
+            <input type="number" id="tc250-clp-f4" value="0" min="0" max="255"
+              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;text-align:center;">
+          </div>
+        </div>
+        <div id="tc250-clp-status" style="margin-top:8px;font-size:11px;font-family:monospace;color:var(--text-hint);min-height:16px;"></div>
+      </div>
+
+      <!-- 4. Relay Map -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">🗺 Relay Map Assignment <span style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;">Cmd 0x07</span></div>
+          <button class="queue-refresh" onclick="tc250SendRelayMap()">Send</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Defines which physical relay outputs respond to each function. Check the boxes where Function → Relay association should be active.</div>
+        <div style="overflow-x:auto;">
+          <table style="border-collapse:collapse;font-size:11px;min-width:300px;">
+            <thead>
+              <tr>
+                <th style="padding:6px 10px;text-align:left;color:var(--text-hint);border-bottom:0.5px solid var(--border-md);">Function</th>
+                <th style="padding:6px 12px;text-align:center;color:var(--text-hint);border-bottom:0.5px solid var(--border-md);">Relay 1</th>
+                <th style="padding:6px 12px;text-align:center;color:var(--text-hint);border-bottom:0.5px solid var(--border-md);">Relay 2</th>
+                <th style="padding:6px 12px;text-align:center;color:var(--text-hint);border-bottom:0.5px solid var(--border-md);">Relay 3</th>
+                <th style="padding:6px 12px;text-align:center;color:var(--text-hint);border-bottom:0.5px solid var(--border-md);">Relay 4</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${[1,2,3,4].map(f => `<tr>
+                <td style="padding:6px 10px;font-weight:600;">F${f}</td>
+                ${[1,2,3,4].map(r => `<td style="text-align:center;padding:6px 12px;"><input type="checkbox" id="tc250-rm-f${f}r${r}" ${f===r?'checked':''} style="accent-color:var(--blue-dark);width:15px;height:15px;"></td>`).join('')}
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top:8px;font-size:10px;color:var(--text-hint);">Hex: <span id="tc250-rm-hex" style="font-family:monospace;">—</span></div>
+        <div id="tc250-rm-status" style="margin-top:4px;font-size:11px;font-family:monospace;color:var(--text-hint);min-height:16px;"></div>
+      </div>
+
+      <!-- 5. Override Timer -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">⏱ Override Timer <span style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;">Cmd 0x08</span></div>
+          <button class="queue-refresh" onclick="tc250SendOverrideTimer()">Send</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Sets time (in seconds) for the TC250 to ignore load control commands. 255 = permanent override until changed. 0 = clear override.</div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Duration (seconds)</label>
+            <input type="number" id="tc250-override-secs" value="0" min="0" max="65535"
+              style="width:120px;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:13px;text-align:center;">
+          </div>
+          <div style="font-size:11px;color:var(--text-hint);">
+            Quick set:
+            <button onclick="document.getElementById('tc250-override-secs').value=1800" style="margin-left:6px;padding:3px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;cursor:pointer;">30 min</button>
+            <button onclick="document.getElementById('tc250-override-secs').value=3600" style="margin-left:4px;padding:3px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;cursor:pointer;">1 hr</button>
+            <button onclick="document.getElementById('tc250-override-secs').value=255" style="margin-left:4px;padding:3px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--red);color:white;font-size:11px;cursor:pointer;">Permanent</button>
+            <button onclick="document.getElementById('tc250-override-secs').value=0" style="margin-left:4px;padding:3px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--green-dark);background:var(--green-bg);color:var(--green-dark);font-size:11px;cursor:pointer;">Clear (0)</button>
+          </div>
+        </div>
+        <div id="tc250-override-status" style="margin-top:8px;font-size:11px;font-family:monospace;color:var(--text-hint);min-height:16px;"></div>
+      </div>
+
+      <!-- 6. Time to Record + Report Offset -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">📊 Bubble-Up Timing <span style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;">Cmd 0x0A / 0x0B</span></div>
+          <button class="queue-refresh" onclick="tc250SendBubbleTiming()">Send Both</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Controls when the TC250 captures data (Time to Record) and how long it waits before transmitting the bubble-up (Report Offset). Recommended: record every 15 min, offset &lt; record interval.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Time to Record (minutes) <span style="font-family:monospace;">0x0A</span></label>
+            <input type="number" id="tc250-record-mins" value="15" min="1" max="255"
+              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+            <div style="font-size:9px;color:var(--text-hint);margin-top:2px;">Recommended: 15 or 30 minutes</div>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Report Offset (seconds) <span style="font-family:monospace;">0x0B</span></label>
+            <input type="number" id="tc250-report-offset" value="0" min="0" max="65535"
+              style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+            <div style="font-size:9px;color:var(--text-hint);margin-top:2px;">Delay before transmitting. 0 = immediate</div>
+          </div>
+        </div>
+        <div id="tc250-bubble-status" style="margin-top:8px;font-size:11px;font-family:monospace;color:var(--text-hint);min-height:16px;"></div>
+      </div>
+
+      <!-- ── Data Requests ─────────────────────────────────────────────────── -->
+      <div style="padding:18px 0 14px;margin-top:8px;">
+        <div style="font-size:17px;font-weight:700;color:var(--text-primary);">📥 TC250 Data Requests</div>
+        <div style="font-size:12px;color:var(--text-hint);margin-top:3px;">Request data from the device. Responses are returned via the next bubble-up or inbound note and displayed below.</div>
+      </div>
+
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">Query Device</div>
+          <span id="tc250-req-status" style="font-size:11px;font-family:monospace;color:var(--text-hint);"></span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:14px;">
+          <button class="queue-refresh" onclick="tc250DataRequest(0x05)">Relay Status</button>
+          <button class="queue-refresh" onclick="tc250DataRequest(0x08)">LC Event Queue</button>
+          <button class="queue-refresh" onclick="tc250DataRequest(0x0B)">Power Measurement</button>
+          <button class="queue-refresh" onclick="tc250DataRequest(0x06)">Time Since Last Current</button>
+          <button class="queue-refresh" onclick="tc250DataRequest(0x07)">Total Time in Service</button>
+          <button class="queue-refresh" onclick="tc250DataRequest(0x0A)">Override Timer</button>
+          <button class="queue-refresh" onclick="tc250DataRequest(0x0C)">Last Touch Pad</button>
+          <button class="queue-refresh" onclick="tc250DataRequest(0x0F)">Voltage Alert Settings</button>
+          <button class="queue-refresh" onclick="tc250DataRequest(0x04)">Relay Map</button>
+          <button class="queue-refresh" onclick="tc250DataRequest(0x09)">Report Provisioning</button>
+          <button class="queue-refresh" onclick="tc250DataRequest(0x03)">Current Time of Day</button>
+          <button class="queue-refresh" onclick="tc250DataRequest(0x01)">Serial Number</button>
+        </div>
+        <div style="font-size:10px;color:var(--text-hint);margin-bottom:6px;">Response hex (paste from device log):</div>
+        <div style="display:flex;gap:8px;align-items:flex-start;">
+          <textarea id="tc250-response-hex" rows="3" placeholder="Paste TC250 response hex here to parse…"
+            style="flex:1;padding:8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;resize:vertical;"></textarea>
+          <button class="queue-refresh" onclick="tc250ParseResponse()">Parse</button>
+        </div>
+        <div id="tc250-response-result" style="margin-top:10px;font-size:12px;font-family:monospace;background:var(--surface2);border-radius:var(--radius-sm);padding:10px;min-height:40px;display:none;white-space:pre-wrap;border:0.5px solid var(--border-md);"></div>
+      </div>
+
+      <!-- ── Bubble-Up Parser (variable length) ────────────────────────────── -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">🔍 Bubble-Up Parser (Variable Length)</div>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Parses variable-length bubble-up payloads (0x10 alert) based on the bubble-up config bits. Handles both fixed and variable field layouts.</div>
+        <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:10px;">
+          <input type="text" id="tc250-bu-input" placeholder="Paste bubble-up hex (variable length)…"
+            style="flex:1;padding:8px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;"
+            oninput="tc250ParseBubbleUp()">
+          <button class="queue-refresh" onclick="tc250ParseBubbleUp()">Parse</button>
+        </div>
+        <div id="tc250-bu-result" style="font-size:12px;font-family:monospace;background:var(--surface2);border-radius:var(--radius-sm);padding:10px;min-height:40px;display:none;white-space:pre-wrap;border:0.5px solid var(--border-md);"></div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -4622,7 +4846,6 @@
       <div class="sched-card">
         <div class="sched-card-header">
           <div class="sched-card-title">📡 Manual Session Control</div>
-          <span id="rm-live-status" style="font-size:11px;font-family:monospace;color:var(--text-hint);">⚫ No active sessions</span>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:12px;">
           <div>
