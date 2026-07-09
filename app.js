@@ -5326,6 +5326,79 @@ async function sendRmCmd(action, uid, source) {
   } catch(e) { console.warn("sendRmCmd log:", e.message); }
 }
 
+// ── Live Session State Machine ────────────────────────────────────────────────
+// Watches current readings from loadLatestDevice and auto-writes
+// equipment_runtime_sessions rows when current transitions zero ↔ non-zero.
+async function rmCheckCurrentTransition(deviceUid, currentRaw, recordedAt) {
+  const onThreshold = parseFloat(rmSettings.current_on_threshold || "0.5");
+  const amps  = currentRaw != null ? currentRaw / 10 : 0;
+  const isOn  = amps >= onThreshold;
+  const prev  = rmLiveState.get(deviceUid) || { isOn: false, sessionId: null, sessionStart: null };
+
+  if (isOn && !prev.isOn) {
+    // Transition: OFF → ON — open a new session
+    let sessionId = null;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/equipment_runtime_sessions`, {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+          "Content-Type": "application/json",
+          "Prefer": "return=representation"
+        },
+        body: JSON.stringify({
+          device_uid:     deviceUid,
+          session_start:  recordedAt,
+          trigger_source: "live",
+          created_at:     new Date().toISOString()
+        })
+      });
+      const rows = await res.json();
+      sessionId = rows?.[0]?.id || null;
+    } catch(e) { console.warn("[RM Live] open session:", e.message); }
+
+    rmLiveState.set(deviceUid, { isOn: true, sessionId, sessionStart: recordedAt });
+    console.log(`[RM Live] Session OPENED for ${deviceUid} at ${recordedAt} (${amps.toFixed(1)}A)`);
+    rmUpdateLiveStatus();
+
+  } else if (!isOn && prev.isOn && prev.sessionId) {
+    // Transition: ON → OFF — close the open session
+    const durMins = prev.sessionStart
+      ? Math.round((new Date(recordedAt) - new Date(prev.sessionStart)) / 60000)
+      : null;
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/equipment_runtime_sessions?id=eq.${prev.sessionId}`, {
+        method: "PATCH",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+          "Content-Type": "application/json",
+          "Prefer": "return=minimal"
+        },
+        body: JSON.stringify({ session_end: recordedAt, duration_minutes: durMins })
+      });
+    } catch(e) { console.warn("[RM Live] close session:", e.message); }
+
+    console.log(`[RM Live] Session CLOSED for ${deviceUid} at ${recordedAt} (${durMins} min)`);
+    rmLiveState.set(deviceUid, { isOn: false, sessionId: null, sessionStart: null });
+    rmUpdateLiveStatus();
+
+  } else {
+    // No transition — just keep current state updated
+    rmLiveState.set(deviceUid, { ...prev, isOn });
+  }
+}
+
+function rmUpdateLiveStatus() {
+  const el = document.getElementById("rm-live-status");
+  if (!el) return;
+  const openSessions = [...rmLiveState.values()].filter(s => s.isOn).length;
+  el.textContent = openSessions > 0
+    ? `🟢 ${openSessions} active session${openSessions > 1 ? "s" : ""}`
+    : "⚫ No active sessions";
+}
+
 // ── Analytics ─────────────────────────────────────────────────────────────────
 // ── Chart toggle controls ──────────────────────────────────────────────────────────────────────────────
 function switchRmDayNight(el) {
@@ -9263,6 +9336,9 @@ async function loadLatestDevice(deviceId) {
       <div class="data-field"><span class="data-field-name">Location</span><span class="data-field-value">${r.location ?? "—"}</span></div>
     </div>`;
     tsEl.textContent = `Last updated: ${new Date(r.recorded_at).toLocaleString()}`;
+
+    // Live session detection — check current transition and open/close sessions
+    await rmCheckCurrentTransition(device.uid, r.current, r.recorded_at);
 
     // Sync load calling badges on the relay control card if this device has sensing.
     // relay_active_rN = relay switched on; load_present_rN = load calling while relay open.
@@ -18518,6 +18594,7 @@ let rmChartCondition      = "temp";       // temp | heat | humidity
 let rmShowDayNight        = false;        // toggle day/night shading on timeline
 let rmMainChart           = null;
 let rmAnalyticsSessions   = [];           // cached for chart switching without re-fetch
+const rmLiveState         = new Map();    // device uid 2192 { isOn, sessionId, sessionStart }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function initBatteryTab() {
