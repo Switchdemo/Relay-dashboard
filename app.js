@@ -24799,7 +24799,7 @@ function loraInit() {
   });
   loraUpdatePreview();
 
-  // Also populate TC250 target device selector
+  // Also populate LoRa target device selector
   const tc250Sel = document.getElementById('tc250-target-device');
   if (tc250Sel) {
     const cur = tc250Sel.value;
@@ -24818,7 +24818,7 @@ function loraInit() {
   setInterval(tc250UpdateTimePreview, 1000);
 }
 
-// ── TC250 Configuration Commands ──────────────────────────────────────────────
+// ── LoRa Device Configuration Commands ──────────────────────────────────────────────
 
 function tc250TargetUID() {
   const uid = document.getElementById('tc250-target-device')?.value;
@@ -24996,7 +24996,7 @@ async function tc250DataRequest(requestByte) {
 }
 
 // ── 8. Response Parser ────────────────────────────────────────────────────────
-const TC250_RESPONSE_TYPES = {
+const LORA_RESPONSE_TYPES = {
   0x00: 'Address', 0x01: 'Serial Number', 0x02: 'CLP Timeout',
   0x03: 'Time of Day', 0x04: 'Relay Map', 0x05: 'Relay Status',
   0x06: 'Time Since Last Current', 0x07: 'Total Time in Service',
@@ -25020,7 +25020,7 @@ function tc250ParseResponse() {
   const header  = b(0);
   const length  = b(1);
   const msgType = b(2) & 0x7F; // mask off response bit
-  const typeName = TC250_RESPONSE_TYPES[msgType] || `Unknown (0x${msgType.toString(16).toUpperCase()})`;
+  const typeName = LORA_RESPONSE_TYPES[msgType] || `Unknown (0x${msgType.toString(16).toUpperCase()})`;
 
   // Validate checksum
   let xor = 0;
