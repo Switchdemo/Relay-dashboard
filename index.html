@@ -1668,10 +1668,32 @@
               <option value="720">Last 30 Days</option>
               <option value="">All Events</option>
             </select>
+            <button class="queue-refresh" style="color:var(--amber);border-color:var(--amber);" onclick="toggleOptOutPanel()">🚫 Opt-Out Devices</button>
             <button class="queue-refresh" style="color:var(--red);border-color:var(--red);" onclick="cancelAllEvents()">Cancel All Events</button>
             <button class="queue-refresh" onclick="loadDeviceEvents()">Refresh</button>
           </div>
         </div>
+
+        <!-- Opt-Out Panel -->
+        <div id="opt-out-panel" style="display:none;margin-bottom:12px;background:var(--surface2);border-radius:var(--radius-sm);border:0.5px solid var(--border-md);overflow:hidden;">
+          <div style="padding:10px 14px;border-bottom:0.5px solid var(--border-md);display:flex;align-items:center;justify-content:space-between;">
+            <div>
+              <div style="font-size:12px;font-weight:700;color:var(--text-primary);">🚫 Device Opt-Out Manager</div>
+              <div style="font-size:11px;color:var(--text-hint);margin-top:2px;">Select an event then opt out individual devices. Sends restore to that device only.</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <select id="opt-out-event-select" class="history-select" onchange="loadOptOutPanel()"
+                style="font-size:11px;">
+                <option value="">— Select Event —</option>
+              </select>
+              <button class="queue-refresh" onclick="toggleOptOutPanel()" style="font-size:11px;">✕ Close</button>
+            </div>
+          </div>
+          <div id="opt-out-device-list" style="padding:10px 14px;">
+            <div class="sched-empty">Select an event above to manage opt-outs.</div>
+          </div>
+        </div>
+
         <div class="queue-list" id="device-events-list">
           <div class="sched-empty">Loading...</div>
         </div>
