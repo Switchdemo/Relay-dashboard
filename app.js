@@ -2987,19 +2987,45 @@ async function loadOptOutPanel() {
     const now    = new Date();
     const eventStarted = fireAt && now >= fireAt;
 
+    // Resolve which devices were targeted by this event
+    const targetType = event?.target_type || "all";
+    const targetId   = event?.target_id   || "";
+    let targetDevices = [];
+
+    if (targetType === "all") {
+      targetDevices = DEVICES.filter(d => !d.uid.startsWith("therm_") && !d.uid.startsWith("batt_") && !d.uid.startsWith("ev_") && !d.uid.startsWith("gen_"));
+    } else if (targetType === "group") {
+      const groupNum = parseInt((targetId || "").replace("group_", ""));
+      targetDevices = DEVICES.filter(d => (groupAssignments[d.uid] || []).includes(groupNum));
+    } else {
+      // Single device
+      const d = DEVICES.find(d => d.uid === targetId);
+      if (d) targetDevices = [d];
+    }
+
+    if (!targetDevices.length) {
+      listEl.innerHTML = '<div class="sched-empty">No devices found for this event target.</div>';
+      return;
+    }
+
+    // Load existing opt-outs for this event
     let optOutMap = {};
     try {
       const optOutRows = await supabaseGet(`event_opt_outs?event_name=eq.${encodeURIComponent(eventName)}`);
       if (Array.isArray(optOutRows)) optOutRows.forEach(o => { optOutMap[o.device_uid] = o; });
     } catch(e) {}
 
+    const targetLabel = targetType === "all" ? "All Devices"
+      : targetType === "group" ? `Group ${targetId.replace("group_","")}`
+      : targetDevices[0]?.name || targetId;
+
     listEl.innerHTML = `
       <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">
-        Event: <strong>${eventName}</strong> —
+        Event: <strong>${eventName}</strong> &bull; Target: <strong>${targetLabel}</strong> (${targetDevices.length} device${targetDevices.length !== 1 ? "s" : ""}) —
         ${fireAt ? (eventStarted ? '<span style="color:var(--green-dark);">In progress / completed</span>' : `Starts ${fireAt.toLocaleString()}`) : "Unknown timing"}
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;">
-        ${DEVICES.map(device => {
+        ${targetDevices.map(device => {
           const optOut    = optOutMap[device.uid];
           const isOptedOut = !!optOut;
           const isDuring  = optOut?.opt_out_type === "during_event";
