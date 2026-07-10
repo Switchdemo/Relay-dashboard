@@ -1345,7 +1345,13 @@ async function loadDeviceEvents() {
             <div class="queue-detail">${icon} ${r.status} &bull; 📅 ${fireStr} &bull; ⏱ ${dur} &bull; ends ${endStr}</div>
             <div class="queue-detail" style="color:var(--text-hint);margin-top:1px;">Mode: ${(r.lc_mode||"—").toUpperCase()} &bull; Strategy: ${r.lc_strategy||"—"} &bull; Duration: ${r.duration_minutes ? formatDuration(r.duration_minutes) : "—"} &nbsp;|&nbsp; <span style="color:var(--blue);text-decoration:underline;">Click to view hex &amp; details</span></div>
           </div>
-          <span class="queue-status ${sc}">${r.status}</span>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;" onclick="event.stopPropagation()">
+            <span class="queue-status ${sc}">${r.status}</span>
+            <button onclick="openOptOutForEvent('${(r.name||'').replace(/'/g,"\\'")}','${(r.fire_at||'').replace(/'/g,"\\'")}')"
+              style="padding:3px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--amber);background:rgba(245,158,11,0.1);color:var(--amber);font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap;">
+              🚫 Opt-Out Device
+            </button>
+          </div>
         </div>`;
       }).join("") + `</div>`;
   } catch(err) {
@@ -2926,6 +2932,24 @@ async function loadParticipation() {
 }
 
 // ── Opt-Out Panel ─────────────────────────────────────────────────────────────
+function openOptOutForEvent(eventName, fireAt) {
+  // Show the opt-out panel
+  const panel = document.getElementById("opt-out-panel");
+  if (panel) panel.style.display = "block";
+
+  // Populate and pre-select the event
+  populateOptOutEventSelect().then(() => {
+    const sel = document.getElementById("opt-out-event-select");
+    if (sel) {
+      sel.value = eventName;
+      loadOptOutPanel();
+    }
+  });
+
+  // Scroll panel into view
+  panel?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
 function toggleOptOutPanel() {
   const panel = document.getElementById("opt-out-panel");
   if (!panel) return;
