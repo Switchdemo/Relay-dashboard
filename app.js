@@ -2831,7 +2831,6 @@ async function loadParticipation() {
   results.innerHTML = `<div class="sched-empty">Loading participation data...</div>`;
 
   try {
-    // Get the event from schedule_queue
     const qRows = await supabaseGet(`schedule_queue?name=eq.${encodeURIComponent(eventName)}&order=fire_at.desc&limit=1`);
     const event = qRows?.[0];
     if (!event) { results.innerHTML = `<div class="sched-empty">Event not found.</div>`; return; }
@@ -2839,9 +2838,16 @@ async function loadParticipation() {
     const fireAt   = new Date(event.fire_at);
     const duration = event.duration_minutes || 60;
     const endAt    = new Date(fireAt.getTime() + duration * 60 * 1000);
+    const now      = new Date();
 
-    // Check each device: did relay turn ON during event window?
-    let participated = 0, didNotParticipate = 0;
+    // Load opt-out records for this event
+    let optOutMap = {};
+    try {
+      const optOutRows = await supabaseGet(`event_opt_outs?event_name=eq.${encodeURIComponent(eventName)}`);
+      if (Array.isArray(optOutRows)) optOutRows.forEach(o => { optOutMap[o.device_uid] = o; });
+    } catch(e) {}
+
+    let participated = 0, optedOutPre = 0, optedOutDuring = 0, didNotParticipate = 0;
     const rows = await Promise.all(DEVICES.map(async device => {
       const readings = await supabaseGet(
         `device_readings?device_uid=eq.${encodeURIComponent(device.uid)}&recorded_at=gte.${fireAt.toISOString()}&recorded_at=lte.${endAt.toISOString()}&order=recorded_at.asc&limit=50`
@@ -2849,54 +2855,185 @@ async function loadParticipation() {
       const relayOn = Array.isArray(readings) && readings.some(r =>
         r.relay_status_r1 > 0 || r.relay_status_r2 > 0 || r.relay_status_r3 > 0 || r.relay_status_r4 > 0
       );
-      if (relayOn) participated++; else didNotParticipate++;
       const lastReading = Array.isArray(readings) ? readings[readings.length-1] : null;
-      return { device, relayOn, readingCount: Array.isArray(readings) ? readings.length : 0, lastReading };
+      const optOut = optOutMap[device.uid] || null;
+      if (optOut?.opt_out_type === "pre_event")      optedOutPre++;
+      else if (optOut?.opt_out_type === "during_event") optedOutDuring++;
+      else if (relayOn) participated++;
+      else didNotParticipate++;
+      return { device, relayOn, readingCount: Array.isArray(readings) ? readings.length : 0, lastReading, optOut };
     }));
 
     const pct = DEVICES.length > 0 ? Math.round((participated / DEVICES.length) * 100) : 0;
 
     results.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:1rem;">
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:1rem;">
         <div style="text-align:center;padding:0.75rem;background:var(--green-bg);border-radius:var(--radius-sm);">
-          <div style="font-size:24px;font-weight:700;color:var(--green-dark);">${participated}</div>
-          <div style="font-size:11px;color:var(--green-dark);">Participated</div>
+          <div style="font-size:20px;font-weight:700;color:var(--green-dark);">${participated}</div>
+          <div style="font-size:10px;color:var(--green-dark);">Participated</div>
         </div>
         <div style="text-align:center;padding:0.75rem;background:#FEF2F2;border-radius:var(--radius-sm);">
-          <div style="font-size:24px;font-weight:700;color:var(--red);">${didNotParticipate}</div>
-          <div style="font-size:11px;color:var(--red);">Did Not Participate</div>
+          <div style="font-size:20px;font-weight:700;color:var(--red);">${didNotParticipate}</div>
+          <div style="font-size:10px;color:var(--red);">Did Not Participate</div>
+        </div>
+        <div style="text-align:center;padding:0.75rem;background:rgba(245,158,11,0.1);border-radius:var(--radius-sm);">
+          <div style="font-size:20px;font-weight:700;color:var(--amber);">${optedOutPre}</div>
+          <div style="font-size:10px;color:var(--amber);">Opted-Out Pre-Event</div>
+        </div>
+        <div style="text-align:center;padding:0.75rem;background:rgba(245,158,11,0.1);border-radius:var(--radius-sm);">
+          <div style="font-size:20px;font-weight:700;color:var(--amber);">${optedOutDuring}</div>
+          <div style="font-size:10px;color:var(--amber);">Opted-Out During</div>
         </div>
         <div style="text-align:center;padding:0.75rem;background:var(--blue-bg);border-radius:var(--radius-sm);">
-          <div style="font-size:24px;font-weight:700;color:var(--blue-dark);">${pct}%</div>
-          <div style="font-size:11px;color:var(--blue-dark);">Participation Rate</div>
+          <div style="font-size:20px;font-weight:700;color:var(--blue-dark);">${pct}%</div>
+          <div style="font-size:10px;color:var(--blue-dark);">Participation Rate</div>
         </div>
       </div>
       <div style="font-size:11px;color:var(--text-hint);margin-bottom:8px;">Event window: ${fireAt.toLocaleString()} — ${endAt.toLocaleString()}</div>
+      <div style="overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:11px;">
         <thead><tr>
           <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Device</th>
-          <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Participated</th>
-          <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Readings in Window</th>
+          <th style="text-align:center;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Participated</th>
+          <th style="text-align:center;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Opted-Out Pre-Event</th>
+          <th style="text-align:center;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Opted-Out During</th>
+          <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Opt-Out Time</th>
+          <th style="text-align:center;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Readings in Event</th>
           <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Relay Status</th>
         </tr></thead>
         <tbody>${rows.map(r => {
           const relayStr = r.lastReading
             ? [r.lastReading.relay_status_r1>0?"R1":"",r.lastReading.relay_status_r2>0?"R2":"",r.lastReading.relay_status_r3>0?"R3":"",r.lastReading.relay_status_r4>0?"R4":""].filter(Boolean).join(", ")||"All Off"
             : "No data";
+          const isPre    = r.optOut?.opt_out_type === "pre_event";
+          const isDuring = r.optOut?.opt_out_type === "during_event";
+          const optTime  = r.optOut ? new Date(r.optOut.opted_out_at).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) : "—";
           return `<tr>
             <td style="padding:6px 8px;border-bottom:0.5px solid var(--border);font-weight:500;">${r.device.name}</td>
-            <td style="padding:6px 8px;border-bottom:0.5px solid var(--border);">${r.relayOn
-              ? '<span style="color:var(--green-dark);font-weight:600;">✅ Yes</span>'
-              : '<span style="color:var(--red);">❌ No</span>'}</td>
-            <td style="padding:6px 8px;border-bottom:0.5px solid var(--border);">${r.readingCount}</td>
+            <td style="padding:6px 8px;border-bottom:0.5px solid var(--border);text-align:center;">${r.optOut?"—":r.relayOn?'<span style="color:var(--green-dark);font-weight:600;">✅ Yes</span>':'<span style="color:var(--red);">❌ No</span>'}</td>
+            <td style="padding:6px 8px;border-bottom:0.5px solid var(--border);text-align:center;">${isPre?'<span style="color:var(--amber);font-weight:600;">🚫 Yes</span>':"—"}</td>
+            <td style="padding:6px 8px;border-bottom:0.5px solid var(--border);text-align:center;">${isDuring?'<span style="color:var(--amber);font-weight:600;">🚫 Yes</span>':"—"}</td>
+            <td style="padding:6px 8px;border-bottom:0.5px solid var(--border);font-size:10px;color:var(--text-hint);">${optTime}</td>
+            <td style="padding:6px 8px;border-bottom:0.5px solid var(--border);text-align:center;">${r.readingCount}</td>
             <td style="padding:6px 8px;border-bottom:0.5px solid var(--border);">${relayStr}</td>
           </tr>`;
         }).join("")}</tbody>
-      </table>`;
+      </table></div>`;
   } catch(e) {
     results.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error: ${e.message}</div>`;
     console.error("loadParticipation:", e);
   }
+}
+
+// ── Opt-Out Panel ─────────────────────────────────────────────────────────────
+function toggleOptOutPanel() {
+  const panel = document.getElementById("opt-out-panel");
+  if (!panel) return;
+  const isOpen = panel.style.display !== "none";
+  panel.style.display = isOpen ? "none" : "block";
+  if (!isOpen) populateOptOutEventSelect();
+}
+
+async function populateOptOutEventSelect() {
+  const sel = document.getElementById("opt-out-event-select");
+  if (!sel) return;
+  try {
+    const rows = await supabaseGet("schedule_queue?order=fire_at.desc&limit=50&select=name,fire_at,status");
+    sel.innerHTML = '<option value="">— Select Event —</option>';
+    if (Array.isArray(rows)) rows.forEach(r => {
+      const opt = document.createElement("option");
+      opt.value = r.name;
+      opt.textContent = `${r.name} (${new Date(r.fire_at).toLocaleDateString()})`;
+      sel.appendChild(opt);
+    });
+  } catch(e) { console.error("populateOptOutEventSelect:", e); }
+}
+
+async function loadOptOutPanel() {
+  const eventName = document.getElementById("opt-out-event-select")?.value;
+  const listEl    = document.getElementById("opt-out-device-list");
+  if (!listEl) return;
+  if (!eventName) { listEl.innerHTML = '<div class="sched-empty">Select an event above.</div>'; return; }
+  listEl.innerHTML = '<div class="sched-empty">Loading…</div>';
+
+  try {
+    const qRows = await supabaseGet(`schedule_queue?name=eq.${encodeURIComponent(eventName)}&order=fire_at.desc&limit=1`);
+    const event = qRows?.[0];
+    const fireAt = event ? new Date(event.fire_at) : null;
+    const now    = new Date();
+    const eventStarted = fireAt && now >= fireAt;
+
+    let optOutMap = {};
+    try {
+      const optOutRows = await supabaseGet(`event_opt_outs?event_name=eq.${encodeURIComponent(eventName)}`);
+      if (Array.isArray(optOutRows)) optOutRows.forEach(o => { optOutMap[o.device_uid] = o; });
+    } catch(e) {}
+
+    listEl.innerHTML = `
+      <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">
+        Event: <strong>${eventName}</strong> —
+        ${fireAt ? (eventStarted ? '<span style="color:var(--green-dark);">In progress / completed</span>' : `Starts ${fireAt.toLocaleString()}`) : "Unknown timing"}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        ${DEVICES.map(device => {
+          const optOut    = optOutMap[device.uid];
+          const isOptedOut = !!optOut;
+          const isDuring  = optOut?.opt_out_type === "during_event";
+          const optTime   = optOut ? new Date(optOut.opted_out_at).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) : null;
+          return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:${isOptedOut?"rgba(245,158,11,0.08)":"var(--surface)"};border-radius:var(--radius-sm);border:0.5px solid ${isOptedOut?"var(--amber)":"var(--border)"};flex-wrap:wrap;">
+            <span style="font-size:12px;font-weight:600;flex:1;min-width:100px;">${device.name}</span>
+            ${isOptedOut
+              ? `<span style="font-size:11px;color:var(--amber);font-weight:600;">🚫 Opted Out ${isDuring?"(during)":"(pre-event)"}</span>
+                 <span style="font-size:10px;color:var(--text-hint);">${optTime}</span>
+                 <button onclick="undoOptOut('${eventName}','${device.uid}')" style="padding:3px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:10px;cursor:pointer;color:var(--text-hint);">Undo</button>`
+              : `${!eventStarted ? `<button onclick="optOutDevice('${eventName}','${device.uid}','pre_event')" style="padding:4px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--amber);background:rgba(245,158,11,0.1);color:var(--amber);font-size:11px;font-weight:600;cursor:pointer;">Pre-Event Opt-Out</button>` : ""}
+                 <button onclick="optOutDevice('${eventName}','${device.uid}','during_event')" style="padding:4px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--red);background:rgba(220,38,38,0.08);color:var(--red);font-size:11px;font-weight:600;cursor:pointer;">${eventStarted?"Opt Out Now":"Opt Out During Event"}</button>`
+            }
+          </div>`;
+        }).join("")}
+      </div>`;
+  } catch(e) {
+    listEl.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error: ${e.message}</div>`;
+  }
+}
+
+async function optOutDevice(eventName, deviceUID, optOutType) {
+  const device = DEVICES.find(d => d.uid === deviceUID);
+  if (!confirm(`Opt out ${device?.name || deviceUID} from "${eventName}"?\n\n${optOutType === "during_event" ? "Restore command will be sent to this device only." : "Device will be skipped when event fires."}`)) return;
+  try {
+    await supabasePost("event_opt_outs", {
+      event_name:   eventName,
+      device_uid:   deviceUID,
+      opt_out_type: optOutType,
+      opted_out_at: new Date().toISOString(),
+      opted_out_by: currentUser?.email || "unknown",
+      restore_sent: optOutType === "during_event"
+    });
+    if (optOutType === "during_event") {
+      const restoreHex = buildRestoreHex("all_on");
+      await fetch(PROXY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Device-UID": deviceUID },
+        body: JSON.stringify({ body: { LC: restoreHex }, req: "note.add", sync: true })
+      });
+      const optRows = await supabaseGet(`event_opt_outs?event_name=eq.${encodeURIComponent(eventName)}&device_uid=eq.${encodeURIComponent(deviceUID)}&limit=1`);
+      if (optRows?.[0]?.id) await supabasePatch(`event_opt_outs?id=eq.${optRows[0].id}`, { restore_sent: true, restore_sent_at: new Date().toISOString(), restore_hex: restoreHex });
+      setStatus("success", `✅ ${device?.name || deviceUID} opted out — restore sent`);
+    } else {
+      setStatus("success", `✅ ${device?.name || deviceUID} pre-event opt-out recorded`);
+    }
+    await loadOptOutPanel();
+  } catch(e) { setStatus("error", `Opt-out failed: ${e.message}`); console.error("optOutDevice:", e); }
+}
+
+async function undoOptOut(eventName, deviceUID) {
+  const device = DEVICES.find(d => d.uid === deviceUID);
+  if (!confirm(`Remove opt-out for ${device?.name || deviceUID}?`)) return;
+  try {
+    await supabaseDelete("event_opt_outs", `event_name=eq.${encodeURIComponent(eventName)}&device_uid=eq.${encodeURIComponent(deviceUID)}`);
+    setStatus("success", `Opt-out removed for ${device?.name || deviceUID}`);
+    await loadOptOutPanel();
+  } catch(e) { setStatus("error", `Failed to remove opt-out: ${e.message}`); }
 }
 
 // ── BUBBLE-UP SCHEDULE ENGINE ────────────────────────────────────────────────
