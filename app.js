@@ -1184,6 +1184,11 @@ async function loadSchedules() {
          </button>`
       : `<span style="font-size:10px;color:var(--text-hint);">${s.status}</span>`;
 
+    const optOutBtn = `<button class="sched-delete-btn" style="color:var(--amber);border-color:var(--amber);white-space:nowrap;"
+      onclick="event.stopPropagation();openOptOutForEvent('${(s.name||'').replace(/'/g,"\\'")}','${(s.fire_at||'').replace(/'/g,"\\'")}')">
+      🚫 Opt-Out Device
+    </button>`;
+
     const rowData = encodeURIComponent(JSON.stringify({ type:"queue", item:s }));
 
     return `<div class="sched-item" style="cursor:pointer;" onclick="showEventDetail(JSON.parse(decodeURIComponent('${rowData}')))">
@@ -1200,7 +1205,7 @@ async function loadSchedules() {
           ${s.lc_mode ? "&bull; " + s.lc_mode.toUpperCase() : ""}
         </div>
       </div>
-      <div class="sched-actions">${cancelBtn}</div>
+      <div class="sched-actions" style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">${cancelBtn}${optOutBtn}</div>
     </div>`;
   }).join("");
 }
@@ -1274,7 +1279,7 @@ async function loadDeviceEvents() {
   list.innerHTML = `<div class="sched-empty">Loading...</div>`;
   try {
     const rangeHours = document.getElementById("device-events-range")?.value;
-    let query = `device_events?order=received_at.desc&limit=200`;
+    let query  = `device_events?order=received_at.desc&limit=500`;
     let qQuery = `schedule_queue?order=fired_at.desc&limit=500`;
     if (rangeHours) {
       const since = new Date(Date.now() - parseInt(rangeHours)*60*60*1000).toISOString();
@@ -1283,57 +1288,69 @@ async function loadDeviceEvents() {
     }
     const devRows = await supabaseGet(query);
     const qRows   = await supabaseGet(qQuery);
-    const qMap = {};
-    if (Array.isArray(qRows)) qRows.forEach(q => { if (q.lc_event_id) qMap[q.lc_event_id] = q; });
 
-    // Merge device_events with schedule_queue data
-    let rows = [];
-    if (Array.isArray(devRows) && devRows.length) {
-      rows = devRows.map(e => {
-        const q = qMap[e.event_id] || {};
-        return {
-          ...e,
-          name:             q.name || "—",
-          target_name:      q.target_name || DEVICES.find(d => d.uid === e.device_uid)?.name || unitName(e.device_uid || ""),
-          relay_action:     q.relay_action || "—",
-          status:           e.lc_status_label || "—",
-          lc_mode:          q.lc_mode || "—",
-          lc_strategy:      q.lc_strategy || "—",
-          lc_reps:          q.lc_reps || "—",
-          fire_at:          q.fire_at || e.event_time,
-          duration_minutes: q.duration_minutes || null,
-          event_type:       q.event_type || "switch",
-          _raw:             e
-        };
+    // Build schedule_queue lookup by lc_event_id
+    const qMap = {};
+    if (Array.isArray(qRows)) qRows.forEach(q => { if (q.lc_event_id != null) qMap[q.lc_event_id] = q; });
+
+    // Group device_events by (device_uid + event_id) — keep the latest status per group
+    // This eliminates the duplicate rows from multiple status transitions
+    const grouped = {};
+    if (Array.isArray(devRows)) {
+      devRows.forEach(e => {
+        const key = `${e.device_uid}_${e.event_id}`;
+        // Keep the highest lc_status (most advanced state) per event per device
+        if (!grouped[key] || e.lc_status > grouped[key].lc_status) {
+          grouped[key] = e;
+        }
       });
-    } else if (Array.isArray(qRows) && qRows.length) {
-      // No device_events — fall back to schedule_queue directly
-      rows = qRows.map(q => ({
-        ...q,
-        lc_status: null,
-        _raw: q
-      }));
     }
-    if (!Array.isArray(rows)) {
-      list.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error loading — check console.</div>`;
-      console.error("loadDeviceEvents:", rows);
+
+    let rows = Object.values(grouped);
+
+    // Sort by received_at descending
+    rows.sort((a, b) => new Date(b.received_at) - new Date(a.received_at));
+
+    // Merge with schedule_queue data
+    rows = rows.map(e => {
+      const q = qMap[e.event_id] || {};
+      return {
+        ...e,
+        name:             q.name || "—",
+        target_name:      q.target_name || DEVICES.find(d => d.uid === e.device_uid)?.name || unitName(e.device_uid || ""),
+        relay_action:     q.relay_action || "—",
+        status:           e.lc_status_label || "—",
+        lc_mode:          q.lc_mode || "—",
+        lc_strategy:      q.lc_strategy || "—",
+        lc_reps:          q.lc_reps || "—",
+        fire_at:          q.fire_at || e.event_time,
+        duration_minutes: q.duration_minutes || null,
+        event_type:       q.event_type || "switch",
+        _raw:             e
+      };
+    });
+
+    // If no device_events at all, fall back to schedule_queue
+    if (!rows.length && Array.isArray(qRows) && qRows.length) {
+      rows = qRows.map(q => ({ ...q, lc_status: null, _raw: q }));
+    }
+
+    if (!rows.length) {
+      list.innerHTML = `<div class="sched-empty">No device events in selected range.</div>`;
       return;
     }
-    if (rows.length === 0) {
-      list.innerHTML = `<div class="sched-empty">No device events in last 48 hours.</div>`;
-      return;
-    }
+
     const statusIcon  = { sent:"📤", received:"📥", started:"▶️", ended:"✅", cancelled:"🚫", rejected:"❌", pending:"🕐" };
     const statusClass = { sent:"sent", received:"received", started:"started", ended:"ended", cancelled:"cancelled", rejected:"rejected" };
-
-    if (rows.length === 0) { list.innerHTML = `<div class="sched-empty">No device events found.</div>`; return; }
+    const lcStatusToKey = { 0:"received", 1:"started", 2:"ended", 3:"sent", 4:"rejected", 5:"rejected", 6:"cancelled", 7:"started", 8:"started", 9:"started", 10:"ended" };
 
     list.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px;">` +
       rows.map(r => {
         const fireAt     = r.fire_at ? new Date(r.fire_at) : null;
         const durationMs = (r.duration_minutes || 0) * 60 * 1000;
         const endAt      = fireAt ? new Date(fireAt.getTime() + durationMs) : null;
-        const sc         = statusClass[r.lc_status === 0 ? "received" : r.lc_status === 1 ? "started" : r.lc_status === 2 ? "ended" : r.lc_status === 6 ? "cancelled" : "sent"] || "sent";
+        const scKey      = lcStatusToKey[r.lc_status] || "sent";
+        const sc         = statusClass[scKey] || "sent";
         const icon       = statusIcon[sc] || "📡";
         const fireStr    = fireAt ? fireAt.toLocaleString() : "—";
         const endStr     = endAt  ? endAt.toLocaleString()  : "—";
@@ -1342,11 +1359,11 @@ async function loadDeviceEvents() {
         return `<div class="queue-item ${sc}" style="cursor:pointer;" onclick="showDeviceEventDetail(JSON.parse(decodeURIComponent('${rData}')))">
           <div class="queue-info">
             <div class="queue-name">${r.name || r.target_name || "Unnamed Event"} &bull; ${r.target_name || "—"} &bull; ${RELAY_ACTION_LABELS[r.relay_action] || r.relay_action || "—"}</div>
-            <div class="queue-detail">${icon} ${r.status} &bull; 📅 ${fireStr} &bull; ⏱ ${dur} &bull; ends ${endStr}</div>
+            <div class="queue-detail">${icon} ${r.lc_status_label || r.status} &bull; 📅 ${fireStr} &bull; ⏱ ${dur} &bull; ends ${endStr}</div>
             <div class="queue-detail" style="color:var(--text-hint);margin-top:1px;">Mode: ${(r.lc_mode||"—").toUpperCase()} &bull; Strategy: ${r.lc_strategy||"—"} &bull; Duration: ${r.duration_minutes ? formatDuration(r.duration_minutes) : "—"} &nbsp;|&nbsp; <span style="color:var(--blue);text-decoration:underline;">Click to view hex &amp; details</span></div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;" onclick="event.stopPropagation()">
-            <span class="queue-status ${sc}">${r.status}</span>
+            <span class="queue-status ${sc}">${r.lc_status_label || r.status}</span>
             <button onclick="openOptOutForEvent('${(r.name||'').replace(/'/g,"\\'")}','${(r.fire_at||'').replace(/'/g,"\\'")}')"
               style="padding:3px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--amber);background:rgba(245,158,11,0.1);color:var(--amber);font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap;">
               🚫 Opt-Out Device
