@@ -1681,8 +1681,7 @@
               <div style="font-size:11px;color:var(--text-hint);margin-top:2px;">Select an event then opt out individual devices. Sends restore to that device only.</div>
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
-              <select id="opt-out-event-select" class="history-select" onchange="loadOptOutPanel()"
-                style="font-size:11px;">
+              <select id="opt-out-event-select" class="history-select" onchange="loadOptOutPanel()" style="font-size:11px;">
                 <option value="">— Select Event —</option>
               </select>
               <button class="queue-refresh" onclick="toggleOptOutPanel()" style="font-size:11px;">✕ Close</button>
@@ -1751,10 +1750,19 @@
       <div class="sched-card">
         <div class="sched-card-header">
           <div class="sched-card-title">Post-Event Participation</div>
-          <div style="display:flex;gap:8px;align-items:center;">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <select class="history-select" id="participation-date-range" style="font-size:11px;">
+              <option value="1">Last 24 hours</option>
+              <option value="3">Last 3 days</option>
+              <option value="7" selected>Last 7 days</option>
+              <option value="30">Last 30 days</option>
+              <option value="90">Last 90 days</option>
+              <option value="">All time</option>
+            </select>
             <select class="history-select" id="participation-event-select">
               <option value="">— Select Event —</option>
             </select>
+            <button class="queue-refresh" onclick="refreshParticipationEvents()">🔄</button>
             <button class="queue-refresh" onclick="loadParticipation()">Load</button>
           </div>
         </div>
