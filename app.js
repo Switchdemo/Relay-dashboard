@@ -1293,47 +1293,53 @@ async function loadDeviceEvents() {
     const qMap = {};
     if (Array.isArray(qRows)) qRows.forEach(q => { if (q.lc_event_id != null) qMap[q.lc_event_id] = q; });
 
-    // Group device_events by (device_uid + event_id) — keep the latest status per group
-    // This eliminates the duplicate rows from multiple status transitions
-    const grouped = {};
-    if (Array.isArray(devRows)) {
-      devRows.forEach(e => {
-        const key = `${e.device_uid}_${e.event_id}`;
-        // Keep the highest lc_status (most advanced state) per event per device
-        if (!grouped[key] || e.lc_status > grouped[key].lc_status) {
-          grouped[key] = e;
+    // Build rows from device_events — one row per device_event entry
+    // but deduplicate by keeping only one row per (name + device) where name is known
+    let rows = [];
+    if (Array.isArray(devRows) && devRows.length) {
+      // First merge all rows with queue data
+      const merged = devRows.map(e => {
+        const q = qMap[e.event_id] || {};
+        return {
+          ...e,
+          name:             q.name || null,
+          target_name:      q.target_name || DEVICES.find(d => d.uid === e.device_uid)?.name || unitName(e.device_uid || ""),
+          relay_action:     q.relay_action || "—",
+          status:           e.lc_status_label || "—",
+          lc_mode:          q.lc_mode || "—",
+          lc_strategy:      q.lc_strategy || "—",
+          lc_reps:          q.lc_reps || "—",
+          fire_at:          q.fire_at || e.event_time,
+          duration_minutes: q.duration_minutes || null,
+          event_type:       q.event_type || "switch",
+          _raw:             e
+        };
+      });
+
+      // Filter out rows with no event name (these are "Unit xxx" fallback entries)
+      const named = merged.filter(r => r.name && r.name !== "—");
+      const unnamed = merged.filter(r => !r.name || r.name === "—");
+
+      // For named events: deduplicate by (name + device_uid) keeping most recent per status
+      // Show one row per unique (name + device_uid + lc_status) combination
+      const namedGrouped = {};
+      named.forEach(r => {
+        const key = `${r.name}_${r.device_uid}_${r.lc_status}`;
+        if (!namedGrouped[key] || new Date(r.received_at) > new Date(namedGrouped[key].received_at)) {
+          namedGrouped[key] = r;
         }
       });
+
+      rows = Object.values(namedGrouped);
     }
 
-    let rows = Object.values(grouped);
-
-    // Sort by received_at descending
-    rows.sort((a, b) => new Date(b.received_at) - new Date(a.received_at));
-
-    // Merge with schedule_queue data
-    rows = rows.map(e => {
-      const q = qMap[e.event_id] || {};
-      return {
-        ...e,
-        name:             q.name || "—",
-        target_name:      q.target_name || DEVICES.find(d => d.uid === e.device_uid)?.name || unitName(e.device_uid || ""),
-        relay_action:     q.relay_action || "—",
-        status:           e.lc_status_label || "—",
-        lc_mode:          q.lc_mode || "—",
-        lc_strategy:      q.lc_strategy || "—",
-        lc_reps:          q.lc_reps || "—",
-        fire_at:          q.fire_at || e.event_time,
-        duration_minutes: q.duration_minutes || null,
-        event_type:       q.event_type || "switch",
-        _raw:             e
-      };
-    });
-
-    // If no device_events at all, fall back to schedule_queue
+    // If no device_events with names, fall back to schedule_queue directly
     if (!rows.length && Array.isArray(qRows) && qRows.length) {
       rows = qRows.map(q => ({ ...q, lc_status: null, _raw: q }));
     }
+
+    // Sort by received_at / fire_at descending
+    rows.sort((a, b) => new Date(b.received_at || b.fire_at) - new Date(a.received_at || a.fire_at));
 
     if (!rows.length) {
       list.innerHTML = `<div class="sched-empty">No device events in selected range.</div>`;
@@ -2826,24 +2832,30 @@ async function loadProgramSummary() {
 }
 
 async function populateParticipationEventSelect() {
+  await refreshParticipationEvents();
+}
+
+async function refreshParticipationEvents() {
   const sel = document.getElementById("participation-event-select");
   if (!sel) return;
+  const days = parseInt(document.getElementById("participation-date-range")?.value || "7");
+  const since = days ? new Date(Date.now() - days * 86400000).toISOString() : null;
+  let q = "schedule_queue?order=fire_at.desc&limit=200&select=name,fire_at,status,target_type,target_id";
+  if (since) q += `&fire_at=gte.${since}`;
   try {
-    const rows = await supabaseGet("schedule_queue?order=fire_at.desc&limit=50");
-    if (!Array.isArray(rows) || rows.length === 0) return;
-    // Deduplicate by name
-    const seen = new Set();
-    rows.forEach(r => {
-      if (r.name && !seen.has(r.name)) {
-        seen.add(r.name);
+    const rows = await supabaseGet(q);
+    const current = sel.value;
+    sel.innerHTML = '<option value="">— Select Event —</option>';
+    if (Array.isArray(rows)) {
+      rows.filter(r => r.name && r.name !== "—").forEach(r => {
         const opt = document.createElement("option");
         opt.value = r.name;
-        const fireTime = new Date(r.fire_at).toLocaleString();
-        opt.textContent = `${r.name} — ${fireTime}`;
+        opt.textContent = `${r.name} (${new Date(r.fire_at).toLocaleDateString()})`;
+        if (r.name === current) opt.selected = true;
         sel.appendChild(opt);
-      }
-    });
-  } catch(e) { console.error("populateParticipationEventSelect:", e); }
+      });
+    }
+  } catch(e) { console.error("refreshParticipationEvents:", e); }
 }
 
 async function loadParticipation() {
@@ -2890,12 +2902,18 @@ async function loadParticipation() {
     } catch(e) {}
 
     let participated = 0, optedOutPre = 0, optedOutDuring = 0, didNotParticipate = 0;
+    // Widen the window by 30 min each side to catch timing mismatches
+    const windowStart = new Date(fireAt.getTime() - 30 * 60 * 1000);
+    const windowEnd   = new Date(endAt.getTime()   + 30 * 60 * 1000);
     const rows = await Promise.all(targetDevices.map(async device => {
       const readings = await supabaseGet(
-        `device_readings?device_uid=eq.${encodeURIComponent(device.uid)}&recorded_at=gte.${fireAt.toISOString()}&recorded_at=lte.${endAt.toISOString()}&order=recorded_at.asc&limit=50`
+        `device_readings?device_uid=eq.${encodeURIComponent(device.uid)}&recorded_at=gte.${windowStart.toISOString()}&recorded_at=lte.${windowEnd.toISOString()}&order=recorded_at.asc&limit=100`
       );
       const relayOn = Array.isArray(readings) && readings.some(r =>
-        r.relay_status_r1 > 0 || r.relay_status_r2 > 0 || r.relay_status_r3 > 0 || r.relay_status_r4 > 0
+        r.relay_status_r1 > 0 || r.relay_status_r2 > 0 ||
+        r.relay_status_r3 > 0 || r.relay_status_r4 > 0 ||
+        r.relay_active_r1 === true || r.relay_active_r2 === true ||
+        r.relay_active_r3 === true || r.relay_active_r4 === true
       );
       const lastReading = Array.isArray(readings) ? readings[readings.length-1] : null;
       const optOut = optOutMap[device.uid] || null;
