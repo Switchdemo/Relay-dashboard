@@ -2846,6 +2846,25 @@ async function loadParticipation() {
     const endAt    = new Date(fireAt.getTime() + duration * 60 * 1000);
     const now      = new Date();
 
+    // Resolve targeted devices (same logic as opt-out panel)
+    const targetType = event.target_type || "all";
+    const targetId   = event.target_id   || "";
+    let targetDevices = [];
+    if (targetType === "all") {
+      targetDevices = DEVICES.filter(d => !d.uid.startsWith("therm_") && !d.uid.startsWith("batt_") && !d.uid.startsWith("ev_") && !d.uid.startsWith("gen_"));
+    } else if (targetType === "group") {
+      const groupNum = parseInt((targetId || "").replace("group_", ""));
+      targetDevices = DEVICES.filter(d => (groupAssignments[d.uid] || []).includes(groupNum));
+    } else {
+      const d = DEVICES.find(d => d.uid === targetId);
+      if (d) targetDevices = [d];
+    }
+
+    if (!targetDevices.length) {
+      results.innerHTML = `<div class="sched-empty">No devices found for this event's target.</div>`;
+      return;
+    }
+
     // Load opt-out records for this event
     let optOutMap = {};
     try {
@@ -2854,7 +2873,7 @@ async function loadParticipation() {
     } catch(e) {}
 
     let participated = 0, optedOutPre = 0, optedOutDuring = 0, didNotParticipate = 0;
-    const rows = await Promise.all(DEVICES.map(async device => {
+    const rows = await Promise.all(targetDevices.map(async device => {
       const readings = await supabaseGet(
         `device_readings?device_uid=eq.${encodeURIComponent(device.uid)}&recorded_at=gte.${fireAt.toISOString()}&recorded_at=lte.${endAt.toISOString()}&order=recorded_at.asc&limit=50`
       );
@@ -2863,14 +2882,21 @@ async function loadParticipation() {
       );
       const lastReading = Array.isArray(readings) ? readings[readings.length-1] : null;
       const optOut = optOutMap[device.uid] || null;
-      if (optOut?.opt_out_type === "pre_event")      optedOutPre++;
+      if (optOut?.opt_out_type === "pre_event")       optedOutPre++;
       else if (optOut?.opt_out_type === "during_event") optedOutDuring++;
       else if (relayOn) participated++;
       else didNotParticipate++;
       return { device, relayOn, readingCount: Array.isArray(readings) ? readings.length : 0, lastReading, optOut };
     }));
 
-    const pct = DEVICES.length > 0 ? Math.round((participated / DEVICES.length) * 100) : 0;
+    const totalDevices  = targetDevices.length;
+    const pct = totalDevices > 0 ? Math.round((participated / totalDevices) * 100) : 0;
+    const targetLabel = targetType === "all" ? "All Devices"
+      : targetType === "group" ? `Group ${targetId.replace("group_","")}`
+      : targetDevices[0]?.name || targetId;
+
+    // Store data for export
+    window._lastParticipationData = { event, eventName, fireAt, endAt, duration, targetLabel, targetDevices, rows, participated, didNotParticipate, optedOutPre, optedOutDuring, pct };
 
     results.innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:1rem;">
@@ -2895,7 +2921,16 @@ async function loadParticipation() {
           <div style="font-size:10px;color:var(--blue-dark);">Participation Rate</div>
         </div>
       </div>
-      <div style="font-size:11px;color:var(--text-hint);margin-bottom:8px;">Event window: ${fireAt.toLocaleString()} — ${endAt.toLocaleString()}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+        <div style="font-size:11px;color:var(--text-hint);">
+          Event window: ${fireAt.toLocaleString()} — ${endAt.toLocaleString()} &bull;
+          Target: <strong>${targetLabel}</strong> &bull;
+          ${totalDevices} device${totalDevices !== 1 ? "s" : ""}
+        </div>
+        <button class="queue-refresh" style="color:var(--green-dark);border-color:var(--green);" onclick="exportParticipationReport()">
+          📄 Export Report
+        </button>
+      </div>
       <div style="overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:11px;">
         <thead><tr>
@@ -2929,6 +2964,92 @@ async function loadParticipation() {
     results.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error: ${e.message}</div>`;
     console.error("loadParticipation:", e);
   }
+}
+
+function exportParticipationReport() {
+  const d = window._lastParticipationData;
+  if (!d) { alert("Please load participation data first."); return; }
+
+  const { eventName, fireAt, endAt, duration, targetLabel, rows,
+          participated, didNotParticipate, optedOutPre, optedOutDuring, pct } = d;
+
+  const total      = rows.length;
+  const reportDate = new Date().toLocaleString();
+  const eventDate  = fireAt.toLocaleString([], { dateStyle: "full", timeStyle: "short" });
+  const endDate    = endAt.toLocaleString([], { timeStyle: "short" });
+
+  // Build narrative
+  const narrative = [
+    `DEMAND RESPONSE EVENT PARTICIPATION REPORT`,
+    `Generated: ${reportDate}`,
+    `${"=".repeat(60)}`,
+    ``,
+    `EVENT SUMMARY`,
+    `-`.repeat(40),
+    `Event Name:        ${eventName}`,
+    `Target:            ${targetLabel}`,
+    `Event Start:       ${eventDate}`,
+    `Event End:         ${endDate}`,
+    `Duration:          ${duration} minutes`,
+    `Devices Called:    ${total}`,
+    ``,
+    `PARTICIPATION OVERVIEW`,
+    `-`.repeat(40),
+    `This demand response event was dispatched to ${total} device${total !== 1 ? "s" : ""} ` +
+    `under the target scope "${targetLabel}". ` +
+    `Of the ${total} devices called, ${participated} (${pct}%) successfully participated ` +
+    `by activating their relay during the event window.`,
+    ``,
+    participated > 0
+      ? `${participated} device${participated !== 1 ? "s" : ""} confirmed participation with relay activation detected within the event window.`
+      : `No devices confirmed relay activation during the event window.`,
+    ``,
+    optedOutPre > 0
+      ? `${optedOutPre} device${optedOutPre !== 1 ? "s" : ""} were opted out prior to the event and did not receive the dispatch command.`
+      : `No pre-event opt-outs were recorded.`,
+    ``,
+    optedOutDuring > 0
+      ? `${optedOutDuring} device${optedOutDuring !== 1 ? "s" : ""} were opted out during the event and received a restore command to return to normal operation.`
+      : `No mid-event opt-outs were recorded.`,
+    ``,
+    didNotParticipate > 0
+      ? `${didNotParticipate} device${didNotParticipate !== 1 ? "s" : ""} did not register relay activation during the event window. This may indicate the device was offline, did not receive the command, or the load was not present.`
+      : `All non-opted-out devices confirmed participation.`,
+    ``,
+    `STATISTICS`,
+    `-`.repeat(40),
+    `Participated:           ${participated} of ${total} (${pct}%)`,
+    `Did Not Participate:    ${didNotParticipate} of ${total}`,
+    `Opted-Out Pre-Event:    ${optedOutPre} of ${total}`,
+    `Opted-Out During Event: ${optedOutDuring} of ${total}`,
+    `Overall Participation:  ${pct}%`,
+    ``,
+    `DEVICE DETAIL`,
+    `-`.repeat(40),
+    `Device Name          | Participated | Opted-Out Pre | Opted-Out During | Opt-Out Time         | Readings | Relay Status`,
+    `-`.repeat(110),
+    ...rows.map(r => {
+      const isPre    = r.optOut?.opt_out_type === "pre_event";
+      const isDuring = r.optOut?.opt_out_type === "during_event";
+      const optTime  = r.optOut ? new Date(r.optOut.opted_out_at).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) : "—";
+      const participated = r.optOut ? "—" : r.relayOn ? "Yes" : "No";
+      const relayStr = r.lastReading
+        ? [r.lastReading.relay_status_r1>0?"R1":"",r.lastReading.relay_status_r2>0?"R2":"",r.lastReading.relay_status_r3>0?"R3":"",r.lastReading.relay_status_r4>0?"R4":""].filter(Boolean).join(",")||"All Off"
+        : "No data";
+      return `${r.device.name.padEnd(20)} | ${participated.padEnd(12)} | ${(isPre?"Yes":"—").padEnd(13)} | ${(isDuring?"Yes":"—").padEnd(16)} | ${optTime.padEnd(20)} | ${String(r.readingCount).padEnd(8)} | ${relayStr}`;
+    }),
+    ``,
+    `${"=".repeat(60)}`,
+    `Report generated by Load Control Dashboard`,
+    `Event: ${eventName} | Generated: ${reportDate}`,
+  ].join("\n");
+
+  const blob = new Blob([narrative], { type: "text/plain" });
+  const a    = document.createElement("a");
+  a.href     = URL.createObjectURL(blob);
+  a.download = `DR_Participation_Report_${eventName.replace(/\s+/g,"_")}_${fireAt.toISOString().split("T")[0]}.txt`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 // ── Opt-Out Panel ─────────────────────────────────────────────────────────────
