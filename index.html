@@ -44,6 +44,7 @@
 
   .tab-pane { display: none; }
   .tab-pane.active { display: block; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
   .scroll-content { padding: 1.25rem 1rem; }
 
   /* ── Device Cards ── */
@@ -774,6 +775,7 @@
     <button class="sub-tab-btn" id="sub-admin-monitor-triggers" onclick="switchSub('admin','admin-monitor-triggers',this)">Monitor & Triggers</button>
   </div>
   <div class="sub-tabs" id="sub-tabs-events" style="display:none;">
+    <button class="sub-tab-btn" id="sub-current-event" onclick="switchSub('events','current-event',this)">🟢 Live Event</button>
     <button class="sub-tab-btn active" id="sub-scheduler" onclick="switchSub('events','scheduler',this)">Event Scheduler</button>
     <button class="sub-tab-btn" id="sub-event-history" onclick="switchSub('events','event-history',this)">Event Activity</button>
     <button class="sub-tab-btn" id="sub-eventstats" onclick="switchSub('events','eventstats',this)">Event Statistics</button>
@@ -1100,6 +1102,36 @@
 </div>
 
 <!-- ── SCHEDULER TAB ── -->
+<!-- ── CURRENT EVENT VIEWER ──────────────────────────────────────────────────── -->
+<div class="tab-pane" id="tab-current-event">
+  <div class="scroll-content">
+    <div style="max-width:1200px;margin:0 auto;padding:1rem;">
+
+      <!-- Header with auto-refresh indicator -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:10px;">
+        <div>
+          <div style="font-size:17px;font-weight:700;color:var(--text-primary);">🟢 Live Event Monitor</div>
+          <div style="font-size:12px;color:var(--text-hint);margin-top:2px;">Auto-refreshes every 30 seconds while active</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span id="live-event-last-refresh" style="font-size:10px;color:var(--text-hint);font-family:monospace;"></span>
+          <button class="queue-refresh" onclick="loadCurrentEvent()">🔄 Refresh Now</button>
+        </div>
+      </div>
+
+      <!-- Active event container -->
+      <div id="current-event-container">
+        <div class="sched-card" style="text-align:center;padding:2rem;">
+          <div style="font-size:32px;margin-bottom:10px;">📭</div>
+          <div style="font-size:15px;font-weight:600;color:var(--text-primary);">No Active Events</div>
+          <div style="font-size:12px;color:var(--text-hint);margin-top:6px;">Live event status will appear here when an event is in progress</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <div class="tab-pane" id="tab-scheduler">
   <div class="scroll-content">
     <div class="scheduler-layout">
