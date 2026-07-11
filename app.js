@@ -296,16 +296,17 @@ function activateSubBtn(main, sub) {
 function runTabInit(name) {
   if (name === "summary")          initSummaryTab();
   if (name === "summary-programs") loadSummaryPrograms();
-  if (name === "scheduler")  initScheduler().catch(e => console.error(e));
-  if (name === "event-history") { loadSchedules(); loadDeviceEvents(); }
-  if (name === "eventstats") initEventStats();
-  if (name === "data")       loadLatest();
-  if (name === "history")    { initTimelineDeviceSelect(); loadHistory(); loadCharts(); }
-  if (name === "map")        loadMap();
-  if (name === "groups")     loadGroups();
-  if (name === "settings")   initSettingsTab();
-  if (name === "weather")    initWeatherTab();
-  if (name === "admin-users") { updateAdminHeader(); loadUsersTable(); }
+  if (name === "scheduler")        initScheduler().catch(e => console.error(e));
+  if (name === "current-event")    initCurrentEventViewer();
+  if (name === "event-history")    { loadSchedules(); loadDeviceEvents(); }
+  if (name === "eventstats")       initEventStats();
+  if (name === "data")             loadLatest();
+  if (name === "history")          { initTimelineDeviceSelect(); loadHistory(); loadCharts(); }
+  if (name === "map")              loadMap();
+  if (name === "groups")           loadGroups();
+  if (name === "settings")         initSettingsTab();
+  if (name === "weather")          initWeatherTab();
+  if (name === "admin-users")      { updateAdminHeader(); loadUsersTable(); }
   if (name === "admin-devices") { loadDeviceManagement(); }
   if (name === "monitor-health") { initFleetHealth(); }
   if (name === "admin-monitor") { initMonitoring(); }
@@ -2193,8 +2194,12 @@ async function cancelScheduledEvent(queueId) {
     // ── OpenADR — mark cancelled (VTN handles restore) ─────────────────────
     // No action needed — cancellation is handled at the VTN level
 
-    // Mark cancelled in Supabase
-    await supabasePatch(`schedule_queue?id=eq.${queueId}`, { status:"cancelled" });
+    // Mark cancelled in Supabase with operator info
+    await supabasePatch(`schedule_queue?id=eq.${queueId}`, {
+      status:       "cancelled",
+      cancelled_at: new Date().toISOString(),
+      cancelled_by: currentUser?.email || "operator"
+    });
     setStatus("ready", `"${displayName}" cancelled — restore sent.`);
     await loadSchedules();
     loadEventsBar();
@@ -2931,7 +2936,12 @@ async function loadParticipation() {
       : targetDevices[0]?.name || targetId;
 
     // Store data for export
-    window._lastParticipationData = { event, eventName, fireAt, endAt, duration, targetLabel, targetDevices, rows, participated, didNotParticipate, optedOutPre, optedOutDuring, pct };
+    window._lastParticipationData = { event, eventName, fireAt, endAt, duration, targetLabel, targetDevices, rows, participated, didNotParticipate, optedOutPre, optedOutDuring, pct,
+      cancelledAt: event.cancelled_at || null,
+      cancelledBy: event.cancelled_by || null,
+      endedAt:     event.ended_at     || null,
+      wasEarlyCancelled: !!event.cancelled_at
+    };
 
     results.innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:1rem;">
@@ -3006,12 +3016,23 @@ function exportParticipationReport() {
   if (!d) { alert("Please load participation data first."); return; }
 
   const { eventName, fireAt, endAt, duration, targetLabel, rows,
-          participated, didNotParticipate, optedOutPre, optedOutDuring, pct } = d;
+          participated, didNotParticipate, optedOutPre, optedOutDuring, pct,
+          cancelledAt, cancelledBy, endedAt, wasEarlyCancelled } = d;
 
   const total      = rows.length;
   const reportDate = new Date().toLocaleString();
   const eventDate  = fireAt.toLocaleString([], { dateStyle: "full", timeStyle: "short" });
   const endDate    = endAt.toLocaleString([], { timeStyle: "short" });
+
+  // Determine how the event actually ended
+  const actualEnd = cancelledAt ? new Date(cancelledAt) : endedAt ? new Date(endedAt) : endAt;
+  const actualEndStr = actualEnd.toLocaleString([], { dateStyle: "full", timeStyle: "short" });
+  const actualDurMins = Math.round((actualEnd - fireAt) / 60000);
+  const endReason = cancelledAt
+    ? `Early cancellation by operator (${cancelledBy || "unknown"})`
+    : endedAt
+      ? "Completed at scheduled end time"
+      : "Completed at scheduled end time (end not explicitly logged)";
 
   // Build narrative
   const narrative = [
@@ -3024,14 +3045,20 @@ function exportParticipationReport() {
     `Event Name:        ${eventName}`,
     `Target:            ${targetLabel}`,
     `Event Start:       ${eventDate}`,
-    `Event End:         ${endDate}`,
-    `Duration:          ${duration} minutes`,
+    `Scheduled End:     ${endDate}`,
+    `Actual End:        ${actualEndStr}`,
+    `Actual Duration:   ${actualDurMins} minutes (of ${duration} scheduled)`,
+    `Conclusion:        ${endReason}`,
     `Devices Called:    ${total}`,
     ``,
     `PARTICIPATION OVERVIEW`,
     `-`.repeat(40),
     `This demand response event was dispatched to ${total} device${total !== 1 ? "s" : ""} ` +
     `under the target scope "${targetLabel}". ` +
+    (wasEarlyCancelled
+      ? `The event was cancelled early by ${cancelledBy || "an operator"} at ${new Date(cancelledAt).toLocaleTimeString()}, ` +
+        `after running for ${actualDurMins} of ${duration} scheduled minutes. `
+      : `The event ran its full scheduled duration of ${duration} minutes. `) +
     `Of the ${total} devices called, ${participated} (${pct}%) successfully participated ` +
     `by activating their relay during the event window.`,
     ``,
@@ -3085,6 +3112,283 @@ function exportParticipationReport() {
   a.download = `DR_Participation_Report_${eventName.replace(/\s+/g,"_")}_${fireAt.toISOString().split("T")[0]}.txt`;
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+// ── Current Event Viewer ──────────────────────────────────────────────────────
+
+let _currentEventPoller = null;
+let _currentEventCountdownTimer = null;
+
+function initCurrentEventViewer() {
+  loadCurrentEvent();
+  // Start auto-refresh every 30 seconds
+  if (_currentEventPoller) clearInterval(_currentEventPoller);
+  _currentEventPoller = setInterval(() => {
+    const pane = document.getElementById("tab-current-event");
+    if (pane?.classList.contains("active")) loadCurrentEvent();
+    else { clearInterval(_currentEventPoller); _currentEventPoller = null; }
+  }, 30000);
+}
+
+async function loadCurrentEvent() {
+  const container = document.getElementById("current-event-container");
+  const refreshEl = document.getElementById("live-event-last-refresh");
+  if (!container) return;
+  if (refreshEl) refreshEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+
+  try {
+    // Find active events — fired within last 24 hours with non-terminal status
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const rows = await supabaseGet(
+      `schedule_queue?fire_at=gte.${since}&status=not.in.(cancelled,rejected,ended)&order=fire_at.desc&limit=10`
+    );
+
+    const now = new Date();
+    // Filter to events that are actually in their active window
+    const active = Array.isArray(rows) ? rows.filter(r => {
+      const start = new Date(r.fire_at);
+      const end   = new Date(start.getTime() + (r.duration_minutes || 60) * 60000);
+      return now >= start && now <= end;
+    }) : [];
+
+    // Also include events that fired recently (sent/received but may not have started yet)
+    const pending = Array.isArray(rows) ? rows.filter(r => {
+      const start = new Date(r.fire_at);
+      const minsAgo = (now - start) / 60000;
+      return minsAgo < 5 && !active.find(a => a.id === r.id);
+    }) : [];
+
+    const allEvents = [...active, ...pending];
+
+    if (!allEvents.length) {
+      // Check if any event ended very recently (within last 15 min)
+      const recentEnd = Array.isArray(rows) ? rows.find(r => {
+        const end = new Date(new Date(r.fire_at).getTime() + (r.duration_minutes||60)*60000);
+        return (now - end) < 15 * 60000;
+      }) : null;
+
+      container.innerHTML = `<div class="sched-card" style="text-align:center;padding:2rem;">
+        <div style="font-size:32px;margin-bottom:10px;">📭</div>
+        <div style="font-size:15px;font-weight:600;color:var(--text-primary);">No Active Events</div>
+        ${recentEnd ? `<div style="font-size:12px;color:var(--amber);margin-top:6px;">⚠️ Event "${recentEnd.name}" ended recently</div>` : ""}
+        <div style="font-size:12px;color:var(--text-hint);margin-top:6px;">Live event status will appear here when an event is in progress</div>
+      </div>`;
+      return;
+    }
+
+    // Render each active event
+    container.innerHTML = await Promise.all(allEvents.map(ev => renderLiveEventCard(ev))).then(cards => cards.join(""));
+
+    // Start countdown timers
+    startEventCountdowns(allEvents);
+
+  } catch(e) {
+    container.innerHTML = `<div class="sched-card"><div class="sched-empty" style="color:var(--red);">Error: ${e.message}</div></div>`;
+    console.error("loadCurrentEvent:", e);
+  }
+}
+
+async function renderLiveEventCard(ev) {
+  const now      = new Date();
+  const fireAt   = new Date(ev.fire_at);
+  const duration = ev.duration_minutes || 60;
+  const endAt    = new Date(fireAt.getTime() + duration * 60000);
+  const elapsed  = Math.max(0, Math.floor((now - fireAt) / 1000));
+  const totalSec = duration * 60;
+  const remaining = Math.max(0, totalSec - elapsed);
+  const pct = Math.min(100, Math.round((elapsed / totalSec) * 100));
+
+  // Resolve target devices
+  const targetType = ev.target_type || "all";
+  const targetId   = ev.target_id   || "";
+  let targetDevices = [];
+  if (targetType === "all") {
+    targetDevices = DEVICES.filter(d => !d.uid.startsWith("therm_") && !d.uid.startsWith("batt_") && !d.uid.startsWith("ev_") && !d.uid.startsWith("gen_"));
+  } else if (targetType === "group") {
+    const groupNum = parseInt((targetId || "").replace("group_", ""));
+    targetDevices = DEVICES.filter(d => (groupAssignments[d.uid] || []).includes(groupNum));
+  } else {
+    const d = DEVICES.find(d => d.uid === targetId);
+    if (d) targetDevices = [d];
+  }
+
+  // Load latest readings for each device
+  const deviceStatuses = await Promise.all(targetDevices.map(async device => {
+    try {
+      const rows = await supabaseGet(
+        `device_readings?device_uid=eq.${encodeURIComponent(device.uid)}&order=recorded_at.desc&limit=1`
+      );
+      const r = rows?.[0];
+      const relayOn = r && (r.relay_status_r1 > 0 || r.relay_status_r2 > 0 || r.relay_status_r3 > 0 || r.relay_status_r4 > 0 || r.relay_active_r1 || r.relay_active_r2);
+      const lastSeen = r ? new Date(r.recorded_at) : null;
+      const minsAgo  = lastSeen ? Math.round((now - lastSeen) / 60000) : null;
+      return { device, relayOn, lastSeen, minsAgo, reading: r };
+    } catch(e) { return { device, relayOn: false, lastSeen: null, minsAgo: null, reading: null }; }
+  }));
+
+  // Load opt-outs for this event
+  let optOutMap = {};
+  try {
+    const optOuts = await supabaseGet(`event_opt_outs?event_name=eq.${encodeURIComponent(ev.name)}`);
+    if (Array.isArray(optOuts)) optOuts.forEach(o => { optOutMap[o.device_uid] = o; });
+  } catch(e) {}
+
+  const participating = deviceStatuses.filter(d => !optOutMap[d.device.uid] && d.relayOn).length;
+  const optedOut      = Object.keys(optOutMap).length;
+  const targetLabel   = targetType === "all" ? "All Devices"
+    : targetType === "group" ? `Group ${targetId.replace("group_","")}`
+    : targetDevices[0]?.name || targetId;
+
+  const fmtTime = s => {
+    const m = Math.floor(s / 60), sec = s % 60;
+    return `${m}:${sec.toString().padStart(2,"0")}`;
+  };
+
+  return `<div class="sched-card" style="margin-bottom:1rem;">
+    <!-- Event Header -->
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="width:8px;height:8px;border-radius:50%;background:var(--green-dark);display:inline-block;animation:pulse 1.5s infinite;"></span>
+          <span style="font-size:16px;font-weight:700;color:var(--text-primary);">${ev.name}</span>
+          <span style="font-size:11px;padding:2px 8px;border-radius:10px;background:var(--green-bg);color:var(--green-dark);font-weight:600;">ACTIVE</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-top:4px;">
+          Target: <strong>${targetLabel}</strong> &bull;
+          Started: ${fireAt.toLocaleTimeString()} &bull;
+          Ends: ${endAt.toLocaleTimeString()} &bull;
+          Strategy: ${ev.lc_strategy || "—"} &bull;
+          Mode: ${(ev.lc_mode || "—").toUpperCase()}
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:28px;font-weight:700;font-family:monospace;color:var(--text-primary);" id="countdown-${ev.id}">${fmtTime(remaining)}</div>
+        <div style="font-size:10px;color:var(--text-hint);">remaining</div>
+      </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div style="height:6px;background:var(--border-md);border-radius:3px;overflow:hidden;margin-bottom:14px;">
+      <div style="height:100%;background:var(--green-dark);border-radius:3px;width:${pct}%;transition:width 1s linear;" id="progress-${ev.id}"></div>
+    </div>
+
+    <!-- KPI Row -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;">
+      <div style="text-align:center;padding:10px;background:var(--surface2);border-radius:var(--radius-sm);">
+        <div style="font-size:20px;font-weight:700;color:var(--text-primary);">${targetDevices.length}</div>
+        <div style="font-size:10px;color:var(--text-hint);">Devices Called</div>
+      </div>
+      <div style="text-align:center;padding:10px;background:var(--green-bg);border-radius:var(--radius-sm);">
+        <div style="font-size:20px;font-weight:700;color:var(--green-dark);">${participating}</div>
+        <div style="font-size:10px;color:var(--green-dark);">Confirmed Active</div>
+      </div>
+      <div style="text-align:center;padding:10px;background:rgba(245,158,11,0.1);border-radius:var(--radius-sm);">
+        <div style="font-size:20px;font-weight:700;color:var(--amber);">${optedOut}</div>
+        <div style="font-size:10px;color:var(--amber);">Opted Out</div>
+      </div>
+      <div style="text-align:center;padding:10px;background:var(--blue-bg);border-radius:var(--radius-sm);">
+        <div style="font-size:20px;font-weight:700;color:var(--blue-dark);">${pct}%</div>
+        <div style="font-size:10px;color:var(--blue-dark);">Elapsed</div>
+      </div>
+    </div>
+
+    <!-- Device Status Cards -->
+    <div style="font-size:11px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Device Status</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;">
+      ${deviceStatuses.map(ds => {
+        const optOut = optOutMap[ds.device.uid];
+        const isOptedOut = !!optOut;
+        const isDuring   = optOut?.opt_out_type === "during_event";
+        const isPre      = optOut?.opt_out_type === "pre_event";
+        const statusColor = isOptedOut ? "var(--amber)" : ds.relayOn ? "var(--green-dark)" : "var(--text-hint)";
+        const statusBg    = isOptedOut ? "rgba(245,158,11,0.08)" : ds.relayOn ? "var(--green-bg)" : "var(--surface2)";
+        const statusBorder = isOptedOut ? "var(--amber)" : ds.relayOn ? "var(--green)" : "var(--border)";
+        const statusLabel = isOptedOut ? `🚫 Opted Out ${isDuring?"(during)":"(pre-event)"}` : ds.relayOn ? "✅ Relay Active" : "⚫ No Response";
+        const lastSeenStr = ds.minsAgo !== null ? (ds.minsAgo < 1 ? "just now" : `${ds.minsAgo}m ago`) : "no data";
+        return `<div style="padding:10px 12px;border-radius:var(--radius-sm);border:0.5px solid ${statusBorder};background:${statusBg};">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <span style="font-size:12px;font-weight:600;">${ds.device.name}</span>
+            <span style="font-size:10px;color:var(--text-hint);">${lastSeenStr}</span>
+          </div>
+          <div style="font-size:11px;font-weight:600;color:${statusColor};margin-bottom:6px;">${statusLabel}</div>
+          ${ds.reading ? `<div style="font-size:10px;color:var(--text-hint);">
+            ${ds.reading.voltage ? (ds.reading.voltage/10).toFixed(1)+"V" : ""} 
+            ${ds.reading.current ? (ds.reading.current/10).toFixed(1)+"A" : ""}
+          </div>` : ""}
+          ${!isOptedOut ? `<button onclick="liveOptOut('${ev.name}','${ds.device.uid}')"
+            style="margin-top:6px;width:100%;padding:4px;border-radius:var(--radius-sm);border:0.5px solid var(--red);background:rgba(220,38,38,0.08);color:var(--red);font-size:10px;font-weight:600;cursor:pointer;">
+            🚫 Opt Out Now
+          </button>` : `<button onclick="liveUndoOptOut('${ev.name}','${ds.device.uid}')"
+            style="margin-top:6px;width:100%;padding:4px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);color:var(--text-hint);font-size:10px;cursor:pointer;">
+            Undo Opt-Out
+          </button>`}
+        </div>`;
+      }).join("")}
+    </div>
+  </div>`;
+}
+
+function startEventCountdowns(events) {
+  if (_currentEventCountdownTimer) clearInterval(_currentEventCountdownTimer);
+  _currentEventCountdownTimer = setInterval(() => {
+    const now = new Date();
+    events.forEach(ev => {
+      const fireAt    = new Date(ev.fire_at);
+      const totalSec  = (ev.duration_minutes || 60) * 60;
+      const elapsed   = Math.max(0, Math.floor((now - fireAt) / 1000));
+      const remaining = Math.max(0, totalSec - elapsed);
+      const pct       = Math.min(100, Math.round((elapsed / totalSec) * 100));
+      const m = Math.floor(remaining / 60), s = remaining % 60;
+      const countdownEl = document.getElementById(`countdown-${ev.id}`);
+      const progressEl  = document.getElementById(`progress-${ev.id}`);
+      if (countdownEl) countdownEl.textContent = `${m}:${s.toString().padStart(2,"0")}`;
+      if (progressEl)  progressEl.style.width  = pct + "%";
+      if (remaining === 0) {
+        if (countdownEl) { countdownEl.textContent = "ENDED"; countdownEl.style.color = "var(--text-hint)"; }
+        // Write ended_at if not already done
+        if (!ev._endedLogged) {
+          ev._endedLogged = true;
+          supabasePatch(`schedule_queue?id=eq.${ev.id}`, {
+            status:   "ended",
+            ended_at: new Date().toISOString()
+          }).catch(e => console.warn("ended_at write:", e.message));
+        }
+      }
+    });
+  }, 1000);
+}
+
+async function liveOptOut(eventName, deviceUID) {
+  const device = DEVICES.find(d => d.uid === deviceUID);
+  if (!confirm(`Opt out ${device?.name || deviceUID} from "${eventName}"?\n\nA restore command will be sent to this device only.`)) return;
+  try {
+    await supabasePost("event_opt_outs", {
+      event_name:   eventName,
+      device_uid:   deviceUID,
+      opt_out_type: "during_event",
+      opted_out_at: new Date().toISOString(),
+      opted_out_by: currentUser?.email || "unknown",
+      restore_sent: true
+    });
+    const restoreHex = buildRestoreHex("all_on");
+    await fetch(PROXY_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Device-UID": deviceUID },
+      body: JSON.stringify({ body: { LC: restoreHex }, req: "note.add", sync: true })
+    });
+    setStatus("success", `✅ ${device?.name || deviceUID} opted out — restore sent`);
+    await loadCurrentEvent();
+  } catch(e) { setStatus("error", `Opt-out failed: ${e.message}`); }
+}
+
+async function liveUndoOptOut(eventName, deviceUID) {
+  const device = DEVICES.find(d => d.uid === deviceUID);
+  if (!confirm(`Remove opt-out for ${device?.name || deviceUID}?`)) return;
+  try {
+    await supabaseDelete("event_opt_outs", `event_name=eq.${encodeURIComponent(eventName)}&device_uid=eq.${encodeURIComponent(deviceUID)}`);
+    setStatus("success", `Opt-out removed for ${device?.name || deviceUID}`);
+    await loadCurrentEvent();
+  } catch(e) { setStatus("error", `Failed: ${e.message}`); }
 }
 
 // ── Opt-Out Panel ─────────────────────────────────────────────────────────────
