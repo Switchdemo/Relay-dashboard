@@ -26193,7 +26193,6 @@ async function amiRunUtilityAPICollection() {
     if (progLbl) progLbl.textContent = 'Waiting for UtilityAPI to collect data (this may take 1-2 minutes)…';
 
     // Poll meter status until updated or timeout (2 min)
-    const key = await amiGetUAPIKey();
     let ready = false;
     for (let attempt = 0; attempt < 12; attempt++) {
       await new Promise(r => setTimeout(r, 10000)); // wait 10 seconds
