@@ -26926,9 +26926,10 @@ async function amiLoadIntervalChart() {
   if (emptyEl)  emptyEl.style.display = 'none';
 
   try {
-    // Fetch AMI readings
-    const readings = await supabaseGet(
-      `ami_readings?meter_uid=eq.${encodeURIComponent(meterUid)}&interval_start=gte.${fromDate}T00:00:00Z&interval_start=lte.${toDate}T23:59:59Z&order=interval_start.asc&limit=2000`
+    // Fetch AMI readings — use paged fetch to bypass Supabase 1000-row default cap
+    const readings = await supabaseGetPaged(
+      `ami_readings?meter_uid=eq.${encodeURIComponent(meterUid)}&interval_start=gte.${fromDate}T00:00:00Z&interval_start=lte.${toDate}T23:59:59Z&order=interval_start.asc`,
+      10000
     );
 
     if (!Array.isArray(readings) || !readings.length) {
@@ -26948,10 +26949,15 @@ async function amiLoadIntervalChart() {
 
     _amiChartData = { readings, relayReadings, meterUid, deviceUid };
 
+    // Downsample for chart rendering if too many points (keep every Nth point)
+    const MAX_CHART_POINTS = 1500;
+    const step = readings.length > MAX_CHART_POINTS ? Math.ceil(readings.length / MAX_CHART_POINTS) : 1;
+    const chartReadings = step > 1 ? readings.filter((_,i) => i % step === 0) : readings;
+
     // Build chart datasets
-    const labels = readings.map(r => new Date(r.interval_start).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}));
-    const kwhData = readings.map(r => r.kwh);
-    const kwData  = readings.map(r => r.kw);
+    const labels  = chartReadings.map(r => new Date(r.interval_start).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}));
+    const kwhData = chartReadings.map(r => r.kwh);
+    const kwData  = chartReadings.map(r => r.kw);
 
     // Map relay state to interval timestamps
     const relayMap = {};
@@ -26959,7 +26965,7 @@ async function amiLoadIntervalChart() {
       const key = new Date(r.recorded_at).toISOString().slice(0,16);
       relayMap[key] = (r.relay_status_r1 > 0 || r.relay_status_r2 > 0 || r.relay_active_r1 || r.relay_active_r2) ? 1 : 0;
     });
-    const relayData = readings.map(r => {
+    const relayData = chartReadings.map(r => {
       const key = new Date(r.interval_start).toISOString().slice(0,16);
       return relayMap[key] ?? null;
     });
@@ -27123,8 +27129,9 @@ async function amiRunMV() {
 
     // 2. Fetch baseline readings (30 days prior, same hours)
     const baselineFrom = new Date(fireAt.getTime() - 30 * 86400000).toISOString();
-    const baselineAll  = await supabaseGet(
-      `ami_readings?meter_uid=eq.${encodeURIComponent(meterUid)}&interval_start=gte.${baselineFrom}&interval_start=lt.${fireAt.toISOString()}&order=interval_start.asc&limit=5000`
+    const baselineAll  = await supabaseGetPaged(
+      `ami_readings?meter_uid=eq.${encodeURIComponent(meterUid)}&interval_start=gte.${baselineFrom}&interval_start=lt.${fireAt.toISOString()}&order=interval_start.asc`,
+      10000
     );
 
     // 3. Fetch device relay readings during event
