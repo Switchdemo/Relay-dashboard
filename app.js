@@ -27303,10 +27303,41 @@ function amiExportMVReport() {
   URL.revokeObjectURL(a.href);
 }
 
-// ── AMI Baseline Calculator ───────────────────────────────────────────────────
 
-let _amiBaselineChart = null;
-let _amiBaselineData  = null;
+// ── AMI Baseline Calculator (Enhanced) ────────────────────────────────────────
+
+let _amiBaselineChart  = null;
+let _amiBaselineData   = null;
+let _blCustomBaselines = [];   // { id, name, config }
+let _blResults         = {};   // { methodKey: [{time, kw}] }
+let _blActual          = [];   // [{time, kw}]
+
+// ── Standard method definitions ──────────────────────────────────────────────
+
+const BL_STANDARD_METHODS = [
+  { key:'caiso_10of10',  label:'CAISO 10-of-10',     iso:'CAISO',   color:'#3B82F6', desc:'Avg of 10 highest-energy non-event weekdays, ±20% LPA adjustment' },
+  { key:'pjm_4of5',      label:'PJM High 4-of-5',    iso:'PJM',     color:'#10B981', desc:'Highest 4 of last 5 similar weekdays by daily energy' },
+  { key:'nyiso_10of10',  label:'NYISO 10-of-10',      iso:'NYISO',   color:'#F59E0B', desc:'10 highest-energy days from last 10 non-event days, weekdays only' },
+  { key:'bl_5of10',      label:'Mid 5-of-10',         iso:'Generic', color:'#8B5CF6', desc:'Middle 5 of 10 days (excludes highest 3 and lowest 2)' },
+  { key:'bl_3of10',      label:'High 3-of-10',        iso:'Generic', color:'#EC4899', desc:'Average of 3 highest-energy days from last 10 similar days' },
+  { key:'isone_ema',     label:'ISO-NE EMA',          iso:'ISO-NE',  color:'#EF4444', desc:'Exponential moving avg: 90% prior CBL + 10% current day' },
+  { key:'bl_7day',       label:'7-Day Same-Hour Avg', iso:'Generic', color:'#14B8A6', desc:'Simple average of same hour across last 7 days' },
+  { key:'bl_30day',      label:'30-Day Same-Hour Avg',iso:'Generic', color:'#F97316', desc:'Simple average of same hour across lookback window' },
+  { key:'aemo_4of5',     label:'AEMO 4-of-5',         iso:'AEMO',    color:'#6366F1', desc:'4 highest-consumption days of last 5 weekdays (Australia)' },
+  { key:'krec_max4of5',  label:'KREC Max 4-of-5',     iso:'KREC',    color:'#0EA5E9', desc:'Highest 4 of prior 5 weekdays (Korea Electric Power)' },
+];
+
+// US Federal Holidays (approximate — year-agnostic matching by month/day)
+const US_HOLIDAYS = [
+  [1,1],[1,15],[2,19],[5,27],[6,19],[7,4],[9,2],[10,14],[11,11],[11,28],[12,25]
+];
+
+function isHoliday(date) {
+  return US_HOLIDAYS.some(([m,d]) => date.getMonth()+1 === m && date.getDate() === d);
+}
+function isWeekend(date) { return date.getDay() === 0 || date.getDay() === 6; }
+
+// ── Init ──────────────────────────────────────────────────────────────────────
 
 async function amiInitBaselineTab() {
   // Populate meter select
@@ -27319,10 +27350,9 @@ async function amiInitBaselineTab() {
     }
   } catch(e) {}
 
-  // Default event window — yesterday 2pm-5pm as a placeholder
-  const now  = new Date();
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
+  // Default event window
+  const now = new Date();
+  const yesterday = new Date(now); yesterday.setDate(yesterday.getDate()-1);
   const fmt = d => d.toISOString().slice(0,16);
   const defStart = new Date(yesterday); defStart.setHours(14,0,0,0);
   const defEnd   = new Date(yesterday); defEnd.setHours(17,0,0,0);
@@ -27330,7 +27360,232 @@ async function amiInitBaselineTab() {
   const endEl   = document.getElementById('bl-event-end');
   if (startEl && !startEl.value) startEl.value = fmt(defStart);
   if (endEl   && !endEl.value)   endEl.value   = fmt(defEnd);
+
+  // Render standard method checkboxes
+  blRenderStandardMethods();
+  blLoadSavedBaselines();
 }
+
+function blRenderStandardMethods() {
+  const el = document.getElementById('bl-standard-methods');
+  if (!el) return;
+  el.innerHTML = BL_STANDARD_METHODS.map(m => `
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 0;">
+      <input type="checkbox" id="bl-std-${m.key}" checked style="accent-color:${m.color};">
+      <span style="width:10px;height:10px;border-radius:50%;background:${m.color};display:inline-block;flex-shrink:0;"></span>
+      <span style="font-size:11px;flex:1;">${m.label}</span>
+      <span style="font-size:9px;padding:1px 5px;border-radius:6px;background:var(--surface2);color:var(--text-hint);">${m.iso}</span>
+    </label>`).join('');
+}
+
+function blToggleAllStandard() {
+  const checkboxes = BL_STANDARD_METHODS.map(m => document.getElementById(`bl-std-${m.key}`)).filter(Boolean);
+  const allChecked = checkboxes.every(cb => cb.checked);
+  checkboxes.forEach(cb => cb.checked = !allChecked);
+}
+
+// ── Custom Baseline Builder ───────────────────────────────────────────────────
+
+function blAddCustomBaseline() {
+  const id = `custom_${Date.now()}`;
+  const colors = ['#A855F7','#06B6D4','#D97706','#DC2626','#059669','#7C3AED'];
+  const color  = colors[_blCustomBaselines.length % colors.length];
+
+  _blCustomBaselines.push({
+    id, color,
+    name:          `Custom ${_blCustomBaselines.length+1}`,
+    method:        'high_x_of_y',
+    x:             5,
+    y:             10,
+    lookback:      30,
+    excludeWeekends:  true,
+    excludeHolidays:  true,
+    trimHigh:      0,
+    trimLow:       0,
+    dayTypes:      'weekday',
+    lpa:           false,
+    lpaHours:      2
+  });
+  blRenderCustomList();
+}
+
+function blRenderCustomList() {
+  const el = document.getElementById('bl-custom-list');
+  if (!el) return;
+  if (!_blCustomBaselines.length) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--text-hint);">Click + Add to build a custom baseline method.</div>';
+    return;
+  }
+  el.innerHTML = _blCustomBaselines.map(bl => `
+    <div style="border:0.5px solid var(--border-md);border-radius:var(--radius-sm);padding:10px;background:var(--surface);">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+        <span style="width:10px;height:10px;border-radius:50%;background:${bl.color};display:inline-block;flex-shrink:0;"></span>
+        <input type="text" value="${bl.name}" onchange="blUpdateCustom('${bl.id}','name',this.value)"
+          style="flex:1;padding:4px 7px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-weight:600;">
+        <button onclick="blRemoveCustom('${bl.id}')" style="padding:3px 7px;border-radius:var(--radius-sm);border:0.5px solid var(--red);background:transparent;color:var(--red);font-size:10px;cursor:pointer;">✕</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;">
+        <div>
+          <label style="color:var(--text-hint);display:block;margin-bottom:2px;">Method</label>
+          <select onchange="blUpdateCustom('${bl.id}','method',this.value)"
+            style="width:100%;padding:5px 7px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
+            <option value="high_x_of_y" ${bl.method==='high_x_of_y'?'selected':''}>High X-of-Y</option>
+            <option value="mid_x_of_y"  ${bl.method==='mid_x_of_y'?'selected':''}>Mid X-of-Y</option>
+            <option value="low_x_of_y"  ${bl.method==='low_x_of_y'?'selected':''}>Low X-of-Y</option>
+            <option value="avg_all"      ${bl.method==='avg_all'?'selected':''}>Average All Days</option>
+            <option value="ema"          ${bl.method==='ema'?'selected':''}>Exponential Moving Avg</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:4px;">
+          <div style="flex:1;">
+            <label style="color:var(--text-hint);display:block;margin-bottom:2px;">X (select)</label>
+            <input type="number" min="1" max="30" value="${bl.x}" onchange="blUpdateCustom('${bl.id}','x',+this.value)"
+              style="width:100%;padding:5px 7px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
+          </div>
+          <div style="flex:1;">
+            <label style="color:var(--text-hint);display:block;margin-bottom:2px;">Y (pool)</label>
+            <input type="number" min="1" max="60" value="${bl.y}" onchange="blUpdateCustom('${bl.id}','y',+this.value)"
+              style="width:100%;padding:5px 7px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
+          </div>
+        </div>
+
+        <div>
+          <label style="color:var(--text-hint);display:block;margin-bottom:2px;">Trim High Days</label>
+          <input type="number" min="0" max="5" value="${bl.trimHigh}" onchange="blUpdateCustom('${bl.id}','trimHigh',+this.value)"
+            style="width:100%;padding:5px 7px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;"
+            title="Remove this many highest-kWh days from pool before averaging">
+        </div>
+        <div>
+          <label style="color:var(--text-hint);display:block;margin-bottom:2px;">Trim Low Days</label>
+          <input type="number" min="0" max="5" value="${bl.trimLow}" onchange="blUpdateCustom('${bl.id}','trimLow',+this.value)"
+            style="width:100%;padding:5px 7px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;"
+            title="Remove this many lowest-kWh days from pool before averaging">
+        </div>
+
+        <div>
+          <label style="color:var(--text-hint);display:block;margin-bottom:2px;">Day Types</label>
+          <select onchange="blUpdateCustom('${bl.id}','dayTypes',this.value)"
+            style="width:100%;padding:5px 7px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
+            <option value="weekday"  ${bl.dayTypes==='weekday'?'selected':''}>Weekdays only</option>
+            <option value="weekend"  ${bl.dayTypes==='weekend'?'selected':''}>Weekends only</option>
+            <option value="all"      ${bl.dayTypes==='all'?'selected':''}>All days</option>
+            <option value="match"    ${bl.dayTypes==='match'?'selected':''}>Match event day type</option>
+          </select>
+        </div>
+        <div>
+          <label style="color:var(--text-hint);display:block;margin-bottom:2px;">Lookback</label>
+          <select onchange="blUpdateCustom('${bl.id}','lookback',+this.value)"
+            style="width:100%;padding:5px 7px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
+            <option value="30"  ${bl.lookback===30?'selected':''}>30 days</option>
+            <option value="45"  ${bl.lookback===45?'selected':''}>45 days</option>
+            <option value="60"  ${bl.lookback===60?'selected':''}>60 days</option>
+            <option value="90"  ${bl.lookback===90?'selected':''}>90 days</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;">
+          <input type="checkbox" ${bl.excludeWeekends?'checked':''} onchange="blUpdateCustom('${bl.id}','excludeWeekends',this.checked)">
+          Exclude weekends
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;">
+          <input type="checkbox" ${bl.excludeHolidays?'checked':''} onchange="blUpdateCustom('${bl.id}','excludeHolidays',this.checked)">
+          Exclude holidays
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;">
+          <input type="checkbox" ${bl.lpa?'checked':''} onchange="blUpdateCustom('${bl.id}','lpa',this.checked)">
+          LPA adjustment
+        </label>
+      </div>
+      ${bl.lpa ? `<div style="margin-top:6px;font-size:11px;display:flex;align-items:center;gap:6px;">
+        <label style="color:var(--text-hint);">LPA pre-event hours:</label>
+        <input type="number" min="1" max="4" value="${bl.lpaHours}" onchange="blUpdateCustom('${bl.id}','lpaHours',+this.value)"
+          style="width:50px;padding:3px 6px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
+      </div>` : ''}
+      <div style="display:flex;gap:6px;margin-top:8px;">
+        <button onclick="blSaveCustomBaseline('${bl.id}')"
+          style="flex:1;padding:4px;border-radius:var(--radius-sm);border:0.5px solid var(--green);background:var(--green-bg);color:var(--green-dark);font-size:10px;font-weight:600;cursor:pointer;">
+          💾 Save
+        </button>
+      </div>
+    </div>`).join('');
+}
+
+function blUpdateCustom(id, field, value) {
+  const bl = _blCustomBaselines.find(b => b.id === id);
+  if (bl) { bl[field] = value; blRenderCustomList(); }
+}
+
+function blRemoveCustom(id) {
+  _blCustomBaselines = _blCustomBaselines.filter(b => b.id !== id);
+  blRenderCustomList();
+}
+
+// ── Save / Load named baselines ───────────────────────────────────────────────
+
+function blSaveCustomBaseline(id) {
+  const bl = _blCustomBaselines.find(b => b.id === id);
+  if (!bl) return;
+  const saved = JSON.parse(localStorage.getItem('ami_saved_baselines') || '[]');
+  const existing = saved.findIndex(s => s.name === bl.name);
+  if (existing >= 0) saved[existing] = bl; else saved.push(bl);
+  localStorage.setItem('ami_saved_baselines', JSON.stringify(saved));
+  setStatus('success', `Baseline "${bl.name}" saved`);
+  blLoadSavedBaselines();
+}
+
+function blSaveCurrentAsBaseline() {
+  const name = prompt('Name for this baseline configuration:', `Baseline ${new Date().toLocaleDateString()}`);
+  if (!name) return;
+  const saved = JSON.parse(localStorage.getItem('ami_saved_baselines') || '[]');
+  const config = {
+    id: `saved_${Date.now()}`, name, color: '#6B7280',
+    activeStandard: BL_STANDARD_METHODS.filter(m => document.getElementById(`bl-std-${m.key}`)?.checked).map(m=>m.key),
+    customBaselines: _blCustomBaselines,
+    savedAt: new Date().toISOString()
+  };
+  saved.push(config);
+  localStorage.setItem('ami_saved_baselines', JSON.stringify(saved));
+  setStatus('success', `"${name}" saved`);
+  blLoadSavedBaselines();
+}
+
+function blLoadSavedBaselines() {
+  const el = document.getElementById('bl-saved-list');
+  if (!el) return;
+  const saved = JSON.parse(localStorage.getItem('ami_saved_baselines') || '[]');
+  if (!saved.length) { el.innerHTML = '<div style="font-size:11px;color:var(--text-hint);">No saved baselines yet.</div>'; return; }
+  el.innerHTML = saved.map(s => `
+    <div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:0.5px solid var(--border);">
+      <span style="font-size:11px;flex:1;color:var(--text-primary);">${s.name}</span>
+      <span style="font-size:10px;color:var(--text-hint);">${s.savedAt ? new Date(s.savedAt).toLocaleDateString() : ''}</span>
+      <button onclick="blApplySaved(${JSON.stringify(s).replace(/"/g,'&quot;')})" style="padding:2px 7px;border-radius:var(--radius-sm);border:0.5px solid var(--blue-dark);background:var(--blue-bg);color:var(--blue-dark);font-size:10px;cursor:pointer;">Load</button>
+      <button onclick="blDeleteSaved('${s.name}')" style="padding:2px 6px;border-radius:var(--radius-sm);border:0.5px solid var(--red);background:transparent;color:var(--red);font-size:10px;cursor:pointer;">✕</button>
+    </div>`).join('');
+}
+
+function blApplySaved(config) {
+  if (config.customBaselines) _blCustomBaselines = config.customBaselines;
+  if (config.activeStandard) {
+    BL_STANDARD_METHODS.forEach(m => {
+      const cb = document.getElementById(`bl-std-${m.key}`);
+      if (cb) cb.checked = config.activeStandard.includes(m.key);
+    });
+  }
+  blRenderCustomList();
+  setStatus('success', `Loaded "${config.name}"`);
+}
+
+function blDeleteSaved(name) {
+  if (!confirm(`Delete saved baseline "${name}"?`)) return;
+  const saved = JSON.parse(localStorage.getItem('ami_saved_baselines') || '[]').filter(s => s.name !== name);
+  localStorage.setItem('ami_saved_baselines', JSON.stringify(saved));
+  blLoadSavedBaselines();
+}
+
+// ── Core Calculation Engine ───────────────────────────────────────────────────
 
 async function amiRunBaseline() {
   const meterUid  = document.getElementById('bl-meter')?.value;
@@ -27339,7 +27594,6 @@ async function amiRunBaseline() {
   const lookback  = parseInt(document.getElementById('bl-lookback')?.value || '30');
   const statusEl  = document.getElementById('bl-status');
   const emptyEl   = document.getElementById('bl-chart-empty');
-  const resultsEl = document.getElementById('bl-results');
 
   if (!meterUid) { if (statusEl) statusEl.textContent = '⚠ Select a meter first.'; return; }
   if (!startStr || !endStr) { if (statusEl) statusEl.textContent = '⚠ Set event window.'; return; }
@@ -27348,7 +27602,7 @@ async function amiRunBaseline() {
   const eventEnd   = new Date(endStr);
   if (eventEnd <= eventStart) { if (statusEl) statusEl.textContent = '⚠ End must be after start.'; return; }
 
-  if (statusEl) statusEl.textContent = 'Loading data…';
+  if (statusEl) statusEl.textContent = 'Loading interval data…';
   if (emptyEl)  emptyEl.style.display = 'none';
 
   try {
@@ -27359,77 +27613,221 @@ async function amiRunBaseline() {
     );
 
     if (!Array.isArray(eventReadings) || !eventReadings.length) {
-      if (statusEl) statusEl.textContent = '⚠ No readings found in the event window.';
-      if (emptyEl)  { emptyEl.style.display = ''; emptyEl.textContent = 'No interval data found in the selected event window. Try a different date range.'; }
+      if (statusEl) statusEl.textContent = '⚠ No readings in event window.';
+      if (emptyEl)  { emptyEl.style.display=''; emptyEl.textContent='No data found in selected event window.'; }
       return;
     }
 
-    // Fetch lookback period readings
-    const lookbackFrom = new Date(eventStart.getTime() - lookback * 86400000);
-    if (statusEl) statusEl.textContent = `Fetching ${lookback} days of historical data…`;
+    // Fetch maximum lookback (90 days) all at once
+    const maxLookback = Math.max(lookback, ...(_blCustomBaselines.map(b=>b.lookback||30)), 90);
+    const lookbackFrom = new Date(eventStart.getTime() - maxLookback * 86400000);
+    if (statusEl) statusEl.textContent = `Fetching ${maxLookback} days of history…`;
+
     const histReadings = await supabaseGetPaged(
       `ami_readings?meter_uid=eq.${encodeURIComponent(meterUid)}&interval_start=gte.${lookbackFrom.toISOString()}&interval_start=lt.${eventStart.toISOString()}&order=interval_start.asc`,
-      15000
+      20000
     );
 
-    if (statusEl) statusEl.textContent = `Calculating baselines from ${histReadings.length} historical readings…`;
+    if (statusEl) statusEl.textContent = `Computing baselines from ${histReadings.length} historical readings…`;
 
-    // Group historical readings by hour-of-day and minute
-    // Key: "HH:MM" matching event interval times
-    const byTimeKey = {};
+    // Build lookup: date string → { timeKey → kw }
+    // Also build daily energy map for X-of-Y day selection
+    const dailyEnergy = {};   // 'YYYY-MM-DD' → total kWh
+    const byTimeKey   = {};   // 'HH:MM' → [{date, kw, dayStr}]
+
     histReadings.forEach(r => {
-      const d = new Date(r.interval_start);
-      const key = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-      if (!byTimeKey[key]) byTimeKey[key] = [];
-      if (r.kw != null) byTimeKey[key].push({ kw: r.kw, date: d });
+      const d      = new Date(r.interval_start);
+      const dayStr = d.toISOString().slice(0,10);
+      const tKey   = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      if (!dailyEnergy[dayStr]) dailyEnergy[dayStr] = 0;
+      dailyEnergy[dayStr] += r.kwh || 0;
+      if (!byTimeKey[tKey]) byTimeKey[tKey] = [];
+      if (r.kw != null) byTimeKey[tKey].push({ date: d, dayStr, kw: r.kw });
     });
 
-    // For each event interval, calculate all four baseline methods
-    const intervals = eventReadings.map(r => {
-      const d   = new Date(r.interval_start);
-      const key = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-      const hist = byTimeKey[key] || [];
-      const vals = hist.map(h => h.kw).sort((a,b) => a-b);
+    const isEventWeekend = isWeekend(eventStart);
 
-      // 10-of-10: average of 10 highest values in lookback
-      const top10    = vals.slice(-10);
-      const bl10of10 = top10.length ? top10.reduce((s,v)=>s+v,0)/top10.length : null;
+    // Helper: filter days by type and exclusion rules
+    function filterDays(entries, cfg) {
+      return entries.filter(e => {
+        if (cfg.excludeWeekends && isWeekend(e.date)) return false;
+        if (cfg.excludeHolidays && isHoliday(e.date)) return false;
+        if (cfg.dayTypes === 'weekday'  && isWeekend(e.date)) return false;
+        if (cfg.dayTypes === 'weekend'  && !isWeekend(e.date)) return false;
+        if (cfg.dayTypes === 'match') {
+          if (isEventWeekend !== isWeekend(e.date)) return false;
+        }
+        // Lookback filter
+        const lb = cfg.lookback || lookback;
+        const cutoff = new Date(eventStart.getTime() - lb * 86400000);
+        if (e.date < cutoff) return false;
+        return true;
+      });
+    }
 
-      // 5-of-10: average of 5 highest values (more conservative)
-      const top5     = vals.slice(-5);
-      const bl5of10  = top5.length ? top5.reduce((s,v)=>s+v,0)/top5.length : null;
+    // Helper: select X-of-Y days by energy ranking
+    function selectDays(filteredEntries, method, x, y, trimHigh, trimLow) {
+      // Get unique day strings sorted by energy
+      const uniqueDays = [...new Set(filteredEntries.map(e => e.dayStr))];
+      let ranked = uniqueDays
+        .map(d => ({ dayStr: d, energy: dailyEnergy[d] || 0 }))
+        .sort((a,b) => b.energy - a.energy);
 
-      // 7-day: average of same time slot over last 7 days only
-      const sevenDaysAgo = new Date(eventStart.getTime() - 7 * 86400000);
-      const last7 = hist.filter(h => h.date >= sevenDaysAgo).map(h => h.kw);
-      const bl7day = last7.length ? last7.reduce((s,v)=>s+v,0)/last7.length : null;
+      // Apply trim
+      if (trimHigh > 0) ranked = ranked.slice(trimHigh);
+      if (trimLow  > 0) ranked = ranked.slice(0, ranked.length - trimLow);
 
-      // 30-day: straight average of all same-time values
-      const bl30day = vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null;
+      // Take pool of Y days
+      const pool = ranked.slice(0, y).map(r => r.dayStr);
 
-      const actualKw = r.kw ?? (r.kwh != null ? r.kwh / ((new Date(r.interval_end) - d) / 3600000) : null);
+      // Select X from pool based on method
+      let selected;
+      if (method === 'high_x_of_y' || method === undefined) {
+        selected = pool.slice(0, x);
+      } else if (method === 'low_x_of_y') {
+        selected = pool.slice(-x);
+      } else if (method === 'mid_x_of_y') {
+        const start = Math.floor((pool.length - x) / 2);
+        selected = pool.slice(start, start + x);
+      } else {
+        selected = pool.slice(0, x);
+      }
 
-      return {
-        time:     d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),
-        fullTime: d,
-        actualKw,
-        bl10of10,
-        bl5of10,
-        bl7day,
-        bl30day,
-        histCount: vals.length
-      };
-    });
+      return new Set(selected);
+    }
 
-    _amiBaselineData = { intervals, meterUid, eventStart, eventEnd, lookback };
+    // Compute LPA adjustment factor for a config
+    function computeLPA(cfg, timeKey) {
+      if (!cfg.lpa) return 1.0;
+      const lpaHours = cfg.lpaHours || 2;
+      const preEventEnd   = new Date(eventStart);
+      const preEventStart = new Date(eventStart.getTime() - lpaHours * 3600000);
+      // Get actual pre-event kW
+      const actualPre = histReadings.filter(r => {
+        const d = new Date(r.interval_start);
+        return d >= preEventStart && d < preEventEnd;
+      }).map(r => r.kw).filter(v => v != null);
+      const actualPreAvg = actualPre.length ? actualPre.reduce((s,v)=>s+v,0)/actualPre.length : null;
+      if (!actualPreAvg) return 1.0;
+      // Get baseline pre-event kW using same timeKey logic
+      const preKeys = [];
+      let cur = new Date(preEventStart);
+      while (cur < preEventEnd) {
+        preKeys.push(`${String(cur.getHours()).padStart(2,'0')}:${String(cur.getMinutes()).padStart(2,'0')}`);
+        cur = new Date(cur.getTime() + 15*60000);
+      }
+      // ... simplified: use overall average of pre-event intervals in history
+      const histPreAvg = preKeys.flatMap(k => (byTimeKey[k]||[]).map(e=>e.kw))
+        .filter(v=>v!=null);
+      const histAvg = histPreAvg.length ? histPreAvg.reduce((s,v)=>s+v,0)/histPreAvg.length : null;
+      if (!histAvg || histAvg === 0) return 1.0;
+      // Cap at ±20% per CAISO rules
+      return Math.min(1.2, Math.max(0.8, actualPreAvg / histAvg));
+    }
 
-    // Render
-    amiRenderBaselineChart(intervals);
-    amiRenderBaselineTable(intervals);
-    amiRenderBaselineKPIs(intervals);
+    // ── Calculate each standard method ──────────────────────────────────────
 
-    if (resultsEl) resultsEl.style.display = '';
-    if (statusEl)  statusEl.textContent = `${intervals.length} intervals | ${histReadings.length} historical readings used`;
+    function calcStandardMethod(methodKey) {
+      const cfg = { excludeWeekends: true, excludeHolidays: true, dayTypes: 'weekday', lookback, lpa: false };
+      return eventReadings.map(r => {
+        const d    = new Date(r.interval_start);
+        const tKey = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+        const pool = filterDays(byTimeKey[tKey] || [], cfg);
+        const vals = pool.map(e => e.kw).filter(v => v != null).sort((a,b) => b-a);
+        const actualKw = r.kw ?? null;
+
+        let blKw = null;
+        if (methodKey === 'caiso_10of10') {
+          const top10Days = selectDays(pool, 'high_x_of_y', 10, 10, 0, 0);
+          const sel = pool.filter(e => top10Days.has(e.dayStr)).map(e => e.kw).filter(v=>v!=null);
+          blKw = sel.length ? sel.reduce((s,v)=>s+v,0)/sel.length : null;
+          if (blKw) blKw *= computeLPA({...cfg, lpa:true, lpaHours:2}, tKey);
+        } else if (methodKey === 'pjm_4of5' || methodKey === 'aemo_4of5' || methodKey === 'krec_max4of5') {
+          const top4Days = selectDays(pool, 'high_x_of_y', 4, 5, 0, 0);
+          const sel = pool.filter(e => top4Days.has(e.dayStr)).map(e => e.kw).filter(v=>v!=null);
+          blKw = sel.length ? sel.reduce((s,v)=>s+v,0)/sel.length : null;
+        } else if (methodKey === 'nyiso_10of10') {
+          const top10Days = selectDays(pool, 'high_x_of_y', 10, 10, 0, 0);
+          const sel = pool.filter(e => top10Days.has(e.dayStr)).map(e => e.kw).filter(v=>v!=null);
+          blKw = sel.length ? sel.reduce((s,v)=>s+v,0)/sel.length : null;
+        } else if (methodKey === 'bl_5of10') {
+          // Mid 5-of-10: drop top 3 and bottom 2
+          const allDays = selectDays(pool, 'high_x_of_y', 10, 10, 3, 2);
+          const sel = pool.filter(e => allDays.has(e.dayStr)).map(e => e.kw).filter(v=>v!=null);
+          blKw = sel.length ? sel.reduce((s,v)=>s+v,0)/sel.length : null;
+        } else if (methodKey === 'bl_3of10') {
+          const top3Days = selectDays(pool, 'high_x_of_y', 3, 10, 0, 0);
+          const sel = pool.filter(e => top3Days.has(e.dayStr)).map(e => e.kw).filter(v=>v!=null);
+          blKw = sel.length ? sel.reduce((s,v)=>s+v,0)/sel.length : null;
+        } else if (methodKey === 'isone_ema') {
+          // Exponential: 90% prior day + 10% current (simplified to weighted recent avg)
+          const sorted = pool.sort((a,b) => b.date - a.date);
+          let ema = null;
+          sorted.forEach(e => { ema = ema === null ? e.kw : 0.9*ema + 0.1*e.kw; });
+          blKw = ema;
+        } else if (methodKey === 'bl_7day') {
+          const sevenDaysAgo = new Date(eventStart.getTime() - 7*86400000);
+          const recent = pool.filter(e => e.date >= sevenDaysAgo).map(e => e.kw).filter(v=>v!=null);
+          blKw = recent.length ? recent.reduce((s,v)=>s+v,0)/recent.length : null;
+        } else if (methodKey === 'bl_30day') {
+          blKw = vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null;
+        }
+
+        return { time: d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), blKw, actualKw };
+      });
+    }
+
+    // ── Calculate custom baselines ───────────────────────────────────────────
+
+    function calcCustomBaseline(bl) {
+      return eventReadings.map(r => {
+        const d    = new Date(r.interval_start);
+        const tKey = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+        const pool = filterDays(byTimeKey[tKey] || [], bl);
+        const actualKw = r.kw ?? null;
+
+        let blKw = null;
+        if (bl.method === 'avg_all') {
+          const vals = pool.map(e=>e.kw).filter(v=>v!=null);
+          blKw = vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null;
+        } else if (bl.method === 'ema') {
+          const sorted = pool.sort((a,b)=>b.date-a.date);
+          let ema = null;
+          sorted.forEach(e => { ema = ema===null ? e.kw : 0.9*ema + 0.1*e.kw; });
+          blKw = ema;
+        } else {
+          const selectedDays = selectDays(pool, bl.method, bl.x, bl.y, bl.trimHigh, bl.trimLow);
+          const sel = pool.filter(e=>selectedDays.has(e.dayStr)).map(e=>e.kw).filter(v=>v!=null);
+          blKw = sel.length ? sel.reduce((s,v)=>s+v,0)/sel.length : null;
+        }
+
+        if (blKw && bl.lpa) blKw *= computeLPA(bl, tKey);
+
+        return { time: d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), blKw, actualKw };
+      });
+    }
+
+    // ── Run all enabled methods ──────────────────────────────────────────────
+
+    _blResults = {};
+    _blActual  = eventReadings.map(r => ({
+      time: new Date(r.interval_start).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),
+      kw:   r.kw ?? null
+    }));
+
+    const enabledStandard = BL_STANDARD_METHODS.filter(m => document.getElementById(`bl-std-${m.key}`)?.checked);
+    enabledStandard.forEach(m => { _blResults[m.key] = calcStandardMethod(m.key); });
+    _blCustomBaselines.forEach(bl => { _blResults[bl.id] = calcCustomBaseline(bl); });
+
+    _amiBaselineData = { meterUid, eventStart, eventEnd, lookback };
+
+    // ── Render ───────────────────────────────────────────────────────────────
+    blRenderChart(enabledStandard);
+    blRenderKPIs(enabledStandard);
+    blRenderTable(enabledStandard);
+
+    const totalMethods = enabledStandard.length + _blCustomBaselines.length;
+    if (statusEl) statusEl.textContent = `${eventReadings.length} intervals | ${histReadings.length} hist readings | ${totalMethods} methods`;
 
   } catch(e) {
     if (statusEl) statusEl.textContent = `Error: ${e.message}`;
@@ -27437,181 +27835,208 @@ async function amiRunBaseline() {
   }
 }
 
-function amiRenderBaselineChart(intervals) {
+// ── Render Chart ──────────────────────────────────────────────────────────────
+
+function blRenderChart(enabledStandard) {
   if (_amiBaselineChart) { _amiBaselineChart.destroy(); _amiBaselineChart = null; }
   const ctx = document.getElementById('bl-chart')?.getContext('2d');
   if (!ctx) return;
 
-  const labels = intervals.map(i => i.time);
+  const labels = _blActual.map(r => r.time);
+
+  const datasets = [
+    // Actual (always shown)
+    {
+      label: 'Actual (event)',
+      data:  _blActual.map(r => r.kw?.toFixed(3)),
+      borderColor: '#6B7280', backgroundColor: 'rgba(107,114,128,0.1)',
+      borderWidth: 2.5, pointRadius: 2, fill: true, tension: 0.2,
+      order: 0
+    },
+    // Standard methods
+    ...enabledStandard.map((m,i) => ({
+      label: m.label,
+      data:  (_blResults[m.key]||[]).map(r => r.blKw?.toFixed(3)),
+      borderColor: m.color, backgroundColor: m.color + '10',
+      borderWidth: 2, pointRadius: 2, fill: false, tension: 0.3,
+      borderDash: i > 4 ? [4,3] : undefined,
+      order: i+1
+    })),
+    // Custom baselines
+    ..._blCustomBaselines.map((bl,i) => ({
+      label: bl.name,
+      data:  (_blResults[bl.id]||[]).map(r => r.blKw?.toFixed(3)),
+      borderColor: bl.color, backgroundColor: bl.color + '15',
+      borderWidth: 2, pointRadius: 2, fill: false, tension: 0.3,
+      borderDash: [6,2],
+      order: enabledStandard.length + i + 1
+    }))
+  ];
 
   _amiBaselineChart = new Chart(ctx, {
     type: 'line',
-    data: {
-      labels,
-      datasets: [
-        {
-          label: '10-of-10',
-          data:  intervals.map(i => i.bl10of10?.toFixed(3)),
-          borderColor: '#3B82F6', backgroundColor: 'rgba(59,130,246,0.05)',
-          borderWidth: 2, pointRadius: 3, fill: false, tension: 0.3
-        },
-        {
-          label: '5-of-10',
-          data:  intervals.map(i => i.bl5of10?.toFixed(3)),
-          borderColor: '#10B981', backgroundColor: 'rgba(16,185,129,0.05)',
-          borderWidth: 2, pointRadius: 3, fill: false, tension: 0.3
-        },
-        {
-          label: '7-day avg',
-          data:  intervals.map(i => i.bl7day?.toFixed(3)),
-          borderColor: '#F59E0B', backgroundColor: 'rgba(245,158,11,0.05)',
-          borderWidth: 2, pointRadius: 3, fill: false, tension: 0.3,
-          borderDash: [5,3]
-        },
-        {
-          label: '30-day avg',
-          data:  intervals.map(i => i.bl30day?.toFixed(3)),
-          borderColor: '#EF4444', backgroundColor: 'rgba(239,68,68,0.05)',
-          borderWidth: 2, pointRadius: 3, fill: false, tension: 0.3,
-          borderDash: [3,3]
-        },
-        {
-          label: 'Actual (event)',
-          data:  intervals.map(i => i.actualKw?.toFixed(3)),
-          borderColor: '#6B7280', backgroundColor: 'rgba(107,114,128,0.1)',
-          borderWidth: 2.5, pointRadius: 3, fill: true, tension: 0.2
-        }
-      ]
-    },
+    data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { position: 'top', labels: { font: { size: 11 }, usePointStyle: true } },
-        tooltip: {
-          callbacks: {
-            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y != null ? Number(ctx.parsed.y).toFixed(3) + ' kW' : '—'}`
-          }
-        }
+        legend: { display: false }, // we render our own toggles
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y!=null?Number(ctx.parsed.y).toFixed(3)+' kW':'—'}` } }
       },
       scales: {
-        x: { ticks: { font: { size: 10 }, maxTicksLimit: 12 } },
-        y: { title: { display: true, text: 'kW', font: { size: 11 } }, beginAtZero: true }
+        x: { ticks: { font:{size:10}, maxTicksLimit:12 } },
+        y: { title: { display:true, text:'kW', font:{size:11} }, beginAtZero: true }
       }
     }
   });
+
+  // Render toggle buttons
+  blRenderLegendToggles(datasets);
 }
 
-function amiUpdateBaselineChart() {
+function blRenderLegendToggles(datasets) {
+  const el = document.getElementById('bl-legend-toggles');
+  if (!el) return;
+  el.innerHTML = datasets.map((ds,i) => `
+    <button onclick="blToggleDataset(${i})" id="bl-toggle-${i}"
+      style="display:flex;align-items:center;gap:5px;padding:3px 8px;border-radius:8px;border:1.5px solid ${ds.borderColor};background:${ds.borderColor}18;cursor:pointer;font-size:10px;color:${ds.borderColor};font-weight:600;">
+      <span style="width:8px;height:8px;border-radius:50%;background:${ds.borderColor};"></span>
+      ${ds.label}
+    </button>`).join('');
+}
+
+function blToggleDataset(index) {
   if (!_amiBaselineChart) return;
-  const show10of10 = document.getElementById('bl-show-10of10')?.checked;
-  const show5of10  = document.getElementById('bl-show-5of10')?.checked;
-  const show7day   = document.getElementById('bl-show-7day')?.checked;
-  const show30day  = document.getElementById('bl-show-30day')?.checked;
-  const showActual = document.getElementById('bl-show-actual')?.checked;
-  const visibility = [show10of10, show5of10, show7day, show30day, showActual];
-  _amiBaselineChart.data.datasets.forEach((ds, i) => { ds.hidden = !visibility[i]; });
+  const meta = _amiBaselineChart.getDatasetMeta(index);
+  meta.hidden = !meta.hidden;
   _amiBaselineChart.update();
+  const btn = document.getElementById(`bl-toggle-${index}`);
+  if (btn) btn.style.opacity = meta.hidden ? '0.35' : '1';
 }
 
-function amiRenderBaselineKPIs(intervals) {
+function amiUpdateBaselineChart() { /* kept for compat — now using toggle buttons */ }
+
+// ── Render KPIs ───────────────────────────────────────────────────────────────
+
+function blRenderKPIs(enabledStandard) {
   const el = document.getElementById('bl-kpi-grid');
   if (!el) return;
+  const avgKw = arr => { const v=arr.filter(r=>r.kw!=null||r.blKw!=null); return v.length ? v.reduce((s,r)=>s+(r.kw??r.blKw??0),0)/v.length : null; };
+  const actualAvg = _blActual.reduce((s,r,_,a)=>s+(r.kw??0)/a.length,0);
 
-  const avg = (arr) => arr.length ? arr.reduce((s,v)=>s+v,0)/arr.length : null;
-  const methods = [
-    { key: 'bl10of10', label: '10-of-10',  color: '#3B82F6' },
-    { key: 'bl5of10',  label: '5-of-10',   color: '#10B981' },
-    { key: 'bl7day',   label: '7-day avg', color: '#F59E0B' },
-    { key: 'bl30day',  label: '30-day avg', color: '#EF4444' },
+  const allMethods = [
+    ...enabledStandard.map(m => ({ label: m.label, color: m.color, key: m.key })),
+    ..._blCustomBaselines.map(b => ({ label: b.name, color: b.color, key: b.id }))
   ];
 
-  const actualAvg = avg(intervals.filter(i=>i.actualKw!=null).map(i=>i.actualKw));
-
-  el.innerHTML = methods.map(m => {
-    const vals = intervals.filter(i=>i[m.key]!=null).map(i=>i[m.key]);
-    const blAvg = avg(vals);
-    const reduction = blAvg != null && actualAvg != null ? Math.max(0, blAvg - actualAvg) : null;
-    const reductionPct = blAvg != null && blAvg > 0 && reduction != null ? (reduction/blAvg*100) : null;
-    return `<div class="sched-card" style="padding:12px;border-left:3px solid ${m.color};">
-      <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">${m.label} Baseline</div>
-      <div style="font-size:20px;font-weight:700;color:${m.color};">${blAvg!=null ? blAvg.toFixed(2)+' kW' : '—'}</div>
-      <div style="font-size:11px;color:var(--text-hint);margin-top:4px;">
-        ${reduction!=null ? `Implies <strong style="color:var(--green-dark);">${reduction.toFixed(2)} kW</strong> reduction (${reductionPct?.toFixed(1)}%)` : '—'}
+  el.innerHTML = allMethods.map(m => {
+    const results  = _blResults[m.key] || [];
+    const blAvg    = results.reduce((s,r,_,a)=>s+(r.blKw??0)/a.length,0);
+    const reduction = Math.max(0, blAvg - actualAvg);
+    const pct       = blAvg > 0 ? (reduction/blAvg*100) : 0;
+    return `<div class="sched-card" style="padding:10px;border-left:3px solid ${m.color};">
+      <div style="font-size:10px;color:var(--text-hint);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${m.label}">${m.label}</div>
+      <div style="font-size:18px;font-weight:700;color:${m.color};">${blAvg.toFixed(2)} kW</div>
+      <div style="font-size:10px;color:var(--text-hint);margin-top:3px;">
+        ${reduction>0 ? `<span style="color:var(--green-dark);font-weight:600;">${reduction.toFixed(2)} kW saved (${pct.toFixed(1)}%)</span>` : 'No reduction'}
       </div>
     </div>`;
   }).join('');
 }
 
-function amiRenderBaselineTable(intervals) {
-  const tbody = document.getElementById('bl-table-body');
-  if (!tbody) return;
+// ── Render Table ──────────────────────────────────────────────────────────────
 
-  tbody.innerHTML = intervals.map(i => {
-    const methods = [i.bl10of10, i.bl5of10, i.bl7day, i.bl30day];
-    const reductions = methods.map(b => b!=null && i.actualKw!=null ? Math.max(0, b - i.actualKw) : null);
-    const bestReduction = reductions.filter(r=>r!=null).length ? Math.max(...reductions.filter(r=>r!=null)) : null;
-    const bestMethod = ['10-of-10','5-of-10','7-day','30-day'][reductions.indexOf(bestReduction)];
-    const fmt = v => v!=null ? v.toFixed(3) : '—';
+function blRenderTable(enabledStandard) {
+  const thead = document.getElementById('bl-table-head');
+  const tbody = document.getElementById('bl-table-body');
+  const card  = document.getElementById('bl-table-card');
+  if (!thead || !tbody) return;
+
+  const allMethods = [
+    ...enabledStandard.map(m => ({ label: m.label, color: m.color, key: m.key })),
+    ..._blCustomBaselines.map(b => ({ label: b.name, color: b.color, key: b.id }))
+  ];
+
+  thead.innerHTML = `<tr>
+    <th style="text-align:left;padding:5px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);position:sticky;top:0;background:var(--surface);">Time</th>
+    <th style="text-align:right;padding:5px 8px;border-bottom:0.5px solid var(--border-md);color:#6B7280;position:sticky;top:0;background:var(--surface);">Actual kW</th>
+    ${allMethods.map(m=>`<th style="text-align:right;padding:5px 8px;border-bottom:0.5px solid var(--border-md);color:${m.color};position:sticky;top:0;background:var(--surface);white-space:nowrap;">${m.label}</th>`).join('')}
+    <th style="text-align:right;padding:5px 8px;border-bottom:0.5px solid var(--border-md);color:var(--green-dark);position:sticky;top:0;background:var(--surface);">Best Reduction</th>
+  </tr>`;
+
+  const intervals = _blActual.length;
+  tbody.innerHTML = Array.from({length: intervals}, (_,i) => {
+    const actual = _blActual[i]?.kw;
+    const blVals = allMethods.map(m => (_blResults[m.key]||[])[i]?.blKw);
+    const reductions = blVals.map(b => b!=null && actual!=null ? Math.max(0,b-actual) : null);
+    const best = reductions.filter(r=>r!=null).length ? Math.max(...reductions.filter(r=>r!=null)) : null;
+    const bestLabel = best!=null ? best.toFixed(3)+' kW' : '—';
     return `<tr>
-      <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);font-size:11px;">${i.time}</td>
-      <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);text-align:right;color:#3B82F6;">${fmt(i.bl10of10)}</td>
-      <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);text-align:right;color:#10B981;">${fmt(i.bl5of10)}</td>
-      <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);text-align:right;color:#F59E0B;">${fmt(i.bl7day)}</td>
-      <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);text-align:right;color:#EF4444;">${fmt(i.bl30day)}</td>
-      <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);text-align:right;color:var(--text-secondary);font-weight:600;">${fmt(i.actualKw)}</td>
-      <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);text-align:right;color:var(--green-dark);">${bestReduction!=null ? bestReduction.toFixed(3)+' kW ('+bestMethod+')' : '—'}</td>
+      <td style="padding:4px 8px;border-bottom:0.5px solid var(--border);font-size:11px;">${_blActual[i]?.time||'—'}</td>
+      <td style="padding:4px 8px;border-bottom:0.5px solid var(--border);text-align:right;font-size:11px;color:#6B7280;font-weight:600;">${actual?.toFixed(3)??'—'}</td>
+      ${blVals.map((b,j)=>`<td style="padding:4px 8px;border-bottom:0.5px solid var(--border);text-align:right;font-size:11px;color:${allMethods[j].color};">${b?.toFixed(3)??'—'}</td>`).join('')}
+      <td style="padding:4px 8px;border-bottom:0.5px solid var(--border);text-align:right;font-size:11px;color:var(--green-dark);">${bestLabel}</td>
     </tr>`;
   }).join('');
+
+  if (card) card.style.display = '';
 }
 
-function amiExportBaselineReport() {
-  const d = _amiBaselineData;
-  if (!d) { alert('Run baseline calculation first.'); return; }
-  const { intervals, meterUid, eventStart, eventEnd, lookback } = d;
+// ── Export ────────────────────────────────────────────────────────────────────
 
-  const avg = arr => arr.length ? (arr.reduce((s,v)=>s+v,0)/arr.length).toFixed(3) : '—';
-  const get = key => intervals.filter(i=>i[key]!=null).map(i=>i[key]);
+function amiExportBaselineReport() {
+  if (!_amiBaselineData || !Object.keys(_blResults).length) { alert('Run calculation first.'); return; }
+  const { meterUid, eventStart, eventEnd, lookback } = _amiBaselineData;
+
+  const allMethods = [
+    ...BL_STANDARD_METHODS.filter(m => _blResults[m.key]).map(m=>({label:m.label, key:m.key, iso:m.iso})),
+    ..._blCustomBaselines.map(b=>({label:b.name, key:b.id, iso:'Custom'}))
+  ];
+
+  const fmt = v => v!=null ? v.toFixed(3).padStart(8) : '       —';
+  const avgKw = key => {
+    const v = (_blResults[key]||[]).filter(r=>r.blKw!=null);
+    return v.length ? v.reduce((s,r)=>s+r.blKw,0)/v.length : null;
+  };
+  const actualAvg = _blActual.filter(r=>r.kw!=null).reduce((s,r,_,a)=>s+r.kw/a.length,0);
 
   const lines = [
     'AMI BASELINE CALCULATOR REPORT',
     `Generated: ${new Date().toLocaleString()}`,
-    '='.repeat(70),
+    '='.repeat(80),
     '',
     'PARAMETERS',
     '-'.repeat(40),
     `Meter:           ${meterUid}`,
     `Event Window:    ${eventStart.toLocaleString()} — ${eventEnd.toLocaleString()}`,
-    `Lookback Period: ${lookback} days`,
-    `Intervals:       ${intervals.length}`,
+    `Lookback:        ${lookback} days`,
+    `Intervals:       ${_blActual.length}`,
     '',
-    'METHOD COMPARISON (avg kW during event window)',
-    '-'.repeat(40),
-    `10-of-10 avg:    ${avg(get('bl10of10'))} kW`,
-    `5-of-10 avg:     ${avg(get('bl5of10'))} kW`,
-    `7-day avg:       ${avg(get('bl7day'))} kW`,
-    `30-day avg:      ${avg(get('bl30day'))} kW`,
-    `Actual avg:      ${avg(get('actualKw'))} kW`,
+    'METHOD SUMMARY',
+    '-'.repeat(60),
+    `${'Method'.padEnd(25)} ${'ISO/Source'.padEnd(10)} ${'Avg kW'.padEnd(10)} ${'Reduction'.padEnd(10)} ${'Pct'}`,
+    '-'.repeat(60),
+    ...allMethods.map(m => {
+      const avg = avgKw(m.key);
+      const red = avg!=null ? Math.max(0,avg-actualAvg) : null;
+      const pct = avg!=null && avg>0 ? (red/avg*100) : null;
+      return `${m.label.padEnd(25)} ${(m.iso||'').padEnd(10)} ${avg!=null?avg.toFixed(3).padEnd(10):'—'.padEnd(10)} ${red!=null?red.toFixed(3).padEnd(10):'—'.padEnd(10)} ${pct!=null?pct.toFixed(1)+'%':'—'}`;
+    }),
+    `${'Actual (event)'.padEnd(25)} ${''.padEnd(10)} ${actualAvg.toFixed(3)}`,
     '',
     'INTERVAL DETAIL',
-    '-'.repeat(70),
-    'Time  | 10-of-10 | 5-of-10  | 7-day    | 30-day   | Actual   | Best Reduction',
-    '-'.repeat(70),
-    ...intervals.map(i => {
-      const fmt = v => v!=null ? v.toFixed(3).padStart(8) : '      —  ';
-      const reductions = [i.bl10of10, i.bl5of10, i.bl7day, i.bl30day]
-        .map(b => b!=null && i.actualKw!=null ? Math.max(0, b - i.actualKw) : null);
-      const best = reductions.filter(r=>r!=null).length
-        ? Math.max(...reductions.filter(r=>r!=null)) : null;
-      const bestLabel = best!=null ? `${best.toFixed(3)} kW` : '—';
-      return `${i.time} | ${fmt(i.bl10of10)} | ${fmt(i.bl5of10)} | ${fmt(i.bl7day)} | ${fmt(i.bl30day)} | ${fmt(i.actualKw)} | ${bestLabel}`;
-    }),
+    '-'.repeat(80),
+    `Time     | Actual   | ${allMethods.map(m=>m.label.slice(0,10).padEnd(10)).join(' | ')}`,
+    '-'.repeat(80),
+    ...Array.from({length:_blActual.length},(_,i)=>
+      `${(_blActual[i]?.time||'—').padEnd(8)} | ${fmt(_blActual[i]?.kw)} | ${allMethods.map(m=>fmt((_blResults[m.key]||[])[i]?.blKw)).join(' | ')}`
+    ),
     '',
-    '='.repeat(70),
+    '='.repeat(80),
     `Load Control Dashboard — Baseline Calculator | Meter: ${meterUid}`,
   ].join('\n');
 
-  const blob = new Blob([lines], { type:'text/plain' });
+  const blob = new Blob([lines],{type:'text/plain'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `Baseline_Report_${meterUid}_${eventStart.toISOString().split('T')[0]}.txt`;
