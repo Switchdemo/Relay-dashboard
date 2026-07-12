@@ -300,6 +300,7 @@ function runTabInit(name) {
   if (name === "ami-meters")   { amiLoadMeters(); }
   if (name === "ami-data")     { amiInitIntervalTab(); }
   if (name === "ami-mv")       { amiInitMVTab(); }
+  if (name === "ami-baseline") { amiInitBaselineTab(); }
   if (name === "ami-settings") { amiLoadSettings(); }
   if (name === "summary")          initSummaryTab();
   if (name === "summary-programs") loadSummaryPrograms();
@@ -26052,6 +26053,7 @@ function initAMITab(sub) {
   if (sub === 'ami-meters')   amiLoadMeters();
   if (sub === 'ami-data')     amiInitIntervalTab();
   if (sub === 'ami-mv')       amiInitMVTab();
+  if (sub === 'ami-baseline') amiInitBaselineTab();
   if (sub === 'ami-settings') amiLoadSettings();
 }
 
@@ -27297,6 +27299,322 @@ function amiExportMVReport() {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `MV_Report_${eventData.name.replace(/\s+/g,'_')}_${fireAt.toISOString().split('T')[0]}.txt`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ── AMI Baseline Calculator ───────────────────────────────────────────────────
+
+let _amiBaselineChart = null;
+let _amiBaselineData  = null;
+
+async function amiInitBaselineTab() {
+  // Populate meter select
+  try {
+    const meters = await supabaseGet('ami_meters?order=created_at.desc&enabled=eq.true');
+    const sel = document.getElementById('bl-meter');
+    if (sel && Array.isArray(meters)) {
+      sel.innerHTML = '<option value="">— Select Meter —</option>' +
+        meters.map(m => `<option value="${m.meter_uid}">${m.utility_name||m.source_type||''} — ${m.meter_uid}</option>`).join('');
+    }
+  } catch(e) {}
+
+  // Default event window — yesterday 2pm-5pm as a placeholder
+  const now  = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const fmt = d => d.toISOString().slice(0,16);
+  const defStart = new Date(yesterday); defStart.setHours(14,0,0,0);
+  const defEnd   = new Date(yesterday); defEnd.setHours(17,0,0,0);
+  const startEl = document.getElementById('bl-event-start');
+  const endEl   = document.getElementById('bl-event-end');
+  if (startEl && !startEl.value) startEl.value = fmt(defStart);
+  if (endEl   && !endEl.value)   endEl.value   = fmt(defEnd);
+}
+
+async function amiRunBaseline() {
+  const meterUid  = document.getElementById('bl-meter')?.value;
+  const startStr  = document.getElementById('bl-event-start')?.value;
+  const endStr    = document.getElementById('bl-event-end')?.value;
+  const lookback  = parseInt(document.getElementById('bl-lookback')?.value || '30');
+  const statusEl  = document.getElementById('bl-status');
+  const emptyEl   = document.getElementById('bl-chart-empty');
+  const resultsEl = document.getElementById('bl-results');
+
+  if (!meterUid) { if (statusEl) statusEl.textContent = '⚠ Select a meter first.'; return; }
+  if (!startStr || !endStr) { if (statusEl) statusEl.textContent = '⚠ Set event window.'; return; }
+
+  const eventStart = new Date(startStr);
+  const eventEnd   = new Date(endStr);
+  if (eventEnd <= eventStart) { if (statusEl) statusEl.textContent = '⚠ End must be after start.'; return; }
+
+  if (statusEl) statusEl.textContent = 'Loading data…';
+  if (emptyEl)  emptyEl.style.display = 'none';
+
+  try {
+    // Fetch actual event-window readings
+    const eventReadings = await supabaseGetPaged(
+      `ami_readings?meter_uid=eq.${encodeURIComponent(meterUid)}&interval_start=gte.${eventStart.toISOString()}&interval_start=lt.${eventEnd.toISOString()}&order=interval_start.asc`,
+      2000
+    );
+
+    if (!Array.isArray(eventReadings) || !eventReadings.length) {
+      if (statusEl) statusEl.textContent = '⚠ No readings found in the event window.';
+      if (emptyEl)  { emptyEl.style.display = ''; emptyEl.textContent = 'No interval data found in the selected event window. Try a different date range.'; }
+      return;
+    }
+
+    // Fetch lookback period readings
+    const lookbackFrom = new Date(eventStart.getTime() - lookback * 86400000);
+    if (statusEl) statusEl.textContent = `Fetching ${lookback} days of historical data…`;
+    const histReadings = await supabaseGetPaged(
+      `ami_readings?meter_uid=eq.${encodeURIComponent(meterUid)}&interval_start=gte.${lookbackFrom.toISOString()}&interval_start=lt.${eventStart.toISOString()}&order=interval_start.asc`,
+      15000
+    );
+
+    if (statusEl) statusEl.textContent = `Calculating baselines from ${histReadings.length} historical readings…`;
+
+    // Group historical readings by hour-of-day and minute
+    // Key: "HH:MM" matching event interval times
+    const byTimeKey = {};
+    histReadings.forEach(r => {
+      const d = new Date(r.interval_start);
+      const key = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      if (!byTimeKey[key]) byTimeKey[key] = [];
+      if (r.kw != null) byTimeKey[key].push({ kw: r.kw, date: d });
+    });
+
+    // For each event interval, calculate all four baseline methods
+    const intervals = eventReadings.map(r => {
+      const d   = new Date(r.interval_start);
+      const key = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      const hist = byTimeKey[key] || [];
+      const vals = hist.map(h => h.kw).sort((a,b) => a-b);
+
+      // 10-of-10: average of 10 highest values in lookback
+      const top10    = vals.slice(-10);
+      const bl10of10 = top10.length ? top10.reduce((s,v)=>s+v,0)/top10.length : null;
+
+      // 5-of-10: average of 5 highest values (more conservative)
+      const top5     = vals.slice(-5);
+      const bl5of10  = top5.length ? top5.reduce((s,v)=>s+v,0)/top5.length : null;
+
+      // 7-day: average of same time slot over last 7 days only
+      const sevenDaysAgo = new Date(eventStart.getTime() - 7 * 86400000);
+      const last7 = hist.filter(h => h.date >= sevenDaysAgo).map(h => h.kw);
+      const bl7day = last7.length ? last7.reduce((s,v)=>s+v,0)/last7.length : null;
+
+      // 30-day: straight average of all same-time values
+      const bl30day = vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null;
+
+      const actualKw = r.kw ?? (r.kwh != null ? r.kwh / ((new Date(r.interval_end) - d) / 3600000) : null);
+
+      return {
+        time:     d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),
+        fullTime: d,
+        actualKw,
+        bl10of10,
+        bl5of10,
+        bl7day,
+        bl30day,
+        histCount: vals.length
+      };
+    });
+
+    _amiBaselineData = { intervals, meterUid, eventStart, eventEnd, lookback };
+
+    // Render
+    amiRenderBaselineChart(intervals);
+    amiRenderBaselineTable(intervals);
+    amiRenderBaselineKPIs(intervals);
+
+    if (resultsEl) resultsEl.style.display = '';
+    if (statusEl)  statusEl.textContent = `${intervals.length} intervals | ${histReadings.length} historical readings used`;
+
+  } catch(e) {
+    if (statusEl) statusEl.textContent = `Error: ${e.message}`;
+    console.error('amiRunBaseline:', e);
+  }
+}
+
+function amiRenderBaselineChart(intervals) {
+  if (_amiBaselineChart) { _amiBaselineChart.destroy(); _amiBaselineChart = null; }
+  const ctx = document.getElementById('bl-chart')?.getContext('2d');
+  if (!ctx) return;
+
+  const labels = intervals.map(i => i.time);
+
+  _amiBaselineChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: '10-of-10',
+          data:  intervals.map(i => i.bl10of10?.toFixed(3)),
+          borderColor: '#3B82F6', backgroundColor: 'rgba(59,130,246,0.05)',
+          borderWidth: 2, pointRadius: 3, fill: false, tension: 0.3
+        },
+        {
+          label: '5-of-10',
+          data:  intervals.map(i => i.bl5of10?.toFixed(3)),
+          borderColor: '#10B981', backgroundColor: 'rgba(16,185,129,0.05)',
+          borderWidth: 2, pointRadius: 3, fill: false, tension: 0.3
+        },
+        {
+          label: '7-day avg',
+          data:  intervals.map(i => i.bl7day?.toFixed(3)),
+          borderColor: '#F59E0B', backgroundColor: 'rgba(245,158,11,0.05)',
+          borderWidth: 2, pointRadius: 3, fill: false, tension: 0.3,
+          borderDash: [5,3]
+        },
+        {
+          label: '30-day avg',
+          data:  intervals.map(i => i.bl30day?.toFixed(3)),
+          borderColor: '#EF4444', backgroundColor: 'rgba(239,68,68,0.05)',
+          borderWidth: 2, pointRadius: 3, fill: false, tension: 0.3,
+          borderDash: [3,3]
+        },
+        {
+          label: 'Actual (event)',
+          data:  intervals.map(i => i.actualKw?.toFixed(3)),
+          borderColor: '#6B7280', backgroundColor: 'rgba(107,114,128,0.1)',
+          borderWidth: 2.5, pointRadius: 3, fill: true, tension: 0.2
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { font: { size: 11 }, usePointStyle: true } },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y != null ? Number(ctx.parsed.y).toFixed(3) + ' kW' : '—'}`
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { font: { size: 10 }, maxTicksLimit: 12 } },
+        y: { title: { display: true, text: 'kW', font: { size: 11 } }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+function amiUpdateBaselineChart() {
+  if (!_amiBaselineChart) return;
+  const show10of10 = document.getElementById('bl-show-10of10')?.checked;
+  const show5of10  = document.getElementById('bl-show-5of10')?.checked;
+  const show7day   = document.getElementById('bl-show-7day')?.checked;
+  const show30day  = document.getElementById('bl-show-30day')?.checked;
+  const showActual = document.getElementById('bl-show-actual')?.checked;
+  const visibility = [show10of10, show5of10, show7day, show30day, showActual];
+  _amiBaselineChart.data.datasets.forEach((ds, i) => { ds.hidden = !visibility[i]; });
+  _amiBaselineChart.update();
+}
+
+function amiRenderBaselineKPIs(intervals) {
+  const el = document.getElementById('bl-kpi-grid');
+  if (!el) return;
+
+  const avg = (arr) => arr.length ? arr.reduce((s,v)=>s+v,0)/arr.length : null;
+  const methods = [
+    { key: 'bl10of10', label: '10-of-10',  color: '#3B82F6' },
+    { key: 'bl5of10',  label: '5-of-10',   color: '#10B981' },
+    { key: 'bl7day',   label: '7-day avg', color: '#F59E0B' },
+    { key: 'bl30day',  label: '30-day avg', color: '#EF4444' },
+  ];
+
+  const actualAvg = avg(intervals.filter(i=>i.actualKw!=null).map(i=>i.actualKw));
+
+  el.innerHTML = methods.map(m => {
+    const vals = intervals.filter(i=>i[m.key]!=null).map(i=>i[m.key]);
+    const blAvg = avg(vals);
+    const reduction = blAvg != null && actualAvg != null ? Math.max(0, blAvg - actualAvg) : null;
+    const reductionPct = blAvg != null && blAvg > 0 && reduction != null ? (reduction/blAvg*100) : null;
+    return `<div class="sched-card" style="padding:12px;border-left:3px solid ${m.color};">
+      <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">${m.label} Baseline</div>
+      <div style="font-size:20px;font-weight:700;color:${m.color};">${blAvg!=null ? blAvg.toFixed(2)+' kW' : '—'}</div>
+      <div style="font-size:11px;color:var(--text-hint);margin-top:4px;">
+        ${reduction!=null ? `Implies <strong style="color:var(--green-dark);">${reduction.toFixed(2)} kW</strong> reduction (${reductionPct?.toFixed(1)}%)` : '—'}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function amiRenderBaselineTable(intervals) {
+  const tbody = document.getElementById('bl-table-body');
+  if (!tbody) return;
+
+  tbody.innerHTML = intervals.map(i => {
+    const methods = [i.bl10of10, i.bl5of10, i.bl7day, i.bl30day];
+    const reductions = methods.map(b => b!=null && i.actualKw!=null ? Math.max(0, b - i.actualKw) : null);
+    const bestReduction = reductions.filter(r=>r!=null).length ? Math.max(...reductions.filter(r=>r!=null)) : null;
+    const bestMethod = ['10-of-10','5-of-10','7-day','30-day'][reductions.indexOf(bestReduction)];
+    const fmt = v => v!=null ? v.toFixed(3) : '—';
+    return `<tr>
+      <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);font-size:11px;">${i.time}</td>
+      <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);text-align:right;color:#3B82F6;">${fmt(i.bl10of10)}</td>
+      <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);text-align:right;color:#10B981;">${fmt(i.bl5of10)}</td>
+      <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);text-align:right;color:#F59E0B;">${fmt(i.bl7day)}</td>
+      <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);text-align:right;color:#EF4444;">${fmt(i.bl30day)}</td>
+      <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);text-align:right;color:var(--text-secondary);font-weight:600;">${fmt(i.actualKw)}</td>
+      <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);text-align:right;color:var(--green-dark);">${bestReduction!=null ? bestReduction.toFixed(3)+' kW ('+bestMethod+')' : '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function amiExportBaselineReport() {
+  const d = _amiBaselineData;
+  if (!d) { alert('Run baseline calculation first.'); return; }
+  const { intervals, meterUid, eventStart, eventEnd, lookback } = d;
+
+  const avg = arr => arr.length ? (arr.reduce((s,v)=>s+v,0)/arr.length).toFixed(3) : '—';
+  const get = key => intervals.filter(i=>i[key]!=null).map(i=>i[key]);
+
+  const lines = [
+    'AMI BASELINE CALCULATOR REPORT',
+    `Generated: ${new Date().toLocaleString()}`,
+    '='.repeat(70),
+    '',
+    'PARAMETERS',
+    '-'.repeat(40),
+    `Meter:           ${meterUid}`,
+    `Event Window:    ${eventStart.toLocaleString()} — ${eventEnd.toLocaleString()}`,
+    `Lookback Period: ${lookback} days`,
+    `Intervals:       ${intervals.length}`,
+    '',
+    'METHOD COMPARISON (avg kW during event window)',
+    '-'.repeat(40),
+    `10-of-10 avg:    ${avg(get('bl10of10'))} kW`,
+    `5-of-10 avg:     ${avg(get('bl5of10'))} kW`,
+    `7-day avg:       ${avg(get('bl7day'))} kW`,
+    `30-day avg:      ${avg(get('bl30day'))} kW`,
+    `Actual avg:      ${avg(get('actualKw'))} kW`,
+    '',
+    'INTERVAL DETAIL',
+    '-'.repeat(70),
+    'Time  | 10-of-10 | 5-of-10  | 7-day    | 30-day   | Actual   | Best Reduction',
+    '-'.repeat(70),
+    ...intervals.map(i => {
+      const fmt = v => v!=null ? v.toFixed(3).padStart(8) : '      —  ';
+      const reductions = [i.bl10of10, i.bl5of10, i.bl7day, i.bl30day]
+        .map(b => b!=null && i.actualKw!=null ? Math.max(0, b - i.actualKw) : null);
+      const best = reductions.filter(r=>r!=null).length
+        ? Math.max(...reductions.filter(r=>r!=null)) : null;
+      const bestLabel = best!=null ? `${best.toFixed(3)} kW` : '—';
+      return `${i.time} | ${fmt(i.bl10of10)} | ${fmt(i.bl5of10)} | ${fmt(i.bl7day)} | ${fmt(i.bl30day)} | ${fmt(i.actualKw)} | ${bestLabel}`;
+    }),
+    '',
+    '='.repeat(70),
+    `Load Control Dashboard — Baseline Calculator | Meter: ${meterUid}`,
+  ].join('\n');
+
+  const blob = new Blob([lines], { type:'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `Baseline_Report_${meterUid}_${eventStart.toISOString().split('T')[0]}.txt`;
   a.click();
   URL.revokeObjectURL(a.href);
 }
