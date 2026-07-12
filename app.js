@@ -260,6 +260,7 @@ function switchMain(main, btn) {
   document.getElementById("sub-tabs-devices").style.display = main === "devices" ? "flex" : "none";
   document.getElementById("sub-tabs-admin").style.display   = main === "admin"   ? "flex" : "none";
   document.getElementById("sub-tabs-monitor").style.display = main === "monitor" ? "flex" : "none";
+  document.getElementById("sub-tabs-ami").style.display     = main === "ami"     ? "flex" : "none";
   if (main === "summary")  { activatePane("summary");          initSummaryTab();    }
   if (main === "programs") { activatePane("summary-programs"); loadSummaryPrograms(); }
   else if (main === "weather") { activatePane("weather"); initWeatherTab(); }
