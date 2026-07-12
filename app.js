@@ -26474,10 +26474,28 @@ async function amiIngestCSV() {
   const idx = col => headers.indexOf(col);
   const records = [];
 
+  // Robust CSV row parser — handles quoted fields, commas inside quotes, empty fields
+  function parseCSVRow(line) {
+    const result = [];
+    let cur = '', inQuote = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQuote && line[i+1] === '"') { cur += '"'; i++; }
+        else inQuote = !inQuote;
+      } else if (ch === ',' && !inQuote) {
+        result.push(cur.trim()); cur = '';
+      } else {
+        cur += ch;
+      }
+    }
+    result.push(cur.trim());
+    return result;
+  }
+
   for (const line of lines) {
     if (!line.trim()) continue;
-    // Handle quoted CSV values
-    const cols = line.match(/(".*?"|[^,]+|(?<=,)(?=,)|^(?=,)|(?<=,)$)/g)?.map(c => c.replace(/^"|"$/g,'').trim()) || line.split(',').map(c => c.trim());
+    const cols = parseCSVRow(line);
 
     const startRaw = cols[idx(startCol)];
     if (!startRaw) continue;
@@ -26537,7 +26555,7 @@ async function amiIngestCSV() {
 // ── Shared Insert ─────────────────────────────────────────────────────────────
 
 async function amiBatchInsertReadings(records, sourceType, progBar, progLbl) {
-  const BATCH = 100;
+  const BATCH = 250;
   let inserted = 0;
 
   for (let i = 0; i < records.length; i += BATCH) {
