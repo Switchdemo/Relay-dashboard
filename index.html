@@ -3326,106 +3326,119 @@
 <!-- AMI Baseline Calculator -->
 <div class="tab-pane" id="tab-ami-baseline">
   <div class="scroll-content">
-    <div style="max-width:1100px;margin:0 auto;padding:1rem;">
+    <div style="max-width:1200px;margin:0 auto;padding:1rem;">
 
       <div style="margin-bottom:1rem;">
         <div style="font-size:20px;font-weight:700;color:var(--text-primary);">📐 Baseline Calculator</div>
-        <div style="font-size:12px;color:var(--text-hint);margin-top:4px;">Compare all baseline methods side by side for a selected meter, event window, and date range. Use this to determine which method best represents normal load before running M&amp;V.</div>
+        <div style="font-size:12px;color:var(--text-hint);margin-top:4px;">Compare industry-standard CBL methods side by side or build a custom baseline. Based on CAISO, PJM, NYISO, ERCOT, ISO-NE, AEMO, and KREC methodologies.</div>
       </div>
 
-      <!-- Controls -->
-      <div class="sched-card" style="margin-bottom:1rem;">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px;align-items:end;">
-          <div>
-            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Meter</label>
-            <select id="bl-meter" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
-              <option value="">— Select Meter —</option>
-            </select>
+      <div style="display:grid;grid-template-columns:340px 1fr;gap:1rem;align-items:start;">
+
+        <!-- LEFT PANEL — controls -->
+        <div style="display:flex;flex-direction:column;gap:10px;">
+
+          <!-- Meter & Window -->
+          <div class="sched-card">
+            <div class="sched-card-header" style="margin-bottom:10px;"><div class="sched-card-title">Event Parameters</div></div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div>
+                <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Meter</label>
+                <select id="bl-meter" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"><option value="">— Select —</option></select>
+              </div>
+              <div>
+                <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Event Start</label>
+                <input type="datetime-local" id="bl-event-start" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              </div>
+              <div>
+                <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Event End</label>
+                <input type="datetime-local" id="bl-event-end" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              </div>
+              <div>
+                <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Lookback Window</label>
+                <select id="bl-lookback" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                  <option value="30" selected>30 days</option>
+                  <option value="45">45 days</option>
+                  <option value="60">60 days</option>
+                  <option value="90">90 days</option>
+                </select>
+              </div>
+            </div>
           </div>
-          <div>
-            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Event Window Start</label>
-            <input type="datetime-local" id="bl-event-start" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+
+          <!-- Standard Methods -->
+          <div class="sched-card">
+            <div class="sched-card-header" style="margin-bottom:10px;">
+              <div class="sched-card-title">Standard Methods</div>
+              <button class="queue-refresh" onclick="blToggleAllStandard()" style="font-size:10px;">Toggle All</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;" id="bl-standard-methods">
+              <!-- Populated by JS -->
+            </div>
           </div>
-          <div>
-            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Event Window End</label>
-            <input type="datetime-local" id="bl-event-end" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+
+          <!-- Custom Baseline Builder -->
+          <div class="sched-card">
+            <div class="sched-card-header" style="margin-bottom:10px;">
+              <div class="sched-card-title">Custom Baseline</div>
+              <button class="queue-refresh" onclick="blAddCustomBaseline()" style="color:var(--green-dark);border-color:var(--green);font-size:10px;">+ Add</button>
+            </div>
+            <div id="bl-custom-list" style="display:flex;flex-direction:column;gap:8px;">
+              <div style="font-size:11px;color:var(--text-hint);">Click + Add to build a custom baseline method.</div>
+            </div>
           </div>
-          <div>
-            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Lookback Period</label>
-            <select id="bl-lookback" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
-              <option value="30" selected>30 days</option>
-              <option value="45">45 days</option>
-              <option value="60">60 days</option>
-              <option value="90">90 days</option>
-            </select>
+
+          <!-- Saved Baselines -->
+          <div class="sched-card">
+            <div class="sched-card-header" style="margin-bottom:10px;">
+              <div class="sched-card-title">💾 Saved Baselines</div>
+              <button class="queue-refresh" onclick="blLoadSavedBaselines()" style="font-size:10px;">🔄</button>
+            </div>
+            <div id="bl-saved-list" style="font-size:11px;color:var(--text-hint);">No saved baselines yet.</div>
           </div>
-          <button class="queue-refresh" onclick="amiRunBaseline()" style="white-space:nowrap;">📐 Calculate</button>
+
+          <button class="queue-refresh" onclick="amiRunBaseline()" style="width:100%;padding:10px;font-size:13px;font-weight:600;background:var(--text-primary);color:#fff;border-color:var(--text-primary);">📐 Calculate All</button>
+          <span id="bl-status" style="font-size:11px;color:var(--text-hint);font-family:monospace;text-align:center;"></span>
         </div>
 
-        <!-- Method toggles -->
-        <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap;align-items:center;">
-          <span style="font-size:11px;color:var(--text-hint);font-weight:600;">Show methods:</span>
-          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
-            <input type="checkbox" id="bl-show-10of10" checked onchange="amiUpdateBaselineChart()">
-            <span style="color:#3B82F6;">■</span> 10-of-10
-          </label>
-          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
-            <input type="checkbox" id="bl-show-5of10" checked onchange="amiUpdateBaselineChart()">
-            <span style="color:#10B981;">■</span> 5-of-10
-          </label>
-          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
-            <input type="checkbox" id="bl-show-7day" checked onchange="amiUpdateBaselineChart()">
-            <span style="color:#F59E0B;">■</span> 7-day avg
-          </label>
-          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
-            <input type="checkbox" id="bl-show-30day" checked onchange="amiUpdateBaselineChart()">
-            <span style="color:#EF4444;">■</span> 30-day avg
-          </label>
-          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
-            <input type="checkbox" id="bl-show-actual" checked onchange="amiUpdateBaselineChart()">
-            <span style="color:#6B7280;">■</span> Actual (event)
-          </label>
-          <span id="bl-status" style="font-size:11px;color:var(--text-hint);margin-left:auto;font-family:monospace;"></span>
-        </div>
-      </div>
+        <!-- RIGHT PANEL — results -->
+        <div style="display:flex;flex-direction:column;gap:10px;">
 
-      <!-- Chart -->
-      <div class="sched-card" style="margin-bottom:1rem;">
-        <div class="sched-card-header">
-          <div class="sched-card-title">Baseline Method Comparison</div>
-          <button class="queue-refresh" onclick="amiExportBaselineReport()" style="color:var(--green-dark);border-color:var(--green);">📄 Export</button>
-        </div>
-        <div style="position:relative;height:320px;">
-          <canvas id="bl-chart"></canvas>
-          <div id="bl-chart-empty" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-hint);font-size:13px;">
-            Select a meter and event window, then click Calculate
+          <!-- Chart -->
+          <div class="sched-card">
+            <div class="sched-card-header">
+              <div class="sched-card-title">Method Comparison Chart</div>
+              <div style="display:flex;gap:6px;">
+                <button class="queue-refresh" onclick="amiExportBaselineReport()" style="color:var(--green-dark);border-color:var(--green);font-size:11px;">📄 Export</button>
+                <button class="queue-refresh" onclick="blSaveCurrentAsBaseline()" style="font-size:11px;">💾 Save</button>
+              </div>
+            </div>
+            <div style="position:relative;height:300px;">
+              <canvas id="bl-chart"></canvas>
+              <div id="bl-chart-empty" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-hint);font-size:13px;">
+                Configure parameters and click Calculate All
+              </div>
+            </div>
+            <!-- Visibility toggles -->
+            <div id="bl-legend-toggles" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border);"></div>
           </div>
-        </div>
-      </div>
 
-      <!-- Method comparison table -->
-      <div class="sched-card" style="margin-bottom:1rem;" id="bl-results" style="display:none;">
-        <div class="sched-card-header">
-          <div class="sched-card-title">Method Comparison Summary</div>
-        </div>
+          <!-- KPI comparison -->
+          <div id="bl-kpi-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;"></div>
 
-        <!-- KPI grid -->
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:1rem;" id="bl-kpi-grid"></div>
+          <!-- Detail table -->
+          <div class="sched-card" id="bl-table-card" style="display:none;">
+            <div class="sched-card-header">
+              <div class="sched-card-title">Interval Detail</div>
+            </div>
+            <div style="overflow-x:auto;max-height:320px;overflow-y:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:11px;">
+                <thead id="bl-table-head" style="position:sticky;top:0;background:var(--surface);"></thead>
+                <tbody id="bl-table-body"></tbody>
+              </table>
+            </div>
+          </div>
 
-        <!-- Detail table -->
-        <div style="overflow-x:auto;">
-          <table style="width:100%;border-collapse:collapse;font-size:11px;">
-            <thead><tr>
-              <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Interval</th>
-              <th style="text-align:right;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:#3B82F6;">10-of-10 kW</th>
-              <th style="text-align:right;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:#10B981;">5-of-10 kW</th>
-              <th style="text-align:right;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:#F59E0B;">7-day kW</th>
-              <th style="text-align:right;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:#EF4444;">30-day kW</th>
-              <th style="text-align:right;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Actual kW</th>
-              <th style="text-align:right;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--green-dark);">Best Reduction</th>
-            </tr></thead>
-            <tbody id="bl-table-body"></tbody>
-          </table>
         </div>
       </div>
 
