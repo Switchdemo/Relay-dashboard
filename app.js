@@ -298,6 +298,8 @@ function activateSubBtn(main, sub) {
 function runTabInit(name) {
   if (name === "ami-ingest")   { amiInitIngest(); }
   if (name === "ami-meters")   { amiLoadMeters(); }
+  if (name === "ami-data")     { amiInitIntervalTab(); }
+  if (name === "ami-mv")       { amiInitMVTab(); }
   if (name === "ami-settings") { amiLoadSettings(); }
   if (name === "summary")          initSummaryTab();
   if (name === "summary-programs") loadSummaryPrograms();
@@ -26047,8 +26049,10 @@ const AMI_CSV_TEMPLATES = {
 
 function initAMITab(sub) {
   if (sub === 'ami-ingest')   amiInitIngest();
-  if (sub === 'ami-settings') amiLoadSettings();
   if (sub === 'ami-meters')   amiLoadMeters();
+  if (sub === 'ami-data')     amiInitIntervalTab();
+  if (sub === 'ami-mv')       amiInitMVTab();
+  if (sub === 'ami-settings') amiLoadSettings();
 }
 
 function amiInitIngest() {
@@ -26693,4 +26697,581 @@ async function amiSaveSettings() {
   }
   const saved = document.getElementById('ami-settings-saved');
   if (saved) { saved.style.display = 'inline-block'; setTimeout(() => saved.style.display = 'none', 2500); }
+}
+
+// ── AMI Meters Tab ────────────────────────────────────────────────────────────
+
+async function amiLoadMeters() {
+  const tableEl  = document.getElementById('ami-meters-table');
+  const countEl  = document.getElementById('ami-meters-count');
+  if (!tableEl) return;
+  tableEl.innerHTML = '<div class="sched-empty">Loading…</div>';
+
+  try {
+    const meters = await supabaseGet('ami_meters?order=created_at.desc');
+    if (!Array.isArray(meters) || !meters.length) {
+      tableEl.innerHTML = '<div class="sched-empty">No meters registered yet. Import data in the Ingest tab to add meters automatically.</div>';
+      if (countEl) countEl.textContent = '';
+      return;
+    }
+
+    if (countEl) countEl.textContent = `${meters.length} meter${meters.length !== 1 ? 's' : ''}`;
+
+    // Also load reading counts per meter
+    const counts = {};
+    try {
+      const readingCounts = await supabaseGet('ami_readings?select=meter_uid&order=meter_uid');
+      if (Array.isArray(readingCounts)) {
+        readingCounts.forEach(r => { counts[r.meter_uid] = (counts[r.meter_uid] || 0) + 1; });
+      }
+    } catch(e) {}
+
+    const srcBadge = s => ({
+      utilityapi:  '<span style="font-size:10px;padding:2px 6px;border-radius:8px;background:var(--blue-bg);color:var(--blue-dark);">UtilityAPI</span>',
+      greenbutton: '<span style="font-size:10px;padding:2px 6px;border-radius:8px;background:var(--green-bg);color:var(--green-dark);">Green Button</span>',
+      csv:         '<span style="font-size:10px;padding:2px 6px;border-radius:8px;background:var(--surface2);color:var(--text-hint);">CSV</span>'
+    }[s] || `<span style="font-size:10px;padding:2px 6px;border-radius:8px;background:var(--surface2);">${s||'—'}</span>`);
+
+    tableEl.innerHTML = `
+      <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead><tr>
+          <th style="text-align:left;padding:7px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Meter UID</th>
+          <th style="text-align:left;padding:7px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Utility</th>
+          <th style="text-align:left;padding:7px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Source</th>
+          <th style="text-align:left;padding:7px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Address</th>
+          <th style="text-align:left;padding:7px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Tariff</th>
+          <th style="text-align:center;padding:7px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Intervals</th>
+          <th style="text-align:center;padding:7px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Interval (min)</th>
+          <th style="text-align:left;padding:7px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Added</th>
+        </tr></thead>
+        <tbody>
+          ${meters.map(m => `<tr>
+            <td style="padding:7px 8px;border-bottom:0.5px solid var(--border);font-family:monospace;font-size:11px;">${m.meter_uid}</td>
+            <td style="padding:7px 8px;border-bottom:0.5px solid var(--border);">${m.utility_name || '—'}</td>
+            <td style="padding:7px 8px;border-bottom:0.5px solid var(--border);">${srcBadge(m.source_type)}</td>
+            <td style="padding:7px 8px;border-bottom:0.5px solid var(--border);font-size:11px;color:var(--text-hint);">${m.service_address || '—'}</td>
+            <td style="padding:7px 8px;border-bottom:0.5px solid var(--border);font-size:11px;color:var(--text-hint);">${m.tariff || '—'}</td>
+            <td style="padding:7px 8px;border-bottom:0.5px solid var(--border);text-align:center;">${counts[m.meter_uid] || 0}</td>
+            <td style="padding:7px 8px;border-bottom:0.5px solid var(--border);text-align:center;">${m.interval_length || '—'}</td>
+            <td style="padding:7px 8px;border-bottom:0.5px solid var(--border);font-size:11px;color:var(--text-hint);">${m.created_at ? new Date(m.created_at).toLocaleDateString() : '—'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>`;
+
+    // Populate correlation meter select
+    await amiLoadCorrelations();
+    const mSel = document.getElementById('ami-corr-meter');
+    if (mSel) {
+      mSel.innerHTML = '<option value="">— Select Meter —</option>' +
+        meters.map(m => `<option value="${m.meter_uid}">${m.utility_name || m.source_type || ''} — ${m.meter_uid}</option>`).join('');
+    }
+
+  } catch(e) {
+    if (tableEl) tableEl.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error: ${e.message}</div>`;
+    console.error('amiLoadMeters:', e);
+  }
+}
+
+function amiShowCorrelationForm() {
+  const form = document.getElementById('ami-corr-form');
+  if (!form) return;
+  form.style.display = form.style.display === 'none' ? '' : 'none';
+  // Populate device select
+  const dSel = document.getElementById('ami-corr-device');
+  if (dSel) {
+    dSel.innerHTML = '<option value="">— Select Device —</option>' +
+      (DEVICES || []).map(d => `<option value="${d.uid}">${d.name || d.uid}</option>`).join('');
+  }
+}
+
+async function amiSaveCorrelation() {
+  const meterUid  = document.getElementById('ami-corr-meter')?.value;
+  const deviceUid = document.getElementById('ami-corr-device')?.value;
+  const corrType  = document.getElementById('ami-corr-type')?.value || 'one_to_one';
+  const notes     = document.getElementById('ami-corr-notes')?.value?.trim() || null;
+  const statusEl  = document.getElementById('ami-corr-status');
+
+  if (!meterUid || !deviceUid) {
+    if (statusEl) statusEl.textContent = '⚠ Select both a meter and a device.';
+    return;
+  }
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/ami_meter_devices?on_conflict=meter_uid,device_uid`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=minimal'
+      },
+      body: JSON.stringify({ meter_uid: meterUid, device_uid: deviceUid, corr_type: corrType, notes })
+    });
+    if (!res.ok) throw new Error(await res.text());
+    if (statusEl) statusEl.textContent = '✅ Correlation saved';
+    setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2000);
+    document.getElementById('ami-corr-form').style.display = 'none';
+    await amiLoadCorrelations();
+  } catch(e) {
+    if (statusEl) statusEl.textContent = `❌ ${e.message}`;
+  }
+}
+
+async function amiLoadCorrelations() {
+  const tableEl = document.getElementById('ami-correlations-table');
+  if (!tableEl) return;
+  try {
+    const rows = await supabaseGet('ami_meter_devices?order=created_at.desc');
+    if (!Array.isArray(rows) || !rows.length) {
+      tableEl.innerHTML = '<div class="sched-empty">No device correlations configured yet.</div>';
+      return;
+    }
+    tableEl.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">
+        <thead><tr>
+          <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Meter UID</th>
+          <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Device</th>
+          <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Type</th>
+          <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Notes</th>
+          <th style="padding:6px 8px;border-bottom:0.5px solid var(--border-md);"></th>
+        </tr></thead>
+        <tbody>
+          ${rows.map(r => {
+            const dev = (DEVICES||[]).find(d => d.uid === r.device_uid);
+            return `<tr>
+              <td style="padding:6px 8px;border-bottom:0.5px solid var(--border);font-family:monospace;font-size:11px;">${r.meter_uid}</td>
+              <td style="padding:6px 8px;border-bottom:0.5px solid var(--border);">${dev?.name || r.device_uid}</td>
+              <td style="padding:6px 8px;border-bottom:0.5px solid var(--border);font-size:11px;color:var(--text-hint);">${r.corr_type?.replace('_',' ') || '—'}</td>
+              <td style="padding:6px 8px;border-bottom:0.5px solid var(--border);font-size:11px;color:var(--text-hint);">${r.notes || '—'}</td>
+              <td style="padding:6px 8px;border-bottom:0.5px solid var(--border);text-align:right;">
+                <button onclick="amiDeleteCorrelation(${r.id})" style="padding:3px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--red);background:transparent;color:var(--red);font-size:10px;cursor:pointer;">Remove</button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  } catch(e) { console.error('amiLoadCorrelations:', e); }
+}
+
+async function amiDeleteCorrelation(id) {
+  if (!confirm('Remove this correlation?')) return;
+  await supabaseDelete('ami_meter_devices', `id=eq.${id}`);
+  await amiLoadCorrelations();
+}
+
+// ── AMI Interval Data Chart ───────────────────────────────────────────────────
+
+let _amiIntervalChart = null;
+let _amiChartData     = null;
+
+async function amiInitIntervalTab() {
+  // Set default date range (last 30 days)
+  const to   = new Date();
+  const from = new Date(to.getTime() - 30 * 86400000);
+  const fmt  = d => d.toISOString().split('T')[0];
+  const fromEl = document.getElementById('ami-chart-from');
+  const toEl   = document.getElementById('ami-chart-to');
+  if (fromEl && !fromEl.value) fromEl.value = fmt(from);
+  if (toEl   && !toEl.value)   toEl.value   = fmt(to);
+
+  // Populate meter select
+  try {
+    const meters = await supabaseGet('ami_meters?order=created_at.desc&enabled=eq.true');
+    const sel = document.getElementById('ami-chart-meter');
+    if (sel && Array.isArray(meters)) {
+      sel.innerHTML = '<option value="">— Select Meter —</option>' +
+        meters.map(m => `<option value="${m.meter_uid}">${m.utility_name||m.source_type||''} — ${m.meter_uid}</option>`).join('');
+    }
+  } catch(e) {}
+}
+
+function amiChartPopulateDevices() {
+  const meterUid = document.getElementById('ami-chart-meter')?.value;
+  const sel = document.getElementById('ami-chart-device');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— None —</option>' +
+    (DEVICES||[]).map(d => `<option value="${d.uid}">${d.name || d.uid}</option>`).join('');
+}
+
+async function amiLoadIntervalChart() {
+  const meterUid = document.getElementById('ami-chart-meter')?.value;
+  const deviceUid = document.getElementById('ami-chart-device')?.value;
+  const fromDate  = document.getElementById('ami-chart-from')?.value;
+  const toDate    = document.getElementById('ami-chart-to')?.value;
+  const statusEl  = document.getElementById('ami-chart-status');
+  const emptyEl   = document.getElementById('ami-chart-empty');
+
+  if (!meterUid) { if (statusEl) statusEl.textContent = '⚠ Select a meter first.'; return; }
+  if (!fromDate || !toDate) { if (statusEl) statusEl.textContent = '⚠ Set a date range.'; return; }
+
+  if (statusEl) statusEl.textContent = 'Loading…';
+  if (emptyEl)  emptyEl.style.display = 'none';
+
+  try {
+    // Fetch AMI readings
+    const readings = await supabaseGet(
+      `ami_readings?meter_uid=eq.${encodeURIComponent(meterUid)}&interval_start=gte.${fromDate}T00:00:00Z&interval_start=lte.${toDate}T23:59:59Z&order=interval_start.asc&limit=2000`
+    );
+
+    if (!Array.isArray(readings) || !readings.length) {
+      if (statusEl) statusEl.textContent = '⚠ No interval data in this date range.';
+      if (emptyEl)  emptyEl.style.display = '';
+      emptyEl.textContent = 'No interval data found for selected meter and date range.';
+      return;
+    }
+
+    // Fetch device relay readings if a device is selected
+    let relayReadings = [];
+    if (deviceUid) {
+      relayReadings = await supabaseGet(
+        `device_readings?device_uid=eq.${encodeURIComponent(deviceUid)}&recorded_at=gte.${fromDate}T00:00:00Z&recorded_at=lte.${toDate}T23:59:59Z&order=recorded_at.asc&limit=2000`
+      ).catch(() => []);
+    }
+
+    _amiChartData = { readings, relayReadings, meterUid, deviceUid };
+
+    // Build chart datasets
+    const labels = readings.map(r => new Date(r.interval_start).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}));
+    const kwhData = readings.map(r => r.kwh);
+    const kwData  = readings.map(r => r.kw);
+
+    // Map relay state to interval timestamps
+    const relayMap = {};
+    relayReadings.forEach(r => {
+      const key = new Date(r.recorded_at).toISOString().slice(0,16);
+      relayMap[key] = (r.relay_status_r1 > 0 || r.relay_status_r2 > 0 || r.relay_active_r1 || r.relay_active_r2) ? 1 : 0;
+    });
+    const relayData = readings.map(r => {
+      const key = new Date(r.interval_start).toISOString().slice(0,16);
+      return relayMap[key] ?? null;
+    });
+
+    // Destroy existing chart
+    if (_amiIntervalChart) { _amiIntervalChart.destroy(); _amiIntervalChart = null; }
+
+    const ctx = document.getElementById('ami-interval-chart')?.getContext('2d');
+    if (!ctx) return;
+
+    _amiIntervalChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'kWh',
+            data: kwhData,
+            borderColor: 'var(--blue-dark)',
+            backgroundColor: 'rgba(56,127,214,0.08)',
+            borderWidth: 1.5,
+            pointRadius: readings.length > 200 ? 0 : 2,
+            fill: true,
+            yAxisID: 'y',
+            hidden: false
+          },
+          {
+            label: 'kW',
+            data: kwData,
+            borderColor: 'var(--green-dark)',
+            backgroundColor: 'transparent',
+            borderWidth: 1.5,
+            pointRadius: 0,
+            fill: false,
+            yAxisID: 'y',
+            hidden: false
+          },
+          ...(deviceUid ? [{
+            label: 'Relay Active',
+            data: relayData,
+            borderColor: 'var(--red)',
+            backgroundColor: 'rgba(226,75,74,0.15)',
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: true,
+            stepped: true,
+            yAxisID: 'y2',
+            hidden: false
+          }] : [])
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'top', labels: { font: { size: 11 } } },
+          tooltip: { callbacks: {
+            label: ctx => {
+              if (ctx.dataset.label === 'Relay Active') return ctx.parsed.y === 1 ? 'Relay: ON' : ctx.parsed.y === 0 ? 'Relay: OFF' : '';
+              return `${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(3)}`;
+            }
+          }}
+        },
+        scales: {
+          x: { ticks: { font: { size: 10 }, maxTicksLimit: 12 } },
+          y: { title: { display: true, text: 'kWh / kW', font: { size: 11 } }, beginAtZero: true },
+          ...(deviceUid ? { y2: { position: 'right', min: 0, max: 1.5, ticks: { display: false }, grid: { display: false } } } : {})
+        }
+      }
+    });
+
+    // Stats
+    const totalKwh = readings.reduce((s,r) => s + (r.kwh||0), 0);
+    const validKw  = readings.filter(r => r.kw != null).map(r => r.kw);
+    const avgKw    = validKw.length ? validKw.reduce((s,v) => s+v,0) / validKw.length : 0;
+    const peakKw   = validKw.length ? Math.max(...validKw) : 0;
+    const totalCost = readings.reduce((s,r) => s + (r.cost||0), 0);
+
+    document.getElementById('ami-stat-total-kwh').textContent = totalKwh.toFixed(1) + ' kWh';
+    document.getElementById('ami-stat-avg-kw').textContent    = avgKw.toFixed(2) + ' kW';
+    document.getElementById('ami-stat-peak-kw').textContent   = peakKw.toFixed(2) + ' kW';
+    document.getElementById('ami-stat-intervals').textContent = readings.length;
+    document.getElementById('ami-stat-cost').textContent      = totalCost > 0 ? '$' + totalCost.toFixed(2) : '—';
+    document.getElementById('ami-chart-stats').style.display  = '';
+
+    if (statusEl) statusEl.textContent = `${readings.length} intervals loaded`;
+
+  } catch(e) {
+    if (statusEl) statusEl.textContent = `Error: ${e.message}`;
+    console.error('amiLoadIntervalChart:', e);
+  }
+}
+
+function amiUpdateChartVisibility() {
+  if (!_amiIntervalChart) return;
+  const showKwh   = document.getElementById('ami-show-kwh')?.checked;
+  const showKw    = document.getElementById('ami-show-kw')?.checked;
+  const showRelay = document.getElementById('ami-show-relay')?.checked;
+  _amiIntervalChart.data.datasets.forEach(ds => {
+    if (ds.label === 'kWh')          ds.hidden = !showKwh;
+    if (ds.label === 'kW')           ds.hidden = !showKw;
+    if (ds.label === 'Relay Active') ds.hidden = !showRelay;
+  });
+  _amiIntervalChart.update();
+}
+
+// ── AMI M&V Reports ───────────────────────────────────────────────────────────
+
+let _amiMVData = null;
+let _amiMVChart = null;
+
+async function amiInitMVTab() {
+  // Populate event select
+  try {
+    const events = await supabaseGet('schedule_queue?order=fire_at.desc&limit=50&select=name,fire_at,duration_minutes');
+    const sel = document.getElementById('ami-mv-event');
+    if (sel && Array.isArray(events)) {
+      const seen = new Set();
+      sel.innerHTML = '<option value="">— Select Event —</option>' +
+        events.filter(e => e.name && !seen.has(e.name) && seen.add(e.name))
+          .map(e => `<option value="${JSON.stringify({name:e.name,fire_at:e.fire_at,duration_minutes:e.duration_minutes}).replace(/"/g,'&quot;')}">${e.name} (${new Date(e.fire_at).toLocaleDateString()})</option>`)
+          .join('');
+    }
+  } catch(e) {}
+
+  // Populate meter select
+  try {
+    const meters = await supabaseGet('ami_meters?order=created_at.desc');
+    const sel = document.getElementById('ami-mv-meter');
+    if (sel && Array.isArray(meters)) {
+      sel.innerHTML = '<option value="">— Select Meter —</option>' +
+        meters.map(m => `<option value="${m.meter_uid}">${m.utility_name||''} — ${m.meter_uid}</option>`).join('');
+    }
+  } catch(e) {}
+}
+
+async function amiRunMV() {
+  const eventRaw   = document.getElementById('ami-mv-event')?.value;
+  const meterUid   = document.getElementById('ami-mv-meter')?.value;
+  const method     = document.getElementById('ami-mv-baseline-method')?.value || '10of10';
+  const resultsEl  = document.getElementById('ami-mv-results');
+  const emptyEl    = document.getElementById('ami-mv-empty');
+
+  if (!eventRaw || !meterUid) { alert('Select an event and meter first.'); return; }
+
+  let eventData;
+  try { eventData = JSON.parse(eventRaw.replace(/&quot;/g,'"')); } catch(e) { alert('Invalid event data'); return; }
+
+  const fireAt   = new Date(eventData.fire_at);
+  const duration = eventData.duration_minutes || 60;
+  const endAt    = new Date(fireAt.getTime() + duration * 60000);
+
+  if (emptyEl) emptyEl.style.display = 'none';
+
+  try {
+    // 1. Fetch event interval readings
+    const eventReadings = await supabaseGet(
+      `ami_readings?meter_uid=eq.${encodeURIComponent(meterUid)}&interval_start=gte.${fireAt.toISOString()}&interval_start=lte.${endAt.toISOString()}&order=interval_start.asc`
+    );
+
+    // 2. Fetch baseline readings (30 days prior, same hours)
+    const baselineFrom = new Date(fireAt.getTime() - 30 * 86400000).toISOString();
+    const baselineAll  = await supabaseGet(
+      `ami_readings?meter_uid=eq.${encodeURIComponent(meterUid)}&interval_start=gte.${baselineFrom}&interval_start=lt.${fireAt.toISOString()}&order=interval_start.asc&limit=5000`
+    );
+
+    // 3. Fetch device relay readings during event
+    let relayReadings = [];
+    const corrs = await supabaseGet(`ami_meter_devices?meter_uid=eq.${encodeURIComponent(meterUid)}&limit=1`).catch(()=>[]);
+    if (Array.isArray(corrs) && corrs[0]?.device_uid) {
+      relayReadings = await supabaseGet(
+        `device_readings?device_uid=eq.${encodeURIComponent(corrs[0].device_uid)}&recorded_at=gte.${fireAt.toISOString()}&recorded_at=lte.${endAt.toISOString()}&order=recorded_at.asc`
+      ).catch(()=>[]);
+    }
+
+    // 4. Calculate baseline per interval using same hour-of-day from prior days
+    const baselineMap = {};
+    if (Array.isArray(baselineAll)) {
+      const byHour = {};
+      baselineAll.forEach(r => {
+        const h = new Date(r.interval_start).getHours();
+        if (!byHour[h]) byHour[h] = [];
+        if (r.kw != null) byHour[h].push(r.kw);
+      });
+      // Average per hour
+      Object.entries(byHour).forEach(([h, vals]) => {
+        const sorted = [...vals].sort((a,b) => a-b);
+        const top = method === '10of10' ? sorted.slice(-10) : sorted.slice(-7);
+        baselineMap[parseInt(h)] = top.length ? top.reduce((s,v)=>s+v,0)/top.length : null;
+      });
+    }
+
+    // 5. Build per-interval comparison
+    const relayMap = {};
+    relayReadings.forEach(r => {
+      const key = new Date(r.recorded_at).toISOString().slice(0,16);
+      relayMap[key] = r.relay_status_r1 > 0 || r.relay_status_r2 > 0 || r.relay_active_r1 || r.relay_active_r2;
+    });
+
+    const intervals = (Array.isArray(eventReadings) ? eventReadings : []).map(r => {
+      const h          = new Date(r.interval_start).getHours();
+      const baselineKw = baselineMap[h] ?? null;
+      const actualKw   = r.kw ?? (r.kwh != null ? r.kwh : null);
+      const reductionKw = baselineKw != null && actualKw != null ? Math.max(0, baselineKw - actualKw) : null;
+      const reductionPct = baselineKw != null && baselineKw > 0 && reductionKw != null ? (reductionKw / baselineKw * 100) : null;
+      const relayKey   = new Date(r.interval_start).toISOString().slice(0,16);
+      return { r, baselineKw, actualKw, reductionKw, reductionPct, relayOn: relayMap[relayKey] ?? null };
+    });
+
+    // 6. Aggregate stats
+    const validBaselines = intervals.filter(i => i.baselineKw != null);
+    const validActuals   = intervals.filter(i => i.actualKw != null);
+    const validReductions = intervals.filter(i => i.reductionKw != null);
+
+    const avgBaseline  = validBaselines.length ? validBaselines.reduce((s,i)=>s+i.baselineKw,0)/validBaselines.length : 0;
+    const avgActual    = validActuals.length   ? validActuals.reduce((s,i)=>s+i.actualKw,0)/validActuals.length : 0;
+    const avgReduction = validReductions.length ? validReductions.reduce((s,i)=>s+i.reductionKw,0)/validReductions.length : 0;
+    const reductionPct = avgBaseline > 0 ? (avgReduction / avgBaseline * 100) : 0;
+    const durHrs       = duration / 60;
+    const energySaved  = avgReduction * durHrs;
+
+    _amiMVData = { eventData, meterUid, intervals, avgBaseline, avgActual, avgReduction, reductionPct, energySaved, method };
+
+    // 7. Update KPI cards
+    document.getElementById('ami-mv-baseline-kw').textContent   = avgBaseline.toFixed(2) + ' kW';
+    document.getElementById('ami-mv-actual-kw').textContent     = avgActual.toFixed(2) + ' kW';
+    document.getElementById('ami-mv-reduction-kw').textContent  = avgReduction.toFixed(2) + ' kW';
+    document.getElementById('ami-mv-reduction-pct').textContent = reductionPct.toFixed(1) + '% of baseline';
+    document.getElementById('ami-mv-energy-saved').textContent  = energySaved.toFixed(3) + ' kWh';
+    document.getElementById('ami-mv-event-info').textContent    = `${eventData.name} | ${fireAt.toLocaleString()} — ${endAt.toLocaleString()} | ${duration} min`;
+
+    // 8. Render chart
+    if (_amiMVChart) { _amiMVChart.destroy(); _amiMVChart = null; }
+    const ctx = document.getElementById('ami-mv-chart')?.getContext('2d');
+    if (ctx && intervals.length) {
+      const labels = intervals.map(i => new Date(i.r.interval_start).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}));
+      _amiMVChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Baseline kW', data: intervals.map(i=>i.baselineKw), backgroundColor: 'rgba(56,127,214,0.3)', borderColor:'var(--blue-dark)', borderWidth:1 },
+            { label: 'Actual kW',   data: intervals.map(i=>i.actualKw),   backgroundColor: 'rgba(15,110,86,0.5)',  borderColor:'var(--green-dark)', borderWidth:1 },
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position:'top', labels:{ font:{size:11} } } },
+          scales: {
+            x: { ticks: { font:{size:10} } },
+            y: { title: { display:true, text:'kW', font:{size:11} }, beginAtZero:true }
+          }
+        }
+      });
+    }
+
+    // 9. Render table
+    const tbody = document.getElementById('ami-mv-table-body');
+    if (tbody) {
+      tbody.innerHTML = intervals.map(i => `<tr>
+        <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);font-size:11px;">${new Date(i.r.interval_start).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</td>
+        <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);text-align:right;">${i.baselineKw?.toFixed(3) ?? '—'}</td>
+        <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);text-align:right;">${i.actualKw?.toFixed(3) ?? '—'}</td>
+        <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);text-align:right;color:${(i.reductionKw||0)>0?'var(--green-dark)':'var(--text-hint)'};">${i.reductionKw?.toFixed(3) ?? '—'}</td>
+        <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);text-align:right;color:${(i.reductionPct||0)>0?'var(--green-dark)':'var(--text-hint)'};">${i.reductionPct?.toFixed(1) ?? '—'}%</td>
+        <td style="padding:5px 8px;border-bottom:0.5px solid var(--border);">${i.relayOn===true?'<span style="color:var(--green-dark);">● ON</span>':i.relayOn===false?'<span style="color:var(--text-hint);">○ OFF</span>':'—'}</td>
+      </tr>`).join('');
+    }
+
+    if (resultsEl) resultsEl.style.display = '';
+
+  } catch(e) {
+    alert('M&V Error: ' + e.message);
+    console.error('amiRunMV:', e);
+  }
+}
+
+function amiExportMVReport() {
+  const d = _amiMVData;
+  if (!d) { alert('Run M&V first.'); return; }
+
+  const { eventData, meterUid, intervals, avgBaseline, avgActual, avgReduction, reductionPct, energySaved, method } = d;
+  const fireAt   = new Date(eventData.fire_at);
+  const duration = eventData.duration_minutes || 60;
+  const endAt    = new Date(fireAt.getTime() + duration * 60000);
+
+  const lines = [
+    'DEMAND RESPONSE M&V REPORT',
+    `Generated: ${new Date().toLocaleString()}`,
+    '='.repeat(60),
+    '',
+    'EVENT SUMMARY',
+    '-'.repeat(40),
+    `Event Name:     ${eventData.name}`,
+    `Event Start:    ${fireAt.toLocaleString()}`,
+    `Event End:      ${endAt.toLocaleString()}`,
+    `Duration:       ${duration} minutes`,
+    `Meter:          ${meterUid}`,
+    `Baseline Method: ${method}`,
+    '',
+    'M&V RESULTS',
+    '-'.repeat(40),
+    `Baseline Demand:   ${avgBaseline.toFixed(3)} kW (avg prior similar periods)`,
+    `Actual Demand:     ${avgActual.toFixed(3)} kW (avg during event)`,
+    `Demand Reduction:  ${avgReduction.toFixed(3)} kW (${reductionPct.toFixed(1)}% of baseline)`,
+    `Energy Saved:      ${energySaved.toFixed(3)} kWh over ${duration} minutes`,
+    '',
+    `This event achieved a ${reductionPct.toFixed(1)}% reduction in demand compared to the ${method} baseline. ` +
+    `Total estimated energy savings of ${energySaved.toFixed(3)} kWh were recorded at meter ${meterUid}.`,
+    '',
+    'INTERVAL DETAIL',
+    '-'.repeat(40),
+    'Time       | Baseline kW | Actual kW | Reduction kW | Reduction % | Relay',
+    '-'.repeat(70),
+    ...intervals.map(i =>
+      `${new Date(i.r.interval_start).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} | ` +
+      `${(i.baselineKw??0).toFixed(3).padStart(11)} | ${(i.actualKw??0).toFixed(3).padStart(9)} | ` +
+      `${(i.reductionKw??0).toFixed(3).padStart(12)} | ${(i.reductionPct??0).toFixed(1).padStart(9)}% | ` +
+      `${i.relayOn===true?'ON':i.relayOn===false?'OFF':'—'}`
+    ),
+    '',
+    '='.repeat(60),
+    `Report generated by Load Control Dashboard | Event: ${eventData.name}`,
+  ].join('\n');
+
+  const blob = new Blob([lines], { type:'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `MV_Report_${eventData.name.replace(/\s+/g,'_')}_${fireAt.toISOString().split('T')[0]}.txt`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
