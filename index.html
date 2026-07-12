@@ -3043,17 +3043,283 @@
 
 <!-- AMI Meters (placeholder — built next) -->
 <div class="tab-pane" id="tab-ami-meters">
-  <div class="scroll-content"><div style="padding:2rem;text-align:center;color:var(--text-hint);">Meter registry — coming soon</div></div>
+  <div class="scroll-content">
+    <div style="max-width:1100px;margin:0 auto;padding:1rem;">
+
+      <!-- Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:10px;">
+        <div>
+          <div style="font-size:20px;font-weight:700;color:var(--text-primary);">🔌 Meter Registry</div>
+          <div style="font-size:12px;color:var(--text-hint);margin-top:4px;">All imported meters and their correlation to platform devices for M&amp;V and load analysis.</div>
+        </div>
+        <button class="queue-refresh" onclick="amiLoadMeters()">🔄 Refresh</button>
+      </div>
+
+      <!-- Meters table -->
+      <div class="sched-card" style="margin-bottom:1rem;">
+        <div class="sched-card-header">
+          <div class="sched-card-title">Registered Meters</div>
+          <span id="ami-meters-count" style="font-size:11px;color:var(--text-hint);"></span>
+        </div>
+        <div id="ami-meters-table">
+          <div class="sched-empty">Loading meters…</div>
+        </div>
+      </div>
+
+      <!-- Device Correlation Manager -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">🔗 Device Correlation</div>
+          <button class="queue-refresh" onclick="amiShowCorrelationForm()">+ Add Correlation</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:12px;">
+          Link a meter to a platform device. Used for baseline calculation, DR event verification, and overlaying relay state on interval charts.
+        </div>
+
+        <!-- Add form (hidden by default) -->
+        <div id="ami-corr-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px;border:0.5px solid var(--border-md);">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end;">
+            <div>
+              <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Meter</label>
+              <select id="ami-corr-meter" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="">— Select Meter —</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Device</label>
+              <select id="ami-corr-device" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="">— Select Device —</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Correlation Type</label>
+              <select id="ami-corr-type" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+                <option value="one_to_one">One-to-One (meter = device)</option>
+                <option value="one_to_many">One-to-Many (meter covers multiple devices)</option>
+                <option value="sub_meter">Sub-Meter (device is subset of meter)</option>
+              </select>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <button class="queue-refresh" onclick="amiSaveCorrelation()" style="color:var(--green-dark);border-color:var(--green);">Save</button>
+              <button class="queue-refresh" onclick="document.getElementById('ami-corr-form').style.display='none'">Cancel</button>
+            </div>
+          </div>
+          <div style="margin-top:8px;">
+            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Notes (optional)</label>
+            <input type="text" id="ami-corr-notes" placeholder="e.g. AC unit only, excludes lighting circuit"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;">
+          </div>
+          <div id="ami-corr-status" style="margin-top:8px;font-size:11px;font-family:monospace;color:var(--text-hint);min-height:16px;"></div>
+        </div>
+
+        <!-- Correlations table -->
+        <div id="ami-correlations-table">
+          <div class="sched-empty">No device correlations configured yet.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
 </div>
 
 <!-- AMI Interval Data (placeholder) -->
 <div class="tab-pane" id="tab-ami-data">
-  <div class="scroll-content"><div style="padding:2rem;text-align:center;color:var(--text-hint);">Interval data charts — coming soon</div></div>
+  <div class="scroll-content">
+    <div style="max-width:1100px;margin:0 auto;padding:1rem;">
+
+      <div style="margin-bottom:1rem;">
+        <div style="font-size:20px;font-weight:700;color:var(--text-primary);">📈 Interval Data</div>
+        <div style="font-size:12px;color:var(--text-hint);margin-top:4px;">Time-series view of meter interval readings overlaid with device relay state.</div>
+      </div>
+
+      <!-- Controls -->
+      <div class="sched-card" style="margin-bottom:1rem;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px;align-items:end;">
+          <div>
+            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Meter</label>
+            <select id="ami-chart-meter" onchange="amiChartPopulateDevices()" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="">— Select Meter —</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Overlay Device</label>
+            <select id="ami-chart-device" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="">— None —</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Date From</label>
+            <input type="date" id="ami-chart-from" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Date To</label>
+            <input type="date" id="ami-chart-to" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+          </div>
+          <button class="queue-refresh" onclick="amiLoadIntervalChart()" style="white-space:nowrap;">📈 Load Chart</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;align-items:center;">
+          <label style="font-size:11px;color:var(--text-hint);">Show:</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
+            <input type="checkbox" id="ami-show-kwh" checked onchange="amiUpdateChartVisibility()"> kWh
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
+            <input type="checkbox" id="ami-show-kw" checked onchange="amiUpdateChartVisibility()"> kW
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
+            <input type="checkbox" id="ami-show-relay" checked onchange="amiUpdateChartVisibility()"> Relay State
+          </label>
+          <span id="ami-chart-status" style="font-size:11px;color:var(--text-hint);margin-left:auto;font-family:monospace;"></span>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="sched-card" style="margin-bottom:1rem;">
+        <div style="position:relative;height:320px;">
+          <canvas id="ami-interval-chart"></canvas>
+          <div id="ami-chart-empty" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-hint);font-size:13px;">
+            Select a meter and date range, then click Load Chart
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats strip -->
+      <div id="ami-chart-stats" style="display:none;">
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:1rem;">
+          <div class="sched-card" style="text-align:center;padding:12px;">
+            <div style="font-size:20px;font-weight:700;color:var(--text-primary);" id="ami-stat-total-kwh">—</div>
+            <div style="font-size:10px;color:var(--text-hint);">Total kWh</div>
+          </div>
+          <div class="sched-card" style="text-align:center;padding:12px;">
+            <div style="font-size:20px;font-weight:700;color:var(--blue-dark);" id="ami-stat-avg-kw">—</div>
+            <div style="font-size:10px;color:var(--text-hint);">Avg kW</div>
+          </div>
+          <div class="sched-card" style="text-align:center;padding:12px;">
+            <div style="font-size:20px;font-weight:700;color:var(--red);" id="ami-stat-peak-kw">—</div>
+            <div style="font-size:10px;color:var(--text-hint);">Peak kW</div>
+          </div>
+          <div class="sched-card" style="text-align:center;padding:12px;">
+            <div style="font-size:20px;font-weight:700;color:var(--green-dark);" id="ami-stat-intervals">—</div>
+            <div style="font-size:10px;color:var(--text-hint);">Intervals</div>
+          </div>
+          <div class="sched-card" style="text-align:center;padding:12px;">
+            <div style="font-size:20px;font-weight:700;color:var(--amber);" id="ami-stat-cost">—</div>
+            <div style="font-size:10px;color:var(--text-hint);">Est. Cost</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
 </div>
 
-<!-- AMI M&V Reports (placeholder) -->
+<!-- AMI M&V Reports -->
 <div class="tab-pane" id="tab-ami-mv">
-  <div class="scroll-content"><div style="padding:2rem;text-align:center;color:var(--text-hint);">M&V reports — coming soon</div></div>
+  <div class="scroll-content">
+    <div style="max-width:1100px;margin:0 auto;padding:1rem;">
+
+      <div style="margin-bottom:1rem;">
+        <div style="font-size:20px;font-weight:700;color:var(--text-primary);">📋 Measurement & Verification</div>
+        <div style="font-size:12px;color:var(--text-hint);margin-top:4px;">Baseline calculation and DR event load reduction verification using meter interval data.</div>
+      </div>
+
+      <!-- Event selector -->
+      <div class="sched-card" style="margin-bottom:1rem;">
+        <div class="sched-card-header">
+          <div class="sched-card-title">Event Selection</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end;">
+          <div>
+            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">DR Event</label>
+            <select id="ami-mv-event" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="">— Select Event —</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Meter</label>
+            <select id="ami-mv-meter" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="">— Select Meter —</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Baseline Method</label>
+            <select id="ami-mv-baseline-method" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="10of10">10-of-10 (avg of 10 prior similar days)</option>
+              <option value="5of10">5-of-10 (avg adjusted for day-of)</option>
+              <option value="7day">7-day average same hour</option>
+              <option value="30day">30-day average same hour</option>
+            </select>
+          </div>
+          <button class="queue-refresh" onclick="amiRunMV()" style="white-space:nowrap;">▶ Run M&amp;V</button>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div id="ami-mv-results" style="display:none;">
+
+        <!-- KPI cards -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:1rem;">
+          <div class="sched-card" style="text-align:center;padding:14px;border-left:3px solid var(--blue-dark);">
+            <div style="font-size:11px;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Baseline kW</div>
+            <div style="font-size:26px;font-weight:700;color:var(--blue-dark);" id="ami-mv-baseline-kw">—</div>
+            <div style="font-size:10px;color:var(--text-hint);" id="ami-mv-baseline-label">avg during event window</div>
+          </div>
+          <div class="sched-card" style="text-align:center;padding:14px;border-left:3px solid var(--green-dark);">
+            <div style="font-size:11px;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Actual kW</div>
+            <div style="font-size:26px;font-weight:700;color:var(--green-dark);" id="ami-mv-actual-kw">—</div>
+            <div style="font-size:10px;color:var(--text-hint);">during event</div>
+          </div>
+          <div class="sched-card" style="text-align:center;padding:14px;border-left:3px solid var(--red);">
+            <div style="font-size:11px;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Reduction</div>
+            <div style="font-size:26px;font-weight:700;color:var(--red);" id="ami-mv-reduction-kw">—</div>
+            <div style="font-size:10px;color:var(--text-hint);" id="ami-mv-reduction-pct">—% of baseline</div>
+          </div>
+          <div class="sched-card" style="text-align:center;padding:14px;border-left:3px solid var(--amber);">
+            <div style="font-size:11px;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Energy Saved</div>
+            <div style="font-size:26px;font-weight:700;color:var(--amber);" id="ami-mv-energy-saved">—</div>
+            <div style="font-size:10px;color:var(--text-hint);">kWh over event duration</div>
+          </div>
+        </div>
+
+        <!-- M&V Chart -->
+        <div class="sched-card" style="margin-bottom:1rem;">
+          <div class="sched-card-header">
+            <div class="sched-card-title">Baseline vs Actual</div>
+            <button class="queue-refresh" onclick="amiExportMVReport()" style="color:var(--green-dark);border-color:var(--green);">📄 Export Report</button>
+          </div>
+          <div style="position:relative;height:280px;">
+            <canvas id="ami-mv-chart"></canvas>
+          </div>
+        </div>
+
+        <!-- Interval detail table -->
+        <div class="sched-card">
+          <div class="sched-card-header">
+            <div class="sched-card-title">Interval Detail</div>
+            <span id="ami-mv-event-info" style="font-size:11px;color:var(--text-hint);"></span>
+          </div>
+          <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:11px;">
+              <thead><tr>
+                <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Interval</th>
+                <th style="text-align:right;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Baseline kW</th>
+                <th style="text-align:right;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Actual kW</th>
+                <th style="text-align:right;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Reduction kW</th>
+                <th style="text-align:right;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Reduction %</th>
+                <th style="text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Relay State</th>
+              </tr></thead>
+              <tbody id="ami-mv-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <div id="ami-mv-empty" style="text-align:center;padding:3rem;color:var(--text-hint);">
+        Select an event, meter, and baseline method then click Run M&amp;V
+      </div>
+
+    </div>
+  </div>
 </div>
 
 <!-- AMI Settings -->
