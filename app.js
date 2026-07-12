@@ -26187,12 +26187,35 @@ async function amiRunUtilityAPICollection() {
     });
     const data = await res.json();
 
-    if (progBar) progBar.style.width = '60%';
-    if (progLbl) progLbl.textContent = 'Collection requested — fetching intervals…';
-
     if (!data.success) throw new Error(data.error || `Worker returned ${res.status}`);
 
-    // Poll for intervals and ingest them
+    if (progBar) progBar.style.width = '60%';
+    if (progLbl) progLbl.textContent = 'Waiting for UtilityAPI to collect data (this may take 1-2 minutes)…';
+
+    // Poll meter status until updated or timeout (2 min)
+    const key = await amiGetUAPIKey();
+    let ready = false;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      await new Promise(r => setTimeout(r, 10000)); // wait 10 seconds
+      if (progLbl) progLbl.textContent = `Polling for data... (${(attempt+1)*10}s elapsed)`;
+      try {
+        const statusRes = await fetch(`${PROXY_URL}ami/uapi/meter-status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ api_key: key, meter_uid: meterUid })
+        });
+        const statusData = await statusRes.json();
+        console.log('[AMI] meter status:', statusData);
+        if (statusData.status === 'updated' || statusData.interval_count > 0) {
+          ready = true;
+          break;
+        }
+      } catch(e) { console.warn('[AMI] status poll:', e.message); }
+    }
+
+    if (!ready && progLbl) progLbl.textContent = 'Fetching available intervals…';
+
+    // Fetch intervals and ingest them
     const inserted = await amiIngestUtilityAPIIntervals(meterUid, key, data.collection_uid, progBar, progLbl, jobId);
 
     if (progBar) progBar.style.width = '100%';
