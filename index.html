@@ -45,6 +45,7 @@
   .tab-pane { display: none; }
   .tab-pane.active { display: block; }
   @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
   .scroll-content { padding: 1.25rem 1rem; }
 
   /* ── Device Cards ── */
@@ -750,7 +751,16 @@
     <button class="tab-btn" id="main-vp" onclick="switchMain('vp', this)">Virtual Peaker</button>
     <button class="tab-btn" id="main-lora" onclick="switchMain('lora', this)">📡 LoRa</button>
     <button class="tab-btn" id="main-monitor" onclick="switchMain('monitor', this)">Monitor</button>
+    <button class="tab-btn" id="main-ami" onclick="switchMain('ami', this)">⚡ AMI Data</button>
     <button class="tab-btn" id="main-admin" onclick="switchMain('admin', this)" style="display:none;">Admin</button>
+  </div>
+  <!-- AMI sub-tabs -->
+  <div class="sub-tabs" id="sub-tabs-ami" style="display:none;">
+    <button class="sub-tab-btn active" id="sub-ami-ingest"   onclick="switchSub('ami','ami-ingest',this)">📥 Ingest</button>
+    <button class="sub-tab-btn"        id="sub-ami-meters"   onclick="switchSub('ami','ami-meters',this)">🔌 Meters</button>
+    <button class="sub-tab-btn"        id="sub-ami-data"     onclick="switchSub('ami','ami-data',this)">📈 Interval Data</button>
+    <button class="sub-tab-btn"        id="sub-ami-mv"       onclick="switchSub('ami','ami-mv',this)">📋 M&amp;V Reports</button>
+    <button class="sub-tab-btn"        id="sub-ami-settings" onclick="switchSub('ami','ami-settings',this)">⚙️ Settings</button>
   </div>
   <!-- Sub-tabs (shown contextually) -->
   <div class="sub-tabs" id="sub-tabs-monitor" style="display:none;">
@@ -2768,6 +2778,322 @@
 </div>
 
 <!-- ── ADMIN USERS TAB ── -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- ── AMI METER DATA TAB ────────────────────────────────────────────────── -->
+
+<!-- AMI Ingest -->
+<div class="tab-pane" id="tab-ami-ingest">
+  <div class="scroll-content">
+    <div style="max-width:1100px;margin:0 auto;padding:1rem;">
+
+      <!-- Header -->
+      <div style="margin-bottom:1.25rem;">
+        <div style="font-size:20px;font-weight:700;color:var(--text-primary);">📥 AMI Data Ingestion</div>
+        <div style="font-size:12px;color:var(--text-hint);margin-top:4px;">Collect interval meter data via UtilityAPI, Green Button XML upload, or CSV. All data normalizes to the same format regardless of source.</div>
+      </div>
+
+      <!-- Source selector -->
+      <div class="sched-card" style="margin-bottom:1rem;">
+        <div class="sched-card-header">
+          <div class="sched-card-title">Data Source</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+          <div id="ami-src-utilityapi" onclick="amiSelectSource('utilityapi')"
+            style="padding:14px;border-radius:var(--radius-sm);border:2px solid var(--blue-dark);background:var(--blue-bg);cursor:pointer;text-align:center;">
+            <div style="font-size:20px;margin-bottom:6px;">🔌</div>
+            <div style="font-size:13px;font-weight:700;color:var(--blue-dark);">UtilityAPI</div>
+            <div style="font-size:11px;color:var(--text-hint);margin-top:3px;">Covers 500+ utilities incl. SCE, Entergy, Duke. Normalized JSON. Automated pulls.</div>
+          </div>
+          <div id="ami-src-greenbutton" onclick="amiSelectSource('greenbutton')"
+            style="padding:14px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);cursor:pointer;text-align:center;">
+            <div style="font-size:20px;margin-bottom:6px;">🟢</div>
+            <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Green Button XML</div>
+            <div style="font-size:11px;color:var(--text-hint);margin-top:3px;">Upload ESPI XML downloaded directly from your utility portal. Works for SCE, PG&E, SDG&E, Entergy, and most large IOUs.</div>
+          </div>
+          <div id="ami-src-csv" onclick="amiSelectSource('csv')"
+            style="padding:14px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);cursor:pointer;text-align:center;">
+            <div style="font-size:20px;margin-bottom:6px;">📄</div>
+            <div style="font-size:13px;font-weight:700;color:var(--text-primary);">CSV Upload</div>
+            <div style="font-size:11px;color:var(--text-hint);margin-top:3px;">Duke Energy Profiler Online, Entergy DataLink, or any interval CSV export. Map columns to our format.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── UtilityAPI Panel ── -->
+      <div id="ami-panel-utilityapi">
+
+        <!-- Authorization / Meter selection -->
+        <div class="sched-card" style="margin-bottom:1rem;">
+          <div class="sched-card-header">
+            <div class="sched-card-title">🔌 UtilityAPI — Meters</div>
+            <div style="display:flex;gap:8px;">
+              <button class="queue-refresh" onclick="amiLoadUtilityAPIMeters()">🔄 Load Meters</button>
+              <button class="queue-refresh" style="color:var(--green-dark);border-color:var(--green);" onclick="amiAuthorizeUtilityAPI()">+ Add Utility Account</button>
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">
+            UtilityAPI handles authorization with your utility on your behalf. Customers authorize access once and data is available across all supported utilities including SCE, Entergy operating companies, Duke, and 500+ others.
+            <br>API key is configured under <strong>AMI Settings</strong>.
+          </div>
+          <div id="ami-utilityapi-meters">
+            <div class="sched-empty">Click "Load Meters" to fetch meters from UtilityAPI.</div>
+          </div>
+        </div>
+
+        <!-- Collection -->
+        <div class="sched-card" style="margin-bottom:1rem;">
+          <div class="sched-card-header">
+            <div class="sched-card-title">📦 Data Collection</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end;margin-bottom:12px;">
+            <div>
+              <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Meter</label>
+              <select id="ami-uapi-meter-select" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                <option value="">— Select Meter —</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Collection Type</label>
+              <select id="ami-uapi-collection-type" onchange="amiUpdateCollectionUI()" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                <option value="backfill">Backfill (historical)</option>
+                <option value="latest">Latest data only</option>
+                <option value="scheduled">Schedule ongoing</option>
+              </select>
+            </div>
+            <div id="ami-uapi-date-range">
+              <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Duration</label>
+              <select id="ami-uapi-duration" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                <option value="1">1 month</option>
+                <option value="3">3 months</option>
+                <option value="6" selected>6 months</option>
+                <option value="12">12 months</option>
+                <option value="24">24 months</option>
+                <option value="36">36 months (max)</option>
+              </select>
+            </div>
+            <button class="queue-refresh" onclick="amiRunUtilityAPICollection()" style="white-space:nowrap;">▶ Collect Data</button>
+          </div>
+          <div id="ami-uapi-schedule-opts" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:10px;margin-bottom:10px;">
+            <div style="font-size:11px;color:var(--text-hint);margin-bottom:6px;">Ongoing Monitoring — UtilityAPI will poll for new data automatically</div>
+            <div style="display:flex;gap:10px;align-items:center;">
+              <label style="font-size:11px;color:var(--text-hint);">Frequency:</label>
+              <select id="ami-uapi-freq" style="padding:5px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:11px;">
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+          </div>
+          <!-- Progress -->
+          <div id="ami-uapi-progress" style="display:none;margin-bottom:10px;">
+            <div style="height:4px;background:var(--border-md);border-radius:2px;overflow:hidden;margin-bottom:6px;">
+              <div id="ami-uapi-progress-bar" style="height:100%;background:var(--blue-dark);border-radius:2px;width:0%;transition:width .5s;"></div>
+            </div>
+            <div id="ami-uapi-progress-label" style="font-size:11px;font-family:monospace;color:var(--text-hint);"></div>
+          </div>
+          <div id="ami-uapi-result" style="font-size:12px;font-family:monospace;color:var(--text-hint);min-height:20px;"></div>
+        </div>
+      </div>
+
+      <!-- ── Green Button XML Panel ── -->
+      <div id="ami-panel-greenbutton" style="display:none;">
+        <div class="sched-card" style="margin-bottom:1rem;">
+          <div class="sched-card-header">
+            <div class="sched-card-title">🟢 Green Button XML Upload</div>
+          </div>
+          <div style="font-size:11px;color:var(--text-hint);margin-bottom:14px;">
+            Download your interval data from your utility portal (look for "Green Button Download My Data" or "Export Usage Data") and upload the XML file here. Supports ESPI/NAESB standard format used by SCE, PG&E, SDG&E, Entergy, and most large IOUs.
+          </div>
+
+          <!-- Utility hint -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+            <div>
+              <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Utility (for reference)</label>
+              <select id="ami-gb-utility" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                <option value="">— Select Utility —</option>
+                <option value="SCE">Southern California Edison (SCE)</option>
+                <option value="PGE">Pacific Gas & Electric (PG&E)</option>
+                <option value="SDGE">San Diego Gas & Electric (SDG&E)</option>
+                <option value="Entergy">Entergy (any operating company)</option>
+                <option value="Duke">Duke Energy</option>
+                <option value="FPL">Florida Power & Light / Duke Florida</option>
+                <option value="ComEd">Commonwealth Edison (ComEd)</option>
+                <option value="Ameren">Ameren</option>
+                <option value="BGE">Baltimore Gas & Electric (BGE)</option>
+                <option value="other">Other / Unknown</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Meter ID (optional — auto-detected from file)</label>
+              <input type="text" id="ami-gb-meter-id" placeholder="e.g. 1234567890"
+                style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+            </div>
+          </div>
+
+          <!-- File drop zone -->
+          <div id="ami-gb-dropzone"
+            style="border:2px dashed var(--border-md);border-radius:var(--radius-sm);padding:2rem;text-align:center;cursor:pointer;background:var(--surface2);transition:border-color .2s;"
+            onclick="document.getElementById('ami-gb-file').click()"
+            ondragover="event.preventDefault();this.style.borderColor='var(--blue-dark)'"
+            ondragleave="this.style.borderColor='var(--border-md)'"
+            ondrop="event.preventDefault();this.style.borderColor='var(--border-md)';amiHandleGBDrop(event)">
+            <div style="font-size:28px;margin-bottom:8px;">📂</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text-primary);">Drop Green Button XML here</div>
+            <div style="font-size:11px;color:var(--text-hint);margin-top:4px;">or click to browse — accepts .xml files</div>
+            <input type="file" id="ami-gb-file" accept=".xml" style="display:none;" onchange="amiParseGreenButton(this.files[0])">
+          </div>
+
+          <!-- Parse result preview -->
+          <div id="ami-gb-preview" style="display:none;margin-top:14px;background:var(--surface2);border-radius:var(--radius-sm);padding:12px;">
+            <div style="font-size:11px;font-weight:600;color:var(--text-primary);margin-bottom:8px;">File Preview</div>
+            <div id="ami-gb-preview-content" style="font-size:11px;font-family:monospace;color:var(--text-secondary);line-height:1.8;"></div>
+            <button class="queue-refresh" style="margin-top:10px;" onclick="amiIngestGreenButton()">⬆ Import to Database</button>
+          </div>
+          <div id="ami-gb-progress" style="display:none;margin-top:10px;">
+            <div style="height:4px;background:var(--border-md);border-radius:2px;overflow:hidden;margin-bottom:6px;">
+              <div id="ami-gb-progress-bar" style="height:100%;background:var(--blue-dark);border-radius:2px;width:0%;transition:width .3s;"></div>
+            </div>
+            <div id="ami-gb-progress-label" style="font-size:11px;font-family:monospace;color:var(--text-hint);"></div>
+          </div>
+          <div id="ami-gb-result" style="margin-top:8px;font-size:12px;font-family:monospace;color:var(--text-hint);"></div>
+        </div>
+      </div>
+
+      <!-- ── CSV Upload Panel ── -->
+      <div id="ami-panel-csv" style="display:none;">
+        <div class="sched-card" style="margin-bottom:1rem;">
+          <div class="sched-card-header">
+            <div class="sched-card-title">📄 CSV Upload</div>
+          </div>
+          <div style="font-size:11px;color:var(--text-hint);margin-bottom:14px;">
+            Upload an interval data CSV from Duke Energy Profiler Online, Entergy DataLink, or any utility that exports interval data as CSV. Map your columns to our standard fields below.
+          </div>
+
+          <!-- Template hints -->
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;">
+            <button class="queue-refresh" onclick="amiLoadCSVTemplate('duke')" style="font-size:11px;">Load Duke Template</button>
+            <button class="queue-refresh" onclick="amiLoadCSVTemplate('entergy')" style="font-size:11px;">Load Entergy Template</button>
+            <button class="queue-refresh" onclick="amiLoadCSVTemplate('generic')" style="font-size:11px;">Generic Template</button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+            <div>
+              <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Utility</label>
+              <select id="ami-csv-utility" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                <option value="">— Select Utility —</option>
+                <option value="Duke">Duke Energy (Profiler Online)</option>
+                <option value="Entergy">Entergy (DataLink)</option>
+                <option value="SCE">Southern California Edison</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Meter ID</label>
+              <input type="text" id="ami-csv-meter-id" placeholder="e.g. 1234567890"
+                style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+            </div>
+          </div>
+
+          <!-- File upload -->
+          <div id="ami-csv-dropzone"
+            style="border:2px dashed var(--border-md);border-radius:var(--radius-sm);padding:2rem;text-align:center;cursor:pointer;background:var(--surface2);"
+            onclick="document.getElementById('ami-csv-file').click()"
+            ondragover="event.preventDefault();this.style.borderColor='var(--blue-dark)'"
+            ondragleave="this.style.borderColor='var(--border-md)'"
+            ondrop="event.preventDefault();this.style.borderColor='var(--border-md)';amiHandleCSVDrop(event)">
+            <div style="font-size:28px;margin-bottom:8px;">📂</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text-primary);">Drop CSV file here</div>
+            <div style="font-size:11px;color:var(--text-hint);margin-top:4px;">or click to browse — accepts .csv files</div>
+            <input type="file" id="ami-csv-file" accept=".csv" style="display:none;" onchange="amiParseCSV(this.files[0])">
+          </div>
+
+          <!-- Column mapper -->
+          <div id="ami-csv-mapper" style="display:none;margin-top:14px;">
+            <div style="font-size:11px;font-weight:600;color:var(--text-primary);margin-bottom:8px;">Column Mapping</div>
+            <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">First 3 rows detected: <span id="ami-csv-preview-rows" style="font-family:monospace;"></span></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;" id="ami-csv-col-map">
+              <!-- Populated dynamically -->
+            </div>
+            <button class="queue-refresh" style="margin-top:12px;" onclick="amiIngestCSV()">⬆ Import to Database</button>
+          </div>
+          <div id="ami-csv-progress" style="display:none;margin-top:10px;">
+            <div style="height:4px;background:var(--border-md);border-radius:2px;overflow:hidden;margin-bottom:6px;">
+              <div id="ami-csv-progress-bar" style="height:100%;background:var(--blue-dark);border-radius:2px;width:0%;transition:width .3s;"></div>
+            </div>
+            <div id="ami-csv-progress-label" style="font-size:11px;font-family:monospace;color:var(--text-hint);"></div>
+          </div>
+          <div id="ami-csv-result" style="margin-top:8px;font-size:12px;font-family:monospace;color:var(--text-hint);"></div>
+        </div>
+      </div>
+
+      <!-- Recent Jobs -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">📋 Collection Jobs</div>
+          <button class="queue-refresh" onclick="amiLoadJobs()">🔄 Refresh</button>
+        </div>
+        <div id="ami-jobs-list">
+          <div class="sched-empty">No collection jobs yet.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- AMI Meters (placeholder — built next) -->
+<div class="tab-pane" id="tab-ami-meters">
+  <div class="scroll-content"><div style="padding:2rem;text-align:center;color:var(--text-hint);">Meter registry — coming soon</div></div>
+</div>
+
+<!-- AMI Interval Data (placeholder) -->
+<div class="tab-pane" id="tab-ami-data">
+  <div class="scroll-content"><div style="padding:2rem;text-align:center;color:var(--text-hint);">Interval data charts — coming soon</div></div>
+</div>
+
+<!-- AMI M&V Reports (placeholder) -->
+<div class="tab-pane" id="tab-ami-mv">
+  <div class="scroll-content"><div style="padding:2rem;text-align:center;color:var(--text-hint);">M&V reports — coming soon</div></div>
+</div>
+
+<!-- AMI Settings -->
+<div class="tab-pane" id="tab-ami-settings">
+  <div class="scroll-content">
+    <div style="max-width:700px;margin:0 auto;padding:1rem;">
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">⚙️ AMI Data Settings</div>
+          <button class="queue-refresh" onclick="amiSaveSettings()">Save</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div>
+            <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">UtilityAPI Key</label>
+            <input type="password" id="ami-setting-uapi-key" placeholder="Bearer token from UtilityAPI dashboard"
+              style="width:100%;padding:8px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;">
+            <div style="font-size:10px;color:var(--text-hint);margin-top:3px;">Get your API key at <a href="https://utilityapi.com" target="_blank" style="color:var(--blue-dark);">utilityapi.com</a>. First collection per month is free.</div>
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">Default Interval Length</label>
+            <select id="ami-setting-interval" style="padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="15">15 minutes</option>
+              <option value="30">30 minutes</option>
+              <option value="60" selected>60 minutes</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">Webhook Endpoint (for utility push)</label>
+            <div style="padding:8px 12px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;font-family:monospace;color:var(--text-hint);" id="ami-webhook-url">
+              Loading…
+            </div>
+            <div style="font-size:10px;color:var(--text-hint);margin-top:3px;">Register this URL with your utility or UtilityAPI to receive pushed interval data automatically.</div>
+          </div>
+        </div>
+        <div id="ami-settings-saved" style="display:none;margin-top:10px;font-size:11px;color:var(--green-dark);font-weight:600;">✓ Settings saved</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="tab-pane" id="tab-admin-users">
   <div class="scroll-content">
     <div style="max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
