@@ -269,6 +269,7 @@ function switchMain(main, btn) {
   else if (main === "monitor") { const s = currentSub.monitor||"monitor-triggers"; activatePane(s); activateSubBtn("monitor",s); }
   else if (main === "vp")   { activatePane("vp"); initVPTab(); }
   else if (main === "lora") { activatePane("lora"); loraInit(); }
+  else if (main === "ami")  { const s = currentSub.ami||"ami-ingest"; activatePane(s); activateSubBtn("ami",s); initAMITab(s); }
 }
 
 function switchSub(main, sub, btn) {
@@ -294,6 +295,9 @@ function activateSubBtn(main, sub) {
 }
 
 function runTabInit(name) {
+  if (name === "ami-ingest")   { amiInitIngest(); }
+  if (name === "ami-meters")   { amiLoadMeters(); }
+  if (name === "ami-settings") { amiLoadSettings(); }
   if (name === "summary")          initSummaryTab();
   if (name === "summary-programs") loadSummaryPrograms();
   if (name === "scheduler")        initScheduler().catch(e => console.error(e));
@@ -26013,4 +26017,657 @@ function loraSelectAllChannels() {
 
   const out = document.getElementById('lora-output-area');
   if (out) out.style.display = 'none';
+}
+
+// ── AMI Meter Data ────────────────────────────────────────────────────────────
+
+let amiCurrentSource    = 'utilityapi';
+let amiGBParsedData     = null;   // parsed Green Button readings ready to ingest
+let amiCSVParsedData    = null;   // parsed CSV readings ready to ingest
+let amiCSVHeaders       = [];     // column headers from uploaded CSV
+
+// Column mapping templates per utility
+const AMI_CSV_TEMPLATES = {
+  duke: {
+    interval_start: 'Start Datetime', interval_end: 'End Datetime',
+    kwh: 'Usage (kWh)', kw: 'Demand (kW)'
+  },
+  entergy: {
+    interval_start: 'Date/Time', interval_end: null,
+    kwh: 'kWh', kw: 'kW'
+  },
+  generic: {
+    interval_start: 'datetime', interval_end: null,
+    kwh: 'kwh', kw: 'kw'
+  }
+};
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+function initAMITab(sub) {
+  if (sub === 'ami-ingest')   amiInitIngest();
+  if (sub === 'ami-settings') amiLoadSettings();
+  if (sub === 'ami-meters')   amiLoadMeters();
+}
+
+function amiInitIngest() {
+  amiSelectSource(amiCurrentSource);
+  amiLoadJobs();
+  // Show webhook URL in settings
+  const wh = document.getElementById('ami-webhook-url');
+  if (wh) wh.textContent = `${PROXY_URL}ami/ingest`;
+}
+
+// ── Source Selection ──────────────────────────────────────────────────────────
+
+function amiSelectSource(src) {
+  amiCurrentSource = src;
+  ['utilityapi','greenbutton','csv'].forEach(s => {
+    const card = document.getElementById(`ami-src-${s}`);
+    const panel = document.getElementById(`ami-panel-${s}`);
+    if (card) {
+      card.style.border   = s === src ? '2px solid var(--blue-dark)' : '0.5px solid var(--border-md)';
+      card.style.background = s === src ? 'var(--blue-bg)' : 'var(--surface2)';
+    }
+    if (panel) panel.style.display = s === src ? '' : 'none';
+  });
+}
+
+// ── UtilityAPI ────────────────────────────────────────────────────────────────
+
+async function amiGetUAPIKey() {
+  try {
+    const rows = await supabaseGet("program_settings?setting_key=eq.ami_utilityapi_key&select=setting_value");
+    return rows?.[0]?.setting_value || null;
+  } catch(e) { return null; }
+}
+
+async function amiLoadUtilityAPIMeters() {
+  const el = document.getElementById('ami-utilityapi-meters');
+  if (el) el.innerHTML = '<div class="sched-empty">Loading meters from UtilityAPI…</div>';
+
+  const key = await amiGetUAPIKey();
+  if (!key) {
+    if (el) el.innerHTML = '<div class="sched-empty" style="color:var(--amber);">⚠ No UtilityAPI key found. Add it under AMI Settings.</div>';
+    return;
+  }
+
+  try {
+    // Fetch authorizations and meters via our worker proxy to avoid CORS
+    const res = await fetch(`${PROXY_URL}ami/uapi/meters`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ api_key: key })
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+      if (el) el.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error: ${data.error}</div>`;
+      return;
+    }
+
+    const meters = data.meters || [];
+    if (!meters.length) {
+      if (el) el.innerHTML = '<div class="sched-empty">No meters found. Click "+ Add Utility Account" to authorize a utility account.</div>';
+      return;
+    }
+
+    // Populate the collection meter select
+    const sel = document.getElementById('ami-uapi-meter-select');
+    if (sel) {
+      sel.innerHTML = '<option value="">— Select Meter —</option>' +
+        meters.map(m => `<option value="${m.uid}">${m.utility || 'Unknown'} — ${m.service_address || m.uid}</option>`).join('');
+    }
+
+    // Render meter cards
+    if (el) el.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px;">
+        ${meters.map(m => `
+          <div style="padding:10px 14px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:4px;">
+              <div style="font-size:12px;font-weight:600;">${m.utility || 'Unknown Utility'}</div>
+              <span style="font-size:10px;padding:2px 6px;border-radius:8px;background:${m.status==='active'?'var(--green-bg)':'var(--surface2)'};color:${m.status==='active'?'var(--green-dark)':'var(--text-hint)'};">${m.status||'unknown'}</span>
+            </div>
+            <div style="font-size:10px;color:var(--text-hint);">${m.service_address || '—'}</div>
+            <div style="font-size:10px;color:var(--text-hint);font-family:monospace;">${m.uid}</div>
+            ${m.tariff ? `<div style="font-size:10px;color:var(--text-hint);">Tariff: ${m.tariff}</div>` : ''}
+            ${m.interval_length ? `<div style="font-size:10px;color:var(--text-hint);">${m.interval_length}-min intervals</div>` : ''}
+            <div style="margin-top:6px;display:flex;gap:6px;">
+              <button onclick="amiQuickCollect('${m.uid}')" style="flex:1;padding:4px;border-radius:var(--radius-sm);border:0.5px solid var(--blue-dark);background:var(--blue-bg);color:var(--blue-dark);font-size:10px;font-weight:600;cursor:pointer;">Collect</button>
+              <button onclick="amiSaveMeter(${JSON.stringify(m).replace(/'/g,"&apos;").replace(/"/g,"&quot;")})" style="padding:4px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:10px;cursor:pointer;" title="Save to meter registry">💾</button>
+            </div>
+          </div>`).join('')}
+      </div>`;
+  } catch(e) {
+    if (el) el.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error: ${e.message}</div>`;
+  }
+}
+
+function amiAuthorizeUtilityAPI() {
+  window.open('https://utilityapi.com/authorize', '_blank');
+}
+
+function amiUpdateCollectionUI() {
+  const type = document.getElementById('ami-uapi-collection-type')?.value;
+  const dateRange = document.getElementById('ami-uapi-date-range');
+  const schedOpts = document.getElementById('ami-uapi-schedule-opts');
+  if (dateRange) dateRange.style.display = type === 'scheduled' ? 'none' : '';
+  if (schedOpts) schedOpts.style.display = type === 'scheduled' ? '' : 'none';
+}
+
+async function amiRunUtilityAPICollection() {
+  const meterUid = document.getElementById('ami-uapi-meter-select')?.value;
+  const type     = document.getElementById('ami-uapi-collection-type')?.value;
+  const duration = parseInt(document.getElementById('ami-uapi-duration')?.value || '6');
+  const freq     = document.getElementById('ami-uapi-freq')?.value || 'daily';
+  const progWrap = document.getElementById('ami-uapi-progress');
+  const progBar  = document.getElementById('ami-uapi-progress-bar');
+  const progLbl  = document.getElementById('ami-uapi-progress-label');
+  const resultEl = document.getElementById('ami-uapi-result');
+
+  if (!meterUid) { if (resultEl) resultEl.textContent = '⚠ Select a meter first.'; return; }
+
+  const key = await amiGetUAPIKey();
+  if (!key) { if (resultEl) resultEl.textContent = '⚠ No UtilityAPI key. Configure it in AMI Settings.'; return; }
+
+  if (progWrap) progWrap.style.display = '';
+  if (progBar)  progBar.style.width = '10%';
+  if (progLbl)  progLbl.textContent = type === 'scheduled' ? 'Enrolling meter in ongoing monitoring…' : 'Requesting historical data collection…';
+  if (resultEl) resultEl.textContent = '';
+
+  // Write a collection job record
+  const jobId = await amiWriteJob({ meter_uid: meterUid, job_type: type === 'scheduled' ? 'scheduled' : 'backfill', status: 'pending' });
+
+  try {
+    const res = await fetch(`${PROXY_URL}ami/uapi/collect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ api_key: key, meter_uid: meterUid, type, duration_months: duration, frequency: freq })
+    });
+    const data = await res.json();
+
+    if (progBar) progBar.style.width = '60%';
+    if (progLbl) progLbl.textContent = 'Collection requested — fetching intervals…';
+
+    if (!data.success) throw new Error(data.error || `Worker returned ${res.status}`);
+
+    // Poll for intervals and ingest them
+    const inserted = await amiIngestUtilityAPIIntervals(meterUid, key, data.collection_uid, progBar, progLbl, jobId);
+
+    if (progBar) progBar.style.width = '100%';
+    if (progLbl) progLbl.textContent = 'Complete';
+    if (resultEl) resultEl.textContent = `✅ ${inserted} interval readings imported for meter ${meterUid}`;
+    await amiUpdateJob(jobId, { status: 'complete', rows_inserted: inserted, completed_at: new Date().toISOString() });
+    amiLoadJobs();
+
+  } catch(e) {
+    if (progLbl) progLbl.textContent = `Error: ${e.message}`;
+    if (resultEl) resultEl.textContent = `❌ ${e.message}`;
+    await amiUpdateJob(jobId, { status: 'failed', error_msg: e.message });
+    console.error('amiRunUtilityAPICollection:', e);
+  }
+}
+
+async function amiQuickCollect(meterUid) {
+  document.getElementById('ami-uapi-meter-select').value = meterUid;
+  await amiRunUtilityAPICollection();
+}
+
+async function amiIngestUtilityAPIIntervals(meterUid, apiKey, collectionUid, progBar, progLbl, jobId) {
+  // Fetch intervals from UtilityAPI via worker (handles CORS)
+  const res = await fetch(`${PROXY_URL}ami/uapi/intervals`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ api_key: apiKey, meter_uid: meterUid, collection_uid: collectionUid })
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || 'Failed to fetch intervals');
+
+  const intervals = data.intervals || [];
+  if (!intervals.length) return 0;
+
+  if (progBar) progBar.style.width = '70%';
+  if (progLbl) progLbl.textContent = `Inserting ${intervals.length} readings…`;
+
+  return await amiBatchInsertReadings(intervals, 'utilityapi');
+}
+
+// ── Green Button XML ──────────────────────────────────────────────────────────
+
+function amiHandleGBDrop(event) {
+  const file = event.dataTransfer?.files?.[0];
+  if (file) amiParseGreenButton(file);
+}
+
+async function amiParseGreenButton(file) {
+  if (!file) return;
+  const previewEl  = document.getElementById('ami-gb-preview');
+  const contentEl  = document.getElementById('ami-gb-preview-content');
+  const resultEl   = document.getElementById('ami-gb-result');
+  if (resultEl) resultEl.textContent = 'Parsing XML…';
+
+  try {
+    const text = await file.text();
+    const parser = new DOMParser();
+    const xml    = parser.parseFromString(text, 'application/xml');
+
+    // Extract meter UID from UsagePoint or meterUID
+    const usagePoint = xml.querySelector('UsagePoint');
+    const meterUidEl = xml.querySelector('meterUID, serialNumber, meter_uid');
+    let detectedMeterUid = meterUidEl?.textContent?.trim() ||
+      usagePoint?.querySelector('localTimeParameters')?.getAttribute('href')?.split('/').pop() ||
+      `gb_${Date.now()}`;
+
+    // Extract interval readings from IntervalBlock
+    const intervals = [];
+    const intervalBlocks = xml.querySelectorAll('IntervalBlock');
+
+    intervalBlocks.forEach(block => {
+      const readings = block.querySelectorAll('IntervalReading');
+      readings.forEach(r => {
+        const startEl  = r.querySelector('timePeriod start');
+        const durationEl = r.querySelector('timePeriod duration');
+        const valueEl  = r.querySelector('value');
+        if (!startEl || !valueEl) return;
+
+        const startUnix = parseInt(startEl.textContent);
+        const durSecs   = parseInt(durationEl?.textContent || '900');
+        const rawValue  = parseFloat(valueEl.textContent);
+
+        // ESPI reports in Wh — convert to kWh
+        const kwh = rawValue / 1000;
+        const startDt = new Date(startUnix * 1000);
+        const endDt   = new Date((startUnix + durSecs) * 1000);
+
+        intervals.push({
+          meter_uid:      detectedMeterUid,
+          interval_start: startDt.toISOString(),
+          interval_end:   endDt.toISOString(),
+          kwh:            parseFloat(kwh.toFixed(4)),
+          kw:             parseFloat((kwh / (durSecs / 3600)).toFixed(4)), // average kW
+          source_type:    'greenbutton'
+        });
+      });
+    });
+
+    // Auto-fill meter ID field if detected
+    const meterIdEl = document.getElementById('ami-gb-meter-id');
+    if (meterIdEl && !meterIdEl.value) meterIdEl.value = detectedMeterUid;
+
+    amiGBParsedData = intervals;
+
+    if (contentEl) contentEl.innerHTML = `
+      Meter UID detected: <strong>${detectedMeterUid}</strong><br>
+      Interval blocks: <strong>${intervalBlocks.length}</strong><br>
+      Total readings: <strong>${intervals.length}</strong><br>
+      ${intervals.length > 0 ? `Date range: <strong>${intervals[0].interval_start.slice(0,10)}</strong> → <strong>${intervals[intervals.length-1].interval_end.slice(0,10)}</strong>` : ''}`;
+
+    if (previewEl) previewEl.style.display = '';
+    if (resultEl)  resultEl.textContent = '';
+
+  } catch(e) {
+    if (resultEl) resultEl.textContent = `❌ Parse error: ${e.message}`;
+    console.error('amiParseGreenButton:', e);
+  }
+}
+
+async function amiIngestGreenButton() {
+  if (!amiGBParsedData?.length) { alert('No data parsed yet.'); return; }
+
+  const meterUid  = document.getElementById('ami-gb-meter-id')?.value?.trim() || `gb_${Date.now()}`;
+  const utility   = document.getElementById('ami-gb-utility')?.value || 'Unknown';
+  const progWrap  = document.getElementById('ami-gb-progress');
+  const progBar   = document.getElementById('ami-gb-progress-bar');
+  const progLbl   = document.getElementById('ami-gb-progress-label');
+  const resultEl  = document.getElementById('ami-gb-result');
+
+  // Assign the correct meter UID to all records
+  const records = amiGBParsedData.map(r => ({ ...r, meter_uid: meterUid }));
+
+  if (progWrap) progWrap.style.display = '';
+  if (progBar)  progBar.style.width = '10%';
+  if (progLbl)  progLbl.textContent = `Inserting ${records.length} readings…`;
+
+  const jobId = await amiWriteJob({ meter_uid: meterUid, job_type: 'backfill', status: 'running', from_date: records[0]?.interval_start?.slice(0,10), to_date: records[records.length-1]?.interval_end?.slice(0,10) });
+
+  try {
+    // Ensure meter exists in registry
+    await amiEnsureMeterExists(meterUid, utility, 'greenbutton');
+
+    const inserted = await amiBatchInsertReadings(records, 'greenbutton', progBar, progLbl);
+    if (progBar)  progBar.style.width = '100%';
+    if (progLbl)  progLbl.textContent = 'Complete';
+    if (resultEl) resultEl.textContent = `✅ ${inserted} readings imported`;
+    await amiUpdateJob(jobId, { status: 'complete', rows_inserted: inserted, completed_at: new Date().toISOString() });
+    amiLoadJobs();
+  } catch(e) {
+    if (resultEl) resultEl.textContent = `❌ ${e.message}`;
+    await amiUpdateJob(jobId, { status: 'failed', error_msg: e.message });
+  }
+}
+
+// ── CSV ───────────────────────────────────────────────────────────────────────
+
+function amiHandleCSVDrop(event) {
+  const file = event.dataTransfer?.files?.[0];
+  if (file) amiParseCSV(file);
+}
+
+function amiLoadCSVTemplate(template) {
+  const mapping = AMI_CSV_TEMPLATES[template] || AMI_CSV_TEMPLATES.generic;
+  // Pre-fill the column mapping selects if they exist
+  Object.entries(mapping).forEach(([field, col]) => {
+    const sel = document.getElementById(`ami-csv-map-${field}`);
+    if (sel && col) sel.value = col;
+  });
+}
+
+async function amiParseCSV(file) {
+  if (!file) return;
+  const mapperEl   = document.getElementById('ami-csv-mapper');
+  const previewEl  = document.getElementById('ami-csv-preview-rows');
+  const colMapEl   = document.getElementById('ami-csv-col-map');
+  const resultEl   = document.getElementById('ami-csv-result');
+
+  try {
+    const text  = await file.text();
+    const lines = text.trim().split('\n');
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
+    amiCSVHeaders = headers;
+
+    // Show first 3 data rows
+    if (previewEl) previewEl.textContent = lines.slice(1,4).join(' | ').slice(0,200);
+
+    // Build column mapping UI
+    const fields = [
+      { id: 'interval_start', label: 'Interval Start *', required: true },
+      { id: 'interval_end',   label: 'Interval End',     required: false },
+      { id: 'kwh',            label: 'Energy (kWh) *',   required: true },
+      { id: 'kw',             label: 'Demand (kW)',       required: false },
+      { id: 'voltage',        label: 'Voltage',           required: false },
+      { id: 'power_factor',   label: 'Power Factor',      required: false },
+      { id: 'cost',           label: 'Cost ($)',           required: false },
+    ];
+
+    if (colMapEl) {
+      colMapEl.innerHTML = fields.map(f => `
+        <div>
+          <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">${f.label}</label>
+          <select id="ami-csv-map-${f.id}" style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
+            <option value="">— Not in file —</option>
+            ${headers.map(h => `<option value="${h}" ${h.toLowerCase().includes(f.id.replace('_',' ')) || h.toLowerCase().includes(f.id) ? 'selected' : ''}>${h}</option>`).join('')}
+          </select>
+        </div>`).join('');
+    }
+
+    // Auto-apply template if utility selected
+    const utility = document.getElementById('ami-csv-utility')?.value;
+    if (utility && AMI_CSV_TEMPLATES[utility.toLowerCase()]) amiLoadCSVTemplate(utility.toLowerCase());
+
+    // Store full CSV for ingestion
+    amiCSVParsedData = { text, headers, lines: lines.slice(1) };
+    if (mapperEl) mapperEl.style.display = '';
+    if (resultEl) resultEl.textContent = `${lines.length - 1} data rows detected, ${headers.length} columns`;
+
+  } catch(e) {
+    if (resultEl) resultEl.textContent = `❌ Parse error: ${e.message}`;
+  }
+}
+
+async function amiIngestCSV() {
+  if (!amiCSVParsedData) { alert('No CSV loaded yet.'); return; }
+
+  const meterUid  = document.getElementById('ami-csv-meter-id')?.value?.trim() || `csv_${Date.now()}`;
+  const utility   = document.getElementById('ami-csv-utility')?.value || 'Unknown';
+  const progWrap  = document.getElementById('ami-csv-progress');
+  const progBar   = document.getElementById('ami-csv-progress-bar');
+  const progLbl   = document.getElementById('ami-csv-progress-label');
+  const resultEl  = document.getElementById('ami-csv-result');
+
+  // Get column mapping
+  const getCol = id => document.getElementById(`ami-csv-map-${id}`)?.value || null;
+  const startCol = getCol('interval_start');
+  const endCol   = getCol('interval_end');
+  const kwhCol   = getCol('kwh');
+  const kwCol    = getCol('kw');
+  const voltCol  = getCol('voltage');
+  const pfCol    = getCol('power_factor');
+  const costCol  = getCol('cost');
+
+  if (!startCol || !kwhCol) {
+    if (resultEl) resultEl.textContent = '⚠ Interval Start and kWh columns are required.';
+    return;
+  }
+
+  if (progWrap) progWrap.style.display = '';
+  if (progBar)  progBar.style.width = '10%';
+  if (progLbl)  progLbl.textContent = 'Parsing CSV rows…';
+
+  const { headers, lines } = amiCSVParsedData;
+  const idx = col => headers.indexOf(col);
+  const records = [];
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    // Handle quoted CSV values
+    const cols = line.match(/(".*?"|[^,]+|(?<=,)(?=,)|^(?=,)|(?<=,)$)/g)?.map(c => c.replace(/^"|"$/g,'').trim()) || line.split(',').map(c => c.trim());
+
+    const startRaw = cols[idx(startCol)];
+    if (!startRaw) continue;
+
+    const startDt = new Date(startRaw);
+    if (isNaN(startDt)) continue;
+
+    const kwhVal = parseFloat(cols[idx(kwhCol)]);
+    if (isNaN(kwhVal)) continue;
+
+    // If no end column, assume 60-min interval
+    const endDt = endCol && cols[idx(endCol)]
+      ? new Date(cols[idx(endCol)])
+      : new Date(startDt.getTime() + 60 * 60 * 1000);
+
+    const durHrs = (endDt - startDt) / 3600000;
+    const kwVal  = kwCol && cols[idx(kwCol)] ? parseFloat(cols[idx(kwCol)]) : parseFloat((kwhVal / durHrs).toFixed(4));
+
+    records.push({
+      meter_uid:      meterUid,
+      interval_start: startDt.toISOString(),
+      interval_end:   endDt.toISOString(),
+      kwh:            parseFloat(kwhVal.toFixed(4)),
+      kw:             isNaN(kwVal) ? null : parseFloat(kwVal.toFixed(4)),
+      voltage:        voltCol ? parseFloat(cols[idx(voltCol)]) || null : null,
+      power_factor:   pfCol   ? parseFloat(cols[idx(pfCol)])   || null : null,
+      cost:           costCol ? parseFloat(cols[idx(costCol)])  || null : null,
+      source_type:    'csv'
+    });
+  }
+
+  if (!records.length) {
+    if (resultEl) resultEl.textContent = '⚠ No valid rows parsed. Check column mapping.';
+    return;
+  }
+
+  if (progBar) progBar.style.width = '40%';
+  if (progLbl) progLbl.textContent = `Inserting ${records.length} readings…`;
+
+  const jobId = await amiWriteJob({ meter_uid: meterUid, job_type: 'backfill', status: 'running',
+    from_date: records[0].interval_start.slice(0,10), to_date: records[records.length-1].interval_end.slice(0,10) });
+
+  try {
+    await amiEnsureMeterExists(meterUid, utility, 'csv');
+    const inserted = await amiBatchInsertReadings(records, 'csv', progBar, progLbl);
+    if (progBar)  progBar.style.width = '100%';
+    if (progLbl)  progLbl.textContent = 'Complete';
+    if (resultEl) resultEl.textContent = `✅ ${inserted} of ${records.length} readings imported`;
+    await amiUpdateJob(jobId, { status: 'complete', rows_inserted: inserted, completed_at: new Date().toISOString() });
+    amiLoadJobs();
+  } catch(e) {
+    if (resultEl) resultEl.textContent = `❌ ${e.message}`;
+    await amiUpdateJob(jobId, { status: 'failed', error_msg: e.message });
+  }
+}
+
+// ── Shared Insert ─────────────────────────────────────────────────────────────
+
+async function amiBatchInsertReadings(records, sourceType, progBar, progLbl) {
+  const BATCH = 100;
+  let inserted = 0;
+
+  for (let i = 0; i < records.length; i += BATCH) {
+    const batch = records.slice(i, i + BATCH);
+    const pct = Math.round(((i + batch.length) / records.length) * 100);
+    if (progBar) progBar.style.width = pct + '%';
+    if (progLbl) progLbl.textContent = `Inserting ${i + batch.length} / ${records.length}…`;
+
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/ami_readings?on_conflict=meter_uid,interval_start`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=ignore-duplicates,return=minimal'
+      },
+      body: JSON.stringify(batch)
+    });
+
+    if (res.ok) {
+      inserted += batch.length;
+    } else {
+      const err = await res.text();
+      console.warn('amiBatchInsert batch error:', err);
+    }
+  }
+  return inserted;
+}
+
+async function amiEnsureMeterExists(meterUid, utilityName, sourceType) {
+  await fetch(`${SUPABASE_URL}/rest/v1/ami_meters?on_conflict=meter_uid`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=ignore-duplicates,return=minimal'
+    },
+    body: JSON.stringify({ meter_uid: meterUid, utility_name: utilityName, source_type: sourceType, enabled: true })
+  });
+}
+
+async function amiSaveMeter(meterObj) {
+  try {
+    await amiEnsureMeterExists(meterObj.uid, meterObj.utility || 'Unknown', 'utilityapi');
+    setStatus('success', `Meter ${meterObj.uid} saved to registry`);
+  } catch(e) { setStatus('error', `Failed: ${e.message}`); }
+}
+
+// ── Jobs ──────────────────────────────────────────────────────────────────────
+
+async function amiWriteJob(data) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/ami_collection_jobs`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify({ ...data, started_at: new Date().toISOString(), created_at: new Date().toISOString() })
+    });
+    const rows = await res.json();
+    return rows?.[0]?.id || null;
+  } catch(e) { console.warn('amiWriteJob:', e.message); return null; }
+}
+
+async function amiUpdateJob(id, data) {
+  if (!id) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/ami_collection_jobs?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(data)
+    });
+  } catch(e) { console.warn('amiUpdateJob:', e.message); }
+}
+
+async function amiLoadJobs() {
+  const el = document.getElementById('ami-jobs-list');
+  if (!el) return;
+  try {
+    const rows = await supabaseGet('ami_collection_jobs?order=created_at.desc&limit=20');
+    if (!Array.isArray(rows) || !rows.length) {
+      el.innerHTML = '<div class="sched-empty">No collection jobs yet.</div>';
+      return;
+    }
+    const statusColor = { complete:'var(--green-dark)', failed:'var(--red)', running:'var(--blue-dark)', pending:'var(--text-hint)' };
+    const statusBg    = { complete:'var(--green-bg)', failed:'#FEF2F2', running:'var(--blue-bg)', pending:'var(--surface2)' };
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:120px 1fr 80px 80px 80px 1fr;gap:6px;padding:5px 8px;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;background:var(--surface2);border-radius:var(--radius-sm);margin-bottom:4px;">
+        <span>Started</span><span>Meter</span><span>Type</span><span>Rows</span><span>Status</span><span>Note</span>
+      </div>
+      ${rows.map(j => `
+        <div style="display:grid;grid-template-columns:120px 1fr 80px 80px 80px 1fr;gap:6px;padding:6px 8px;font-size:11px;align-items:center;border-bottom:0.5px solid var(--border);">
+          <span style="font-size:10px;color:var(--text-hint);">${j.created_at ? new Date(j.created_at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'}</span>
+          <span style="font-family:monospace;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${j.meter_uid||''}">${j.meter_uid||'—'}</span>
+          <span>${j.job_type||'—'}</span>
+          <span style="text-align:center;">${j.rows_inserted ?? '—'}</span>
+          <span style="padding:2px 6px;border-radius:8px;background:${statusBg[j.status]||'var(--surface2)'};color:${statusColor[j.status]||'var(--text-hint)'};font-size:10px;font-weight:600;text-align:center;">${j.status||'—'}</span>
+          <span style="font-size:10px;color:var(--text-hint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${j.error_msg || (j.from_date ? `${j.from_date} → ${j.to_date||'now'}` : '')}</span>
+        </div>`).join('')}`;
+  } catch(e) {
+    el.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error: ${e.message}</div>`;
+  }
+}
+
+async function amiLoadMeters() {
+  // Placeholder — will be built in Meters tab
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+async function amiLoadSettings() {
+  try {
+    const rows = await supabaseGet("program_settings?setting_key=in.(ami_utilityapi_key,ami_interval_length)");
+    if (Array.isArray(rows)) {
+      rows.forEach(r => {
+        if (r.setting_key === 'ami_utilityapi_key') {
+          const el = document.getElementById('ami-setting-uapi-key');
+          if (el) el.value = r.setting_value || '';
+        }
+        if (r.setting_key === 'ami_interval_length') {
+          const el = document.getElementById('ami-setting-interval');
+          if (el) el.value = r.setting_value || '60';
+        }
+      });
+    }
+  } catch(e) { console.warn('amiLoadSettings:', e.message); }
+  // Show webhook URL
+  const wh = document.getElementById('ami-webhook-url');
+  if (wh) wh.textContent = `${PROXY_URL}ami/ingest`;
+}
+
+async function amiSaveSettings() {
+  const pairs = [
+    ['ami_utilityapi_key',   document.getElementById('ami-setting-uapi-key')?.value?.trim()  || ''],
+    ['ami_interval_length',  document.getElementById('ami-setting-interval')?.value           || '60'],
+  ];
+  for (const [key, val] of pairs) {
+    await fetch(`${SUPABASE_URL}/rest/v1/program_settings?on_conflict=setting_key`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=minimal'
+      },
+      body: JSON.stringify({ setting_key: key, setting_value: val })
+    });
+  }
+  const saved = document.getElementById('ami-settings-saved');
+  if (saved) { saved.style.display = 'inline-block'; setTimeout(() => saved.style.display = 'none', 2500); }
 }
