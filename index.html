@@ -3347,6 +3347,12 @@
                 <select id="bl-meter" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"><option value="">— Select —</option></select>
               </div>
               <div>
+                <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">DR Event (optional — auto-fills window)</label>
+                <select id="bl-dr-event" onchange="blApplyDREvent(this.value)" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+                  <option value="">— Select Event or enter manually —</option>
+                </select>
+              </div>
+              <div>
                 <label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:3px;">Event Start</label>
                 <input type="datetime-local" id="bl-event-start" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
               </div>
