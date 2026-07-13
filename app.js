@@ -532,7 +532,6 @@ async function initScheduler() {
 
 async function getNextEventName() {
   try {
-    // Check both schedules and schedule_queue to find the true highest event number
     const [schedRows, queueRows] = await Promise.all([
       supabaseGet("schedules?select=name&order=id.desc&limit=200").catch(()=>[]),
       supabaseGet("schedule_queue?select=name&order=id.desc&limit=200").catch(()=>[])
@@ -27612,7 +27611,7 @@ function amiExportMVReport() {
   a.download = `MV_Report_${eventData.name.replace(/\s+/g,'_')}_${fireAt.toISOString().split('T')[0]}.html`;
   a.click();
   URL.revokeObjectURL(a.href);
-
+}
 
 // ── AMI Baseline Calculator (Enhanced) ────────────────────────────────────────
 
@@ -28352,5 +28351,4 @@ function amiExportBaselineReport() {
   a.download = `Baseline_Report_${meterUid}_${eventStart.toISOString().split('T')[0]}.txt`;
   a.click();
   URL.revokeObjectURL(a.href);
-}
 }
