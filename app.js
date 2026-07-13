@@ -27659,20 +27659,64 @@ async function amiInitBaselineTab() {
     }
   } catch(e) {}
 
-  // Default event window
-  const now = new Date();
-  const yesterday = new Date(now); yesterday.setDate(yesterday.getDate()-1);
-  const fmt = d => d.toISOString().slice(0,16);
-  const defStart = new Date(yesterday); defStart.setHours(14,0,0,0);
-  const defEnd   = new Date(yesterday); defEnd.setHours(17,0,0,0);
-  const startEl = document.getElementById('bl-event-start');
-  const endEl   = document.getElementById('bl-event-end');
-  if (startEl && !startEl.value) startEl.value = fmt(defStart);
-  if (endEl   && !endEl.value)   endEl.value   = fmt(defEnd);
+  // Populate DR event dropdown from schedule_queue
+  try {
+    const events = await supabaseGet('schedule_queue?order=fire_at.desc&limit=50&select=name,fire_at,duration_minutes');
+    const sel = document.getElementById('bl-dr-event');
+    if (sel && Array.isArray(events)) {
+      const seen = new Set();
+      sel.innerHTML = '<option value="">— Select Event or enter manually —</option>' +
+        events.filter(e => e.name && !seen.has(e.name) && seen.add(e.name))
+          .map(e => `<option value="${JSON.stringify({fire_at:e.fire_at,duration_minutes:e.duration_minutes}).replace(/"/g,'&quot;')}">${e.name} (${new Date(e.fire_at).toLocaleDateString()})</option>`)
+          .join('');
+    }
+  } catch(e) {}
+
+  // Default event window — use most recent AMI data range rather than yesterday
+  try {
+    const latest = await supabaseGet('ami_readings?order=interval_start.desc&limit=1&select=interval_start');
+    const earliest = await supabaseGet('ami_readings?order=interval_start.asc&limit=1&select=interval_start');
+    if (latest?.[0]?.interval_start) {
+      const latestDt  = new Date(latest[0].interval_start);
+      const defEnd    = new Date(latestDt);
+      const defStart  = new Date(latestDt.getTime() - 3 * 3600000); // 3 hours before latest
+      const fmt = d => d.toISOString().slice(0,16);
+      const startEl = document.getElementById('bl-event-start');
+      const endEl   = document.getElementById('bl-event-end');
+      if (startEl && !startEl.value) startEl.value = fmt(defStart);
+      if (endEl   && !endEl.value)   endEl.value   = fmt(defEnd);
+    }
+  } catch(e) {
+    // Fallback to yesterday
+    const now = new Date();
+    const yesterday = new Date(now); yesterday.setDate(yesterday.getDate()-1);
+    const fmt = d => d.toISOString().slice(0,16);
+    const defStart = new Date(yesterday); defStart.setHours(14,0,0,0);
+    const defEnd   = new Date(yesterday); defEnd.setHours(17,0,0,0);
+    const startEl = document.getElementById('bl-event-start');
+    const endEl   = document.getElementById('bl-event-end');
+    if (startEl && !startEl.value) startEl.value = fmt(defStart);
+    if (endEl   && !endEl.value)   endEl.value   = fmt(defEnd);
+  }
 
   // Render standard method checkboxes
   blRenderStandardMethods();
   blLoadSavedBaselines();
+}
+
+function blApplyDREvent(val) {
+  if (!val) return;
+  try {
+    const ev = JSON.parse(val.replace(/&quot;/g,'"'));
+    const fireAt   = new Date(ev.fire_at);
+    const duration = ev.duration_minutes || 60;
+    const endAt    = new Date(fireAt.getTime() + duration * 60000);
+    const fmt = d => d.toISOString().slice(0,16);
+    const startEl = document.getElementById('bl-event-start');
+    const endEl   = document.getElementById('bl-event-end');
+    if (startEl) startEl.value = fmt(fireAt);
+    if (endEl)   endEl.value   = fmt(endAt);
+  } catch(e) { console.warn('blApplyDREvent:', e.message); }
 }
 
 function blRenderStandardMethods() {
