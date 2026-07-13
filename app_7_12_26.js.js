@@ -3027,100 +3027,188 @@ function exportParticipationReport() {
           participated, didNotParticipate, optedOutPre, optedOutDuring, pct,
           cancelledAt, cancelledBy, endedAt, wasEarlyCancelled } = d;
 
-  const total      = rows.length;
-  const reportDate = new Date().toLocaleString();
-  const eventDate  = fireAt.toLocaleString([], { dateStyle: "full", timeStyle: "short" });
-  const endDate    = endAt.toLocaleString([], { timeStyle: "short" });
-
-  // Determine how the event actually ended
-  const actualEnd = cancelledAt ? new Date(cancelledAt) : endedAt ? new Date(endedAt) : endAt;
-  const actualEndStr = actualEnd.toLocaleString([], { dateStyle: "full", timeStyle: "short" });
+  const total        = rows.length;
+  const reportDate   = new Date().toLocaleString();
+  const actualEnd    = cancelledAt ? new Date(cancelledAt) : endedAt ? new Date(endedAt) : endAt;
   const actualDurMins = Math.round((actualEnd - fireAt) / 60000);
-  const endReason = cancelledAt
+  const endReason    = cancelledAt
     ? `Early cancellation by operator (${cancelledBy || "unknown"})`
-    : endedAt
-      ? "Completed at scheduled end time"
-      : "Completed at scheduled end time (end not explicitly logged)";
+    : "Completed at scheduled end time";
 
-  // Build narrative
-  const narrative = [
-    `DEMAND RESPONSE EVENT PARTICIPATION REPORT`,
-    `Generated: ${reportDate}`,
-    `${"=".repeat(60)}`,
-    ``,
-    `EVENT SUMMARY`,
-    `-`.repeat(40),
-    `Event Name:        ${eventName}`,
-    `Target:            ${targetLabel}`,
-    `Event Start:       ${eventDate}`,
-    `Scheduled End:     ${endDate}`,
-    `Actual End:        ${actualEndStr}`,
-    `Actual Duration:   ${actualDurMins} minutes (of ${duration} scheduled)`,
-    `Conclusion:        ${endReason}`,
-    `Devices Called:    ${total}`,
-    ``,
-    `PARTICIPATION OVERVIEW`,
-    `-`.repeat(40),
-    `This demand response event was dispatched to ${total} device${total !== 1 ? "s" : ""} ` +
-    `under the target scope "${targetLabel}". ` +
-    (wasEarlyCancelled
-      ? `The event was cancelled early by ${cancelledBy || "an operator"} at ${new Date(cancelledAt).toLocaleTimeString()}, ` +
-        `after running for ${actualDurMins} of ${duration} scheduled minutes. `
-      : `The event ran its full scheduled duration of ${duration} minutes. `) +
-    `Of the ${total} devices called, ${participated} (${pct}%) successfully participated ` +
-    `by activating their relay during the event window.`,
-    ``,
-    participated > 0
-      ? `${participated} device${participated !== 1 ? "s" : ""} confirmed participation with relay activation detected within the event window.`
-      : `No devices confirmed relay activation during the event window.`,
-    ``,
-    optedOutPre > 0
-      ? `${optedOutPre} device${optedOutPre !== 1 ? "s" : ""} were opted out prior to the event and did not receive the dispatch command.`
-      : `No pre-event opt-outs were recorded.`,
-    ``,
-    optedOutDuring > 0
-      ? `${optedOutDuring} device${optedOutDuring !== 1 ? "s" : ""} were opted out during the event and received a restore command to return to normal operation.`
-      : `No mid-event opt-outs were recorded.`,
-    ``,
-    didNotParticipate > 0
-      ? `${didNotParticipate} device${didNotParticipate !== 1 ? "s" : ""} did not register relay activation during the event window. This may indicate the device was offline, did not receive the command, or the load was not present.`
-      : `All non-opted-out devices confirmed participation.`,
-    ``,
-    `STATISTICS`,
-    `-`.repeat(40),
-    `Participated:           ${participated} of ${total} (${pct}%)`,
-    `Did Not Participate:    ${didNotParticipate} of ${total}`,
-    `Opted-Out Pre-Event:    ${optedOutPre} of ${total}`,
-    `Opted-Out During Event: ${optedOutDuring} of ${total}`,
-    `Overall Participation:  ${pct}%`,
-    ``,
-    `DEVICE DETAIL`,
-    `-`.repeat(40),
-    `Device Name          | Participated | Opted-Out Pre | Opted-Out During | Opt-Out Time         | Readings | Relay Status`,
-    `-`.repeat(110),
-    ...rows.map(r => {
-      const isPre    = r.optOut?.opt_out_type === "pre_event";
-      const isDuring = r.optOut?.opt_out_type === "during_event";
-      const optTime  = r.optOut ? new Date(r.optOut.opted_out_at).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) : "—";
-      const participated = r.optOut ? "—" : r.relayOn ? "Yes" : "No";
-      const relayStr = r.lastReading
-        ? [r.lastReading.relay_status_r1>0?"R1":"",r.lastReading.relay_status_r2>0?"R2":"",r.lastReading.relay_status_r3>0?"R3":"",r.lastReading.relay_status_r4>0?"R4":""].filter(Boolean).join(",")||"All Off"
-        : "No data";
-      return `${r.device.name.padEnd(20)} | ${participated.padEnd(12)} | ${(isPre?"Yes":"—").padEnd(13)} | ${(isDuring?"Yes":"—").padEnd(16)} | ${optTime.padEnd(20)} | ${String(r.readingCount).padEnd(8)} | ${relayStr}`;
-    }),
-    ``,
-    `${"=".repeat(60)}`,
-    `Report generated by Load Control Dashboard`,
-    `Event: ${eventName} | Generated: ${reportDate}`,
-  ].join("\n");
+  const kpiCard = (value, label, color, bg) =>
+    `<div style="text-align:center;padding:16px 12px;border-radius:8px;background:${bg};border-left:4px solid ${color};">
+      <div style="font-size:28px;font-weight:800;color:${color};line-height:1;">${value}</div>
+      <div style="font-size:11px;color:#64748B;margin-top:6px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;">${label}</div>
+    </div>`;
 
-  const blob = new Blob([narrative], { type: "text/plain" });
-  const a    = document.createElement("a");
-  a.href     = URL.createObjectURL(blob);
-  a.download = `DR_Participation_Report_${eventName.replace(/\s+/g,"_")}_${fireAt.toISOString().split("T")[0]}.txt`;
+  const statusBadge = (val) => {
+    if (val === true  || val === 'yes') return `<span style="display:inline-block;padding:2px 10px;border-radius:12px;background:#DCFCE7;color:#166534;font-size:11px;font-weight:700;">✓ Yes</span>`;
+    if (val === false || val === 'no')  return `<span style="display:inline-block;padding:2px 10px;border-radius:12px;background:#FEE2E2;color:#991B1B;font-size:11px;font-weight:700;">✗ No</span>`;
+    if (val === 'optout') return `<span style="display:inline-block;padding:2px 10px;border-radius:12px;background:#FEF3C7;color:#92400E;font-size:11px;font-weight:700;">🚫 Opted Out</span>`;
+    return `<span style="color:#94A3B8;">—</span>`;
+  };
+
+  // Build donut chart SVG for participation breakdown
+  const total2 = participated + didNotParticipate + optedOutPre + optedOutDuring;
+  const pctParticipated  = total2 > 0 ? (participated  / total2 * 100) : 0;
+  const pctNoShow        = total2 > 0 ? (didNotParticipate / total2 * 100) : 0;
+  const pctOptPre        = total2 > 0 ? (optedOutPre / total2 * 100) : 0;
+  const pctOptDuring     = total2 > 0 ? (optedOutDuring / total2 * 100) : 0;
+
+  function donutArc(pct, offset, color) {
+    const r = 60, cx = 80, cy = 80;
+    const circ = 2 * Math.PI * r;
+    const dash = (pct / 100) * circ;
+    const dashOffset = circ - (offset / 100) * circ;
+    return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="20"
+      stroke-dasharray="${dash} ${circ - dash}"
+      stroke-dashoffset="${dashOffset}"
+      transform="rotate(-90 ${cx} ${cy})" />`;
+  }
+
+  let offset = 0;
+  const arc1 = donutArc(pctParticipated, offset, '#16A34A'); offset += pctParticipated;
+  const arc2 = donutArc(pctNoShow,       offset, '#DC2626'); offset += pctNoShow;
+  const arc3 = donutArc(pctOptPre,       offset, '#D97706'); offset += pctOptPre;
+  const arc4 = donutArc(pctOptDuring,    offset, '#F59E0B');
+
+  const donutSVG = `<svg width="160" height="160" viewBox="0 0 160 160">
+    <circle cx="80" cy="80" r="60" fill="none" stroke="#F1F5F9" stroke-width="20"/>
+    ${arc1}${arc2}${arc3}${arc4}
+    <text x="80" y="75" text-anchor="middle" font-size="22" font-weight="800" fill="#0F172A">${pct}%</text>
+    <text x="80" y="94" text-anchor="middle" font-size="10" fill="#64748B" font-weight="600">PARTICIPATION</text>
+  </svg>`;
+
+  const deviceRows = rows.map(r => {
+    const isPre    = r.optOut?.opt_out_type === "pre_event";
+    const isDuring = r.optOut?.opt_out_type === "during_event";
+    const optTime  = r.optOut ? new Date(r.optOut.opted_out_at).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) : "—";
+    const relayStr = r.lastReading
+      ? [r.lastReading.relay_status_r1>0?"R1":"",r.lastReading.relay_status_r2>0?"R2":"",
+         r.lastReading.relay_status_r3>0?"R3":"",r.lastReading.relay_status_r4>0?"R4":""].filter(Boolean).join(", ")||"All Off"
+      : "No data";
+    const rowBg = r.optOut ? "#FFFBEB" : r.relayOn ? "#F0FDF4" : "#FFF";
+    return `<tr style="background:${rowBg};">
+      <td style="padding:10px 14px;font-weight:600;border-bottom:1px solid #F1F5F9;">${r.device.name}</td>
+      <td style="padding:10px 14px;border-bottom:1px solid #F1F5F9;text-align:center;">${r.optOut ? statusBadge('optout') : r.relayOn ? statusBadge(true) : statusBadge(false)}</td>
+      <td style="padding:10px 14px;border-bottom:1px solid #F1F5F9;text-align:center;">${isPre ? statusBadge('yes') : statusBadge(false)}</td>
+      <td style="padding:10px 14px;border-bottom:1px solid #F1F5F9;text-align:center;">${isDuring ? statusBadge('yes') : statusBadge(false)}</td>
+      <td style="padding:10px 14px;border-bottom:1px solid #F1F5F9;font-size:12px;color:#64748B;">${optTime}</td>
+      <td style="padding:10px 14px;border-bottom:1px solid #F1F5F9;text-align:center;font-weight:600;">${r.readingCount}</td>
+      <td style="padding:10px 14px;border-bottom:1px solid #F1F5F9;font-size:12px;">${relayStr}</td>
+    </tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DR Participation Report — ${eventName}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F8FAFC; color: #0F172A; font-size: 14px; }
+  @media print { body { background: #fff; } .no-print { display: none; } }
+</style>
+</head>
+<body>
+<div style="max-width:900px;margin:0 auto;padding:32px 24px;">
+
+  <!-- Header -->
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:32px;padding-bottom:24px;border-bottom:2px solid #E2E8F0;">
+    <div>
+      <div style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;">Demand Response Report</div>
+      <div style="font-size:28px;font-weight:800;color:#0F172A;line-height:1.2;">Event Participation Report</div>
+      <div style="font-size:15px;color:#64748B;margin-top:6px;">${eventName}</div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:11px;color:#94A3B8;">Generated</div>
+      <div style="font-size:13px;font-weight:600;color:#475569;">${reportDate}</div>
+      <button class="no-print" onclick="window.print()" style="margin-top:10px;padding:8px 16px;border-radius:6px;border:none;background:#0F172A;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">🖨 Print / Save PDF</button>
+    </div>
+  </div>
+
+  <!-- Event Summary Card -->
+  <div style="background:#fff;border-radius:12px;padding:24px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid #E2E8F0;">
+    <div style="font-size:12px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.08em;margin-bottom:16px;">Event Summary</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div><div style="font-size:11px;color:#94A3B8;margin-bottom:3px;">Event Name</div><div style="font-weight:700;font-size:15px;">${eventName}</div></div>
+      <div><div style="font-size:11px;color:#94A3B8;margin-bottom:3px;">Target Scope</div><div style="font-weight:700;font-size:15px;">${targetLabel}</div></div>
+      <div><div style="font-size:11px;color:#94A3B8;margin-bottom:3px;">Event Start</div><div style="font-weight:600;">${fireAt.toLocaleString([], {dateStyle:"full",timeStyle:"short"})}</div></div>
+      <div><div style="font-size:11px;color:#94A3B8;margin-bottom:3px;">Event End</div><div style="font-weight:600;">${endAt.toLocaleString([],{timeStyle:"short"})}</div></div>
+      <div><div style="font-size:11px;color:#94A3B8;margin-bottom:3px;">Scheduled Duration</div><div style="font-weight:600;">${duration} minutes</div></div>
+      <div><div style="font-size:11px;color:#94A3B8;margin-bottom:3px;">Actual Duration</div><div style="font-weight:600;">${actualDurMins} minutes</div></div>
+      <div style="grid-column:1/-1;"><div style="font-size:11px;color:#94A3B8;margin-bottom:3px;">Conclusion</div>
+        <div style="font-weight:600;${cancelledAt?'color:#DC2626;':'color:#16A34A;'}">${endReason}</div></div>
+    </div>
+  </div>
+
+  <!-- KPI Row + Donut -->
+  <div style="display:grid;grid-template-columns:160px 1fr;gap:20px;margin-bottom:24px;align-items:center;">
+    <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid #E2E8F0;display:flex;align-items:center;justify-content:center;">
+      ${donutSVG}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      ${kpiCard(participated, 'Participated', '#16A34A', '#F0FDF4')}
+      ${kpiCard(didNotParticipate, 'Did Not Participate', '#DC2626', '#FEF2F2')}
+      ${kpiCard(optedOutPre, 'Opted-Out Pre-Event', '#D97706', '#FFFBEB')}
+      ${kpiCard(optedOutDuring, 'Opted-Out During', '#F59E0B', '#FFFBEB')}
+    </div>
+  </div>
+
+  <!-- Narrative -->
+  <div style="background:#EFF6FF;border-radius:12px;padding:20px 24px;margin-bottom:24px;border-left:4px solid #3B82F6;">
+    <div style="font-size:12px;font-weight:700;color:#1D4ED8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Summary</div>
+    <p style="color:#1E3A5F;line-height:1.7;font-size:13px;">
+      This demand response event was dispatched to <strong>${total} device${total!==1?"s":""}</strong> under the target scope <strong>"${targetLabel}"</strong>.
+      ${wasEarlyCancelled
+        ? `The event was <strong style="color:#DC2626;">cancelled early</strong> by ${cancelledBy||"an operator"} after running for <strong>${actualDurMins} of ${duration}</strong> scheduled minutes.`
+        : `The event ran its <strong>full scheduled duration</strong> of <strong>${duration} minutes</strong>.`}
+      Of the ${total} devices called, <strong style="color:#16A34A;">${participated} (${pct}%)</strong> successfully participated by activating their relay during the event window.
+      ${optedOutPre > 0 ? `<strong>${optedOutPre} device${optedOutPre!==1?"s":""}</strong> were opted out prior to the event.` : ""}
+      ${optedOutDuring > 0 ? `<strong>${optedOutDuring} device${optedOutDuring!==1?"s":""}</strong> were opted out during the event and received a restore command.` : ""}
+      ${didNotParticipate > 0 ? `<strong style="color:#DC2626;">${didNotParticipate} device${didNotParticipate!==1?"s":""}</strong> did not register relay activation during the event window.` : "All non-opted-out devices confirmed participation."}
+    </p>
+  </div>
+
+  <!-- Device Detail Table -->
+  <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid #E2E8F0;margin-bottom:24px;">
+    <div style="padding:16px 20px;border-bottom:1px solid #F1F5F9;font-size:12px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.08em;">Device Detail</div>
+    <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="background:#F8FAFC;">
+          <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #E2E8F0;">Device</th>
+          <th style="text-align:center;padding:10px 14px;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #E2E8F0;">Participated</th>
+          <th style="text-align:center;padding:10px 14px;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #E2E8F0;">Opted-Out Pre</th>
+          <th style="text-align:center;padding:10px 14px;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #E2E8F0;">Opted-Out During</th>
+          <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #E2E8F0;">Opt-Out Time</th>
+          <th style="text-align:center;padding:10px 14px;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #E2E8F0;">Readings</th>
+          <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #E2E8F0;">Relay Status</th>
+        </tr>
+      </thead>
+      <tbody>${deviceRows}</tbody>
+    </table>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div style="text-align:center;padding-top:24px;border-top:1px solid #E2E8F0;color:#94A3B8;font-size:11px;">
+    Load Control Dashboard &nbsp;·&nbsp; ${eventName} &nbsp;·&nbsp; ${reportDate}
+  </div>
+
+</div>
+</body>
+</html>`;
+
+  const blob = new Blob([html], { type: "text/html" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `DR_Participation_Report_${eventName.replace(/\s+/g,"_")}_${fireAt.toISOString().split("T")[0]}.html`;
   a.click();
   URL.revokeObjectURL(a.href);
 }
+
 
 // ── Current Event Viewer ──────────────────────────────────────────────────────
 
@@ -4278,33 +4366,87 @@ async function searchWeatherLocation() {
   const container = document.getElementById("weather-forecast-container");
   container.innerHTML = `<div class="wx-loading">🔍 Searching for "${query}"...</div>`;
   try {
-    // Use Census geocoder for US locations
-    const geoRes = await fetch(
-      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`
-    );
-    const geoData = await geoRes.json();
-    const result  = geoData?.results?.[0];
-    if (!result) {
-      container.innerHTML = `<div class="wx-loading" style="color:var(--red);">Location not found. Try "Oklahoma City, OK" or a ZIP code.</div>`;
-      return;
+    let lat, lon, locationName;
+    const isZip = /^\d{5}(-\d{4})?$/.test(query);
+
+    if (isZip) {
+      // ZIP code — use Zippopotam.us (free, no key needed)
+      const zipRes  = await fetch(`https://api.zippopotam.us/us/${query.slice(0,5)}`);
+      if (!zipRes.ok) {
+        container.innerHTML = `<div class="wx-loading" style="color:var(--red);">ZIP code not found. Try a city name or "City, ST".</div>`;
+        return;
+      }
+      const zipData = await zipRes.json();
+      const place   = zipData.places?.[0];
+      if (!place) {
+        container.innerHTML = `<div class="wx-loading" style="color:var(--red);">ZIP code not found.</div>`;
+        return;
+      }
+      lat          = parseFloat(place.latitude);
+      lon          = parseFloat(place.longitude);
+      locationName = `${place["place name"]}, ${place["state abbreviation"]} ${query.slice(0,5)}`;
+
+    } else {
+      // City/State — split on comma so Open-Meteo only sees the city name
+      const parts    = query.split(/,\s*/);
+      const cityPart = parts[0].trim();
+      const statePart = parts[1]?.trim() || "";
+
+      // Search Open-Meteo with just the city name, then filter by state
+      const geoRes  = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityPart)}&count=10&language=en&format=json`
+      );
+      const geoData = await geoRes.json();
+      let result = null;
+
+      if (geoData?.results?.length) {
+        if (statePart) {
+          const stateUpper = statePart.toUpperCase();
+          result = geoData.results.find(r =>
+            r.country_code === "US" && (
+              r.admin1?.toUpperCase().startsWith(stateUpper) ||
+              r.admin1_code?.toUpperCase() === stateUpper ||
+              r.admin1?.toUpperCase() === stateUpper
+            )
+          ) || geoData.results.find(r => r.country_code === "US")
+            || geoData.results[0];
+        } else {
+          result = geoData.results.find(r => r.country_code === "US") || geoData.results[0];
+        }
+      }
+
+      // Fallback to Nominatim (OpenStreetMap) if Open-Meteo found nothing
+      if (!result) {
+        const nomRes  = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=us`,
+          { headers: { "Accept-Language": "en", "User-Agent": "LoadControlDashboard/1.0" } }
+        );
+        const nomData = await nomRes.json();
+        if (nomData?.[0]) {
+          lat          = parseFloat(nomData[0].lat);
+          lon          = parseFloat(nomData[0].lon);
+          locationName = nomData[0].display_name.split(",").slice(0,3).join(",").trim();
+        } else {
+          container.innerHTML = `<div class="wx-loading" style="color:var(--red);">Location not found. Try "Oklahoma City, OK" or a 5-digit ZIP code.</div>`;
+          return;
+        }
+      } else {
+        lat          = result.latitude;
+        lon          = result.longitude;
+        locationName = [result.name, result.admin1, result.country_code].filter(Boolean).join(", ");
+      }
     }
-    wxLocationData = {
-      name: [result.name, result.admin1, result.country_code].filter(Boolean).join(", "),
-      lat:  result.latitude,
-      lon:  result.longitude
-    };
+
+    wxLocationData = { name: locationName, lat, lon };
     localStorage.setItem(WEATHER_LOC_KEY, JSON.stringify(wxLocationData));
-    // Only reset NWS station if location actually changed — preserve manual station selection
     const prevLocation = JSON.parse(localStorage.getItem(WEATHER_LOC_KEY) || "{}");
-    const locationChanged = Math.abs((prevLocation.lat||0) - wxLocationData.lat) > 0.1
-                         || Math.abs((prevLocation.lon||0) - wxLocationData.lon) > 0.1;
+    const locationChanged = Math.abs((prevLocation.lat||0) - lat) > 0.1
+                         || Math.abs((prevLocation.lon||0) - lon) > 0.1;
     if (locationChanged) {
-      // Location changed — clear saved station so it rediscovers for new area
       try { localStorage.removeItem(NWS_STATION_KEY); } catch(e) {}
       nwsStationId   = null;
       nwsStationName = null;
     } else {
-      // Same location — reload saved station preference if set
       loadSavedNWSStation();
     }
     startNWSPoller();
@@ -27255,53 +27397,192 @@ function amiExportMVReport() {
   const fireAt   = new Date(eventData.fire_at);
   const duration = eventData.duration_minutes || 60;
   const endAt    = new Date(fireAt.getTime() + duration * 60000);
+  const reportDate = new Date().toLocaleString();
 
-  const lines = [
-    'DEMAND RESPONSE M&V REPORT',
-    `Generated: ${new Date().toLocaleString()}`,
-    '='.repeat(60),
-    '',
-    'EVENT SUMMARY',
-    '-'.repeat(40),
-    `Event Name:     ${eventData.name}`,
-    `Event Start:    ${fireAt.toLocaleString()}`,
-    `Event End:      ${endAt.toLocaleString()}`,
-    `Duration:       ${duration} minutes`,
-    `Meter:          ${meterUid}`,
-    `Baseline Method: ${method}`,
-    '',
-    'M&V RESULTS',
-    '-'.repeat(40),
-    `Baseline Demand:   ${avgBaseline.toFixed(3)} kW (avg prior similar periods)`,
-    `Actual Demand:     ${avgActual.toFixed(3)} kW (avg during event)`,
-    `Demand Reduction:  ${avgReduction.toFixed(3)} kW (${reductionPct.toFixed(1)}% of baseline)`,
-    `Energy Saved:      ${energySaved.toFixed(3)} kWh over ${duration} minutes`,
-    '',
-    `This event achieved a ${reductionPct.toFixed(1)}% reduction in demand compared to the ${method} baseline. ` +
-    `Total estimated energy savings of ${energySaved.toFixed(3)} kWh were recorded at meter ${meterUid}.`,
-    '',
-    'INTERVAL DETAIL',
-    '-'.repeat(40),
-    'Time       | Baseline kW | Actual kW | Reduction kW | Reduction % | Relay',
-    '-'.repeat(70),
-    ...intervals.map(i =>
-      `${new Date(i.r.interval_start).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} | ` +
-      `${(i.baselineKw??0).toFixed(3).padStart(11)} | ${(i.actualKw??0).toFixed(3).padStart(9)} | ` +
-      `${(i.reductionKw??0).toFixed(3).padStart(12)} | ${(i.reductionPct??0).toFixed(1).padStart(9)}% | ` +
-      `${i.relayOn===true?'ON':i.relayOn===false?'OFF':'—'}`
-    ),
-    '',
-    '='.repeat(60),
-    `Report generated by Load Control Dashboard | Event: ${eventData.name}`,
-  ].join('\n');
+  const methodLabels = {
+    '10of10': 'CAISO 10-of-10', '5of10': 'Mid 5-of-10',
+    '7day': '7-Day Same-Hour Avg', '30day': '30-Day Same-Hour Avg'
+  };
+  const methodLabel = methodLabels[method] || method;
 
-  const blob = new Blob([lines], { type:'text/plain' });
+  const kpiCard = (value, label, unit, color, bg) =>
+    `<div style="text-align:center;padding:20px 16px;border-radius:12px;background:${bg};border-left:4px solid ${color};">
+      <div style="font-size:32px;font-weight:800;color:${color};line-height:1;">${value}</div>
+      <div style="font-size:11px;color:#64748B;margin-top:4px;font-weight:600;">${unit}</div>
+      <div style="font-size:11px;color:#94A3B8;margin-top:4px;text-transform:uppercase;letter-spacing:.05em;">${label}</div>
+    </div>`;
+
+  // Build sparkline-style bar chart SVG for baseline vs actual per interval
+  const maxKw = Math.max(...intervals.map(i => Math.max(i.baselineKw||0, i.actualKw||0)), 1);
+  const barW  = Math.max(4, Math.floor(560 / Math.max(intervals.length, 1) / 2));
+  const gap   = Math.max(2, Math.floor(560 / Math.max(intervals.length, 1)) - barW * 2);
+  const chartH = 120;
+
+  const bars = intervals.map((iv, i) => {
+    const x      = i * (barW * 2 + gap);
+    const blH    = iv.baselineKw ? Math.round((iv.baselineKw / maxKw) * chartH) : 0;
+    const acH    = iv.actualKw   ? Math.round((iv.actualKw   / maxKw) * chartH) : 0;
+    return `<rect x="${x}" y="${chartH - blH}" width="${barW}" height="${blH}" fill="#3B82F6" opacity="0.7" rx="1"/>
+            <rect x="${x+barW}" y="${chartH - acH}" width="${barW}" height="${acH}" fill="${acH < blH ? '#16A34A' : '#DC2626'}" opacity="0.85" rx="1"/>`;
+  }).join('');
+
+  const totalWidth = intervals.length * (barW * 2 + gap);
+  const chartSVG = intervals.length ? `
+    <svg width="100%" viewBox="0 0 ${totalWidth} ${chartH + 20}" preserveAspectRatio="none" style="display:block;border-radius:4px;">
+      <rect width="${totalWidth}" height="${chartH + 20}" fill="#F8FAFC" rx="4"/>
+      ${bars}
+      <line x1="0" y1="${chartH}" x2="${totalWidth}" y2="${chartH}" stroke="#E2E8F0" stroke-width="1"/>
+    </svg>` : '';
+
+  const tableRows = intervals.map(i => {
+    const reduction = i.reductionKw ?? 0;
+    const pct       = i.reductionPct ?? 0;
+    const rowBg     = reduction > 0 ? '#F0FDF4' : '#FFF';
+    return `<tr style="background:${rowBg};">
+      <td style="padding:9px 14px;border-bottom:1px solid #F1F5F9;font-weight:600;white-space:nowrap;">${new Date(i.r.interval_start).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</td>
+      <td style="padding:9px 14px;border-bottom:1px solid #F1F5F9;text-align:right;color:#3B82F6;font-weight:600;">${i.baselineKw?.toFixed(3)??'—'}</td>
+      <td style="padding:9px 14px;border-bottom:1px solid #F1F5F9;text-align:right;font-weight:600;">${i.actualKw?.toFixed(3)??'—'}</td>
+      <td style="padding:9px 14px;border-bottom:1px solid #F1F5F9;text-align:right;color:${reduction>0?'#16A34A':'#DC2626'};font-weight:700;">${reduction.toFixed(3)}</td>
+      <td style="padding:9px 14px;border-bottom:1px solid #F1F5F9;text-align:right;">
+        <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:${pct>0?'#DCFCE7':'#FEE2E2'};color:${pct>0?'#166534':'#991B1B'};">${pct.toFixed(1)}%</span>
+      </td>
+      <td style="padding:9px 14px;border-bottom:1px solid #F1F5F9;text-align:center;">
+        ${i.relayOn===true
+          ? '<span style="display:inline-block;padding:2px 8px;border-radius:10px;background:#DCFCE7;color:#166534;font-size:11px;font-weight:700;">● ON</span>'
+          : i.relayOn===false
+            ? '<span style="display:inline-block;padding:2px 8px;border-radius:10px;background:#F1F5F9;color:#64748B;font-size:11px;">○ OFF</span>'
+            : '<span style="color:#94A3B8;">—</span>'}
+      </td>
+    </tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>M&V Report — ${eventData.name}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F8FAFC; color: #0F172A; font-size: 14px; }
+  @media print { body { background: #fff; } .no-print { display: none; } }
+</style>
+</head>
+<body>
+<div style="max-width:920px;margin:0 auto;padding:32px 24px;">
+
+  <!-- Header -->
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:32px;padding-bottom:24px;border-bottom:2px solid #E2E8F0;">
+    <div>
+      <div style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;">AMI Measurement & Verification</div>
+      <div style="font-size:28px;font-weight:800;color:#0F172A;line-height:1.2;">Demand Reduction Report</div>
+      <div style="font-size:15px;color:#64748B;margin-top:6px;">${eventData.name}</div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:11px;color:#94A3B8;">Generated</div>
+      <div style="font-size:13px;font-weight:600;color:#475569;">${reportDate}</div>
+      <button class="no-print" onclick="window.print()" style="margin-top:10px;padding:8px 16px;border-radius:6px;border:none;background:#0F172A;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">🖨 Print / Save PDF</button>
+    </div>
+  </div>
+
+  <!-- Event + Meter Info -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
+    <div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid #E2E8F0;">
+      <div style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px;">Event Details</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;justify-content:space-between;"><span style="color:#94A3B8;font-size:12px;">Event</span><span style="font-weight:700;font-size:13px;">${eventData.name}</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#94A3B8;font-size:12px;">Start</span><span style="font-weight:600;font-size:13px;">${fireAt.toLocaleString([],{dateStyle:"medium",timeStyle:"short"})}</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#94A3B8;font-size:12px;">End</span><span style="font-weight:600;font-size:13px;">${endAt.toLocaleString([],{dateStyle:"medium",timeStyle:"short"})}</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#94A3B8;font-size:12px;">Duration</span><span style="font-weight:600;font-size:13px;">${duration} minutes</span></div>
+      </div>
+    </div>
+    <div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid #E2E8F0;">
+      <div style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px;">M&V Parameters</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;justify-content:space-between;"><span style="color:#94A3B8;font-size:12px;">Meter</span><span style="font-weight:700;font-size:12px;font-family:monospace;">${meterUid}</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#94A3B8;font-size:12px;">Baseline Method</span><span style="font-weight:600;font-size:13px;">${methodLabel}</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#94A3B8;font-size:12px;">Intervals Analyzed</span><span style="font-weight:600;font-size:13px;">${intervals.length}</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI Cards -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;">
+    ${kpiCard(avgBaseline.toFixed(2), 'Baseline Demand', 'kW avg', '#3B82F6', '#EFF6FF')}
+    ${kpiCard(avgActual.toFixed(2),   'Actual Demand',   'kW avg', '#64748B', '#F8FAFC')}
+    ${kpiCard(avgReduction.toFixed(2),'Demand Reduction','kW avg', '#16A34A', '#F0FDF4')}
+    ${kpiCard(reductionPct.toFixed(1)+'%','Reduction Rate','of baseline','#7C3AED','#F5F3FF')}
+  </div>
+
+  <!-- Energy Saved Banner -->
+  <div style="background:linear-gradient(135deg,#0F172A 0%,#1E3A5F 100%);border-radius:12px;padding:24px 28px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;">
+    <div>
+      <div style="font-size:12px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;">Estimated Energy Savings</div>
+      <div style="font-size:36px;font-weight:800;color:#fff;line-height:1;">${energySaved.toFixed(3)} <span style="font-size:20px;font-weight:400;color:#94A3B8;">kWh</span></div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:12px;color:#94A3B8;margin-bottom:4px;">Over ${duration}-minute event</div>
+      <div style="font-size:13px;color:#64748B;">${avgReduction.toFixed(2)} kW avg reduction × ${(duration/60).toFixed(2)} hrs</div>
+    </div>
+  </div>
+
+  <!-- Narrative -->
+  <div style="background:#EFF6FF;border-radius:12px;padding:20px 24px;margin-bottom:24px;border-left:4px solid #3B82F6;">
+    <div style="font-size:12px;font-weight:700;color:#1D4ED8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Analysis Summary</div>
+    <p style="color:#1E3A5F;line-height:1.8;font-size:13px;">
+      This M&V analysis used the <strong>${methodLabel}</strong> baseline methodology to estimate the Customer Baseline Load (CBL) for meter <strong style="font-family:monospace;">${meterUid}</strong> during the event window of <strong>${fireAt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} – ${endAt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</strong>.
+      The baseline average demand was <strong style="color:#3B82F6;">${avgBaseline.toFixed(3)} kW</strong>, while the actual measured demand during the event was <strong>${avgActual.toFixed(3)} kW</strong>.
+      This represents a verified demand reduction of <strong style="color:#16A34A;">${avgReduction.toFixed(3)} kW (${reductionPct.toFixed(1)}%)</strong> against the established baseline,
+      resulting in estimated energy savings of <strong style="color:#7C3AED;">${energySaved.toFixed(3)} kWh</strong> over the ${duration}-minute event duration.
+    </p>
+  </div>
+
+  <!-- Bar Chart -->
+  ${chartSVG ? `<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid #E2E8F0;margin-bottom:24px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="font-size:12px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.08em;">Baseline vs Actual — Per Interval</div>
+      <div style="display:flex;gap:16px;font-size:11px;">
+        <span><span style="display:inline-block;width:10px;height:10px;background:#3B82F6;border-radius:2px;margin-right:4px;"></span>Baseline</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:#16A34A;border-radius:2px;margin-right:4px;"></span>Actual (below baseline)</span>
+      </div>
+    </div>
+    ${chartSVG}
+  </div>` : ''}
+
+  <!-- Detail Table -->
+  <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid #E2E8F0;margin-bottom:24px;">
+    <div style="padding:16px 20px;border-bottom:1px solid #F1F5F9;font-size:12px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.08em;">Interval Detail</div>
+    <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="background:#F8FAFC;">
+          <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;border-bottom:1px solid #E2E8F0;">Time</th>
+          <th style="text-align:right;padding:10px 14px;font-size:11px;font-weight:700;color:#3B82F6;text-transform:uppercase;border-bottom:1px solid #E2E8F0;">Baseline kW</th>
+          <th style="text-align:right;padding:10px 14px;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;border-bottom:1px solid #E2E8F0;">Actual kW</th>
+          <th style="text-align:right;padding:10px 14px;font-size:11px;font-weight:700;color:#16A34A;text-transform:uppercase;border-bottom:1px solid #E2E8F0;">Reduction kW</th>
+          <th style="text-align:right;padding:10px 14px;font-size:11px;font-weight:700;color:#7C3AED;text-transform:uppercase;border-bottom:1px solid #E2E8F0;">Reduction %</th>
+          <th style="text-align:center;padding:10px 14px;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;border-bottom:1px solid #E2E8F0;">Relay</th>
+        </tr>
+      </thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div style="text-align:center;padding-top:24px;border-top:1px solid #E2E8F0;color:#94A3B8;font-size:11px;">
+    Load Control Dashboard &nbsp;·&nbsp; M&V Report &nbsp;·&nbsp; ${eventData.name} &nbsp;·&nbsp; ${reportDate}
+  </div>
+
+</div>
+</body>
+</html>`;
+
+  const blob = new Blob([html], { type: 'text/html' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `MV_Report_${eventData.name.replace(/\s+/g,'_')}_${fireAt.toISOString().split('T')[0]}.txt`;
+  a.download = `MV_Report_${eventData.name.replace(/\s+/g,'_')}_${fireAt.toISOString().split('T')[0]}.html`;
   a.click();
   URL.revokeObjectURL(a.href);
-}
 
 
 // ── AMI Baseline Calculator (Enhanced) ────────────────────────────────────────
@@ -28042,4 +28323,5 @@ function amiExportBaselineReport() {
   a.download = `Baseline_Report_${meterUid}_${eventStart.toISOString().split('T')[0]}.txt`;
   a.click();
   URL.revokeObjectURL(a.href);
+}
 }
