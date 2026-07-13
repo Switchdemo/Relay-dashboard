@@ -28164,8 +28164,9 @@ async function amiRunBaseline() {
 
     _blResults = {};
     _blActual  = eventReadings.map(r => ({
-      time: new Date(r.interval_start).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),
-      kw:   r.kw ?? null
+      time:     new Date(r.interval_start).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),
+      fullTime: new Date(r.interval_start),
+      kw:       r.kw ?? null
     }));
 
     const enabledStandard = BL_STANDARD_METHODS.filter(m => document.getElementById(`bl-std-${m.key}`)?.checked);
@@ -28175,7 +28176,8 @@ async function amiRunBaseline() {
     _amiBaselineData = { meterUid, eventStart, eventEnd, lookback };
 
     // ── Render ───────────────────────────────────────────────────────────────
-    blRenderChart(enabledStandard);
+    const rangeDays = document.getElementById('bl-chart-range')?.value || 'all';
+    blRenderChart(enabledStandard, rangeDays);
     blRenderKPIs(enabledStandard);
     blRenderTable(enabledStandard);
 
@@ -28190,37 +28192,44 @@ async function amiRunBaseline() {
 
 // ── Render Chart ──────────────────────────────────────────────────────────────
 
-function blRenderChart(enabledStandard) {
+function blRenderChart(enabledStandard, rangeDays) {
   if (_amiBaselineChart) { _amiBaselineChart.destroy(); _amiBaselineChart = null; }
   const ctx = document.getElementById('bl-chart')?.getContext('2d');
   if (!ctx) return;
 
-  const labels = _blActual.map(r => r.time);
+  // Filter indices by display range
+  let indices = _blActual.map((_,i)=>i);
+  if (rangeDays && rangeDays !== 'all') {
+    const cutoff = new Date(_blActual[_blActual.length-1]?.fullTime || new Date());
+    cutoff.setDate(cutoff.getDate() - parseInt(rangeDays));
+    indices = _blActual.map((r,i)=>({r,i})).filter(({r})=>r.fullTime>=cutoff).map(({i})=>i);
+  }
+
+  const labels = indices.map(i => _blActual[i].time);
+  const sliceActual = i => _blActual[i]?.kw?.toFixed(3);
+  const sliceResult = (key, i) => (_blResults[key]||[])[i]?.blKw?.toFixed(3);
 
   const datasets = [
-    // Actual (always shown)
     {
       label: 'Actual (event)',
-      data:  _blActual.map(r => r.kw?.toFixed(3)),
+      data:  indices.map(sliceActual),
       borderColor: '#6B7280', backgroundColor: 'rgba(107,114,128,0.1)',
-      borderWidth: 2.5, pointRadius: 2, fill: true, tension: 0.2,
+      borderWidth: 2.5, pointRadius: indices.length > 200 ? 0 : 2, fill: true, tension: 0.2,
       order: 0
     },
-    // Standard methods
     ...enabledStandard.map((m,i) => ({
       label: m.label,
-      data:  (_blResults[m.key]||[]).map(r => r.blKw?.toFixed(3)),
+      data:  indices.map(idx => sliceResult(m.key, idx)),
       borderColor: m.color, backgroundColor: m.color + '10',
-      borderWidth: 2, pointRadius: 2, fill: false, tension: 0.3,
+      borderWidth: 2, pointRadius: 0, fill: false, tension: 0.3,
       borderDash: i > 4 ? [4,3] : undefined,
       order: i+1
     })),
-    // Custom baselines
     ..._blCustomBaselines.map((bl,i) => ({
       label: bl.name,
-      data:  (_blResults[bl.id]||[]).map(r => r.blKw?.toFixed(3)),
+      data:  indices.map(idx => sliceResult(bl.id, idx)),
       borderColor: bl.color, backgroundColor: bl.color + '15',
-      borderWidth: 2, pointRadius: 2, fill: false, tension: 0.3,
+      borderWidth: 2, pointRadius: 0, fill: false, tension: 0.3,
       borderDash: [6,2],
       order: enabledStandard.length + i + 1
     }))
@@ -28233,18 +28242,24 @@ function blRenderChart(enabledStandard) {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { display: false }, // we render our own toggles
+        legend: { display: false },
         tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y!=null?Number(ctx.parsed.y).toFixed(3)+' kW':'—'}` } }
       },
       scales: {
-        x: { ticks: { font:{size:10}, maxTicksLimit:12 } },
+        x: { ticks: { font:{size:10}, maxTicksLimit:16 } },
         y: { title: { display:true, text:'kW', font:{size:11} }, beginAtZero: true }
       }
     }
   });
 
-  // Render toggle buttons
   blRenderLegendToggles(datasets);
+}
+
+function blUpdateChartRange() {
+  if (!_amiBaselineData || !Object.keys(_blResults).length) return;
+  const rangeDays = document.getElementById('bl-chart-range')?.value || 'all';
+  const enabledStandard = BL_STANDARD_METHODS.filter(m => _blResults[m.key]);
+  blRenderChart(enabledStandard, rangeDays);
 }
 
 function blRenderLegendToggles(datasets) {
