@@ -4366,33 +4366,87 @@ async function searchWeatherLocation() {
   const container = document.getElementById("weather-forecast-container");
   container.innerHTML = `<div class="wx-loading">🔍 Searching for "${query}"...</div>`;
   try {
-    // Use Census geocoder for US locations
-    const geoRes = await fetch(
-      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`
-    );
-    const geoData = await geoRes.json();
-    const result  = geoData?.results?.[0];
-    if (!result) {
-      container.innerHTML = `<div class="wx-loading" style="color:var(--red);">Location not found. Try "Oklahoma City, OK" or a ZIP code.</div>`;
-      return;
+    let lat, lon, locationName;
+    const isZip = /^\d{5}(-\d{4})?$/.test(query);
+
+    if (isZip) {
+      // ZIP code — use Zippopotam.us (free, no key needed)
+      const zipRes  = await fetch(`https://api.zippopotam.us/us/${query.slice(0,5)}`);
+      if (!zipRes.ok) {
+        container.innerHTML = `<div class="wx-loading" style="color:var(--red);">ZIP code not found. Try a city name or "City, ST".</div>`;
+        return;
+      }
+      const zipData = await zipRes.json();
+      const place   = zipData.places?.[0];
+      if (!place) {
+        container.innerHTML = `<div class="wx-loading" style="color:var(--red);">ZIP code not found.</div>`;
+        return;
+      }
+      lat          = parseFloat(place.latitude);
+      lon          = parseFloat(place.longitude);
+      locationName = `${place["place name"]}, ${place["state abbreviation"]} ${query.slice(0,5)}`;
+
+    } else {
+      // City/State — split on comma so Open-Meteo only sees the city name
+      const parts    = query.split(/,\s*/);
+      const cityPart = parts[0].trim();
+      const statePart = parts[1]?.trim() || "";
+
+      // Search Open-Meteo with just the city name, then filter by state
+      const geoRes  = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityPart)}&count=10&language=en&format=json`
+      );
+      const geoData = await geoRes.json();
+      let result = null;
+
+      if (geoData?.results?.length) {
+        if (statePart) {
+          const stateUpper = statePart.toUpperCase();
+          result = geoData.results.find(r =>
+            r.country_code === "US" && (
+              r.admin1?.toUpperCase().startsWith(stateUpper) ||
+              r.admin1_code?.toUpperCase() === stateUpper ||
+              r.admin1?.toUpperCase() === stateUpper
+            )
+          ) || geoData.results.find(r => r.country_code === "US")
+            || geoData.results[0];
+        } else {
+          result = geoData.results.find(r => r.country_code === "US") || geoData.results[0];
+        }
+      }
+
+      // Fallback to Nominatim (OpenStreetMap) if Open-Meteo found nothing
+      if (!result) {
+        const nomRes  = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=us`,
+          { headers: { "Accept-Language": "en", "User-Agent": "LoadControlDashboard/1.0" } }
+        );
+        const nomData = await nomRes.json();
+        if (nomData?.[0]) {
+          lat          = parseFloat(nomData[0].lat);
+          lon          = parseFloat(nomData[0].lon);
+          locationName = nomData[0].display_name.split(",").slice(0,3).join(",").trim();
+        } else {
+          container.innerHTML = `<div class="wx-loading" style="color:var(--red);">Location not found. Try "Oklahoma City, OK" or a 5-digit ZIP code.</div>`;
+          return;
+        }
+      } else {
+        lat          = result.latitude;
+        lon          = result.longitude;
+        locationName = [result.name, result.admin1, result.country_code].filter(Boolean).join(", ");
+      }
     }
-    wxLocationData = {
-      name: [result.name, result.admin1, result.country_code].filter(Boolean).join(", "),
-      lat:  result.latitude,
-      lon:  result.longitude
-    };
+
+    wxLocationData = { name: locationName, lat, lon };
     localStorage.setItem(WEATHER_LOC_KEY, JSON.stringify(wxLocationData));
-    // Only reset NWS station if location actually changed — preserve manual station selection
     const prevLocation = JSON.parse(localStorage.getItem(WEATHER_LOC_KEY) || "{}");
-    const locationChanged = Math.abs((prevLocation.lat||0) - wxLocationData.lat) > 0.1
-                         || Math.abs((prevLocation.lon||0) - wxLocationData.lon) > 0.1;
+    const locationChanged = Math.abs((prevLocation.lat||0) - lat) > 0.1
+                         || Math.abs((prevLocation.lon||0) - lon) > 0.1;
     if (locationChanged) {
-      // Location changed — clear saved station so it rediscovers for new area
       try { localStorage.removeItem(NWS_STATION_KEY); } catch(e) {}
       nwsStationId   = null;
       nwsStationName = null;
     } else {
-      // Same location — reload saved station preference if set
       loadSavedNWSStation();
     }
     startNWSPoller();
