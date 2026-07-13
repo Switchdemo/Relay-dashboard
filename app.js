@@ -3209,25 +3209,6 @@ function exportParticipationReport() {
   URL.revokeObjectURL(a.href);
 }
 
-  const { eventName, fireAt, endAt, duration, targetLabel, rows,
-          participated, didNotParticipate, optedOutPre, optedOutDuring, pct,
-          cancelledAt, cancelledBy, endedAt, wasEarlyCancelled } = d;
-
-  const total      = rows.length;
-  const reportDate = new Date().toLocaleString();
-  const eventDate  = fireAt.toLocaleString([], { dateStyle: "full", timeStyle: "short" });
-  const endDate    = endAt.toLocaleString([], { timeStyle: "short" });
-
-  // Determine how the event actually ended
-  const actualEnd = cancelledAt ? new Date(cancelledAt) : endedAt ? new Date(endedAt) : endAt;
-  const actualEndStr = actualEnd.toLocaleString([], { dateStyle: "full", timeStyle: "short" });
-  const actualDurMins = Math.round((actualEnd - fireAt) / 60000);
-  const endReason = cancelledAt
-    ? `Early cancellation by operator (${cancelledBy || "unknown"})`
-    : endedAt
-      ? "Completed at scheduled end time"
-      : "Completed at scheduled end time (end not explicitly logged)";
-
 
 // ── Current Event Viewer ──────────────────────────────────────────────────────
 
