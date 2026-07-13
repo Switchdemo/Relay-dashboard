@@ -532,17 +532,20 @@ async function initScheduler() {
 
 async function getNextEventName() {
   try {
-    const rows = await supabaseGet("schedules?select=name&order=id.desc&limit=100");
+    // Check both schedules and schedule_queue to find the true highest event number
+    const [schedRows, queueRows] = await Promise.all([
+      supabaseGet("schedules?select=name&order=id.desc&limit=200").catch(()=>[]),
+      supabaseGet("schedule_queue?select=name&order=id.desc&limit=200").catch(()=>[])
+    ]);
     let maxNum = 0;
-    if (Array.isArray(rows)) {
-      rows.forEach(r => {
-        const match = r.name.match(/Event (\d+)/i);
-        if (match) {
-          const num = parseInt(match[1]);
-          if (num > maxNum) maxNum = num;
-        }
-      });
-    }
+    [...(Array.isArray(schedRows) ? schedRows : []), ...(Array.isArray(queueRows) ? queueRows : [])].forEach(r => {
+      if (!r.name) return;
+      const match = r.name.match(/Event\s+(\d+)/i);
+      if (match) {
+        const num = parseInt(match[1]);
+        if (num > maxNum) maxNum = num;
+      }
+    });
     return "Event " + String(maxNum + 1).padStart(5, "0");
   } catch(e) { return "Event 00001"; }
 }
@@ -1592,7 +1595,30 @@ const RELAY_FUNCTION_MAP = {
   relay4_on: 0x88,
 };
 
-let lcEventId = 1; // Auto-incrementing event ID (1-254)
+let lcEventId = 1; // Auto-incrementing event ID (1-254) — loaded from Supabase on init
+
+async function loadLCEventId() {
+  try {
+    const rows = await supabaseGet("program_settings?setting_key=eq.lc_event_id_counter&select=setting_value");
+    const val = parseInt(rows?.[0]?.setting_value);
+    if (!isNaN(val) && val >= 1 && val <= 254) lcEventId = val;
+  } catch(e) { console.warn("loadLCEventId:", e.message); }
+}
+
+async function saveLCEventId(id) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/program_settings?on_conflict=setting_key`, {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates,return=minimal"
+      },
+      body: JSON.stringify({ setting_key: "lc_event_id_counter", setting_value: String(id) })
+    });
+  } catch(e) { console.warn("saveLCEventId:", e.message); }
+}
 
 function buildLCHex(relayAction, mode, strategyNum, reps, startUnixTime) {
   const bytes = [];
@@ -1612,9 +1638,10 @@ function buildLCHex(relayAction, mode, strategyNum, reps, startUnixTime) {
   // Data byte = repetitions (0-255)
   const dataByte = Math.min(255, Math.max(0, reps - 1)); // 0 = 1 rep, 1 = 2 reps etc.
 
-  // Event ID (1-254, wraps)
+  // Event ID (1-254, wraps) — persisted to Supabase to prevent collisions across devices
   const evId = lcEventId;
   lcEventId = (lcEventId >= 254) ? 1 : lcEventId + 1;
+  saveLCEventId(lcEventId); // async, non-blocking
 
   // Start time as 4 bytes MSB first (Unix timestamp)
   const t = Math.floor(startUnixTime || 0);
@@ -4807,6 +4834,8 @@ async function onSignedIn(session) {
   await loadDevicesFromDB();
   buildControls();
   buildDataCards();
+  // Load LC event ID counter from Supabase to prevent cross-device collisions
+  loadLCEventId().catch(e => console.warn("loadLCEventId:", e.message));
   // Load Pelican sites in background (non-blocking)
   loadPelicanSites().catch(e => console.warn("Pelican load:", e.message));
   loadDerapiAssets().catch(e => console.warn("DERapi load:", e.message));
@@ -27583,7 +27612,7 @@ function amiExportMVReport() {
   a.download = `MV_Report_${eventData.name.replace(/\s+/g,'_')}_${fireAt.toISOString().split('T')[0]}.html`;
   a.click();
   URL.revokeObjectURL(a.href);
-}
+
 
 // ── AMI Baseline Calculator (Enhanced) ────────────────────────────────────────
 
@@ -28323,4 +28352,5 @@ function amiExportBaselineReport() {
   a.download = `Baseline_Report_${meterUid}_${eventStart.toISOString().split('T')[0]}.txt`;
   a.click();
   URL.revokeObjectURL(a.href);
+}
 }
