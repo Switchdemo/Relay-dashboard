@@ -3414,7 +3414,16 @@
           <div class="sched-card">
             <div class="sched-card-header">
               <div class="sched-card-title">Method Comparison Chart</div>
-              <div style="display:flex;gap:6px;">
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                <label style="font-size:11px;color:var(--text-hint);">Display:</label>
+                <select id="bl-chart-range" onchange="blUpdateChartRange()" style="padding:4px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
+                  <option value="all" selected>Full event window</option>
+                  <option value="1">Last 1 day</option>
+                  <option value="3">Last 3 days</option>
+                  <option value="7">Last 7 days</option>
+                  <option value="14">Last 14 days</option>
+                  <option value="30">Last 30 days</option>
+                </select>
                 <button class="queue-refresh" onclick="amiExportBaselineReport()" style="color:var(--green-dark);border-color:var(--green);font-size:11px;">📄 Export</button>
                 <button class="queue-refresh" onclick="blSaveCurrentAsBaseline()" style="font-size:11px;">💾 Save</button>
               </div>
