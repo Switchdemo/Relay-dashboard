@@ -2462,10 +2462,13 @@ async function generateHistoryReport() {
   if (previewEl) previewEl.style.display = "none";
 
   try {
-    // ── Fetch device readings ──────────────────────────────────────────────
-    let readingQuery = `device_readings?recorded_at=gte.${encodeURIComponent(fromISO)}&recorded_at=lte.${encodeURIComponent(toISO)}&order=recorded_at.asc&limit=5000`;
+    // ── Fetch device readings — paginated so we get ALL rows in the window ──
+    // supabaseGet() is capped by PostgREST's server-side row limit (~1000).
+    // supabaseGetPaged() uses Range headers to page through all results.
+    let readingQuery = `device_readings?recorded_at=gte.${encodeURIComponent(fromISO)}&recorded_at=lte.${encodeURIComponent(toISO)}&order=recorded_at.asc`;
     if (deviceUid) readingQuery += `&device_uid=eq.${encodeURIComponent(deviceUid)}`;
-    const readings = await supabaseGet(readingQuery);
+    if (statusEl) statusEl.textContent = "Fetching readings (paging)…";
+    const readings = await supabaseGetPaged(readingQuery, 50000, 1000);
 
     // ── Fetch schedule events in window ───────────────────────────────────
     let evQuery = `schedule_queue?fire_at=gte.${encodeURIComponent(fromISO)}&fire_at=lte.${encodeURIComponent(toISO)}&order=fire_at.asc&limit=200`;
@@ -2476,18 +2479,29 @@ async function generateHistoryReport() {
     const oadrEvents = await supabaseGet(oadrQuery).catch(() => []);
 
     if (!Array.isArray(readings) || readings.length === 0) {
-      if (statusEl) { statusEl.textContent = "No device readings found for the selected period."; statusEl.style.color = "var(--amber)"; }
+      if (statusEl) { statusEl.textContent = "No device readings found for the selected period."; statusEl.style.color = "var(--amber)"; statusEl.style.display = "block"; }
       return;
+    }
+
+    if (statusEl) {
+      const cappedNote = readings.length >= 50000 ? " (capped at 50 000 — narrow the date range for full accuracy)" : "";
+      statusEl.textContent = `Loaded ${readings.length.toLocaleString()} readings${cappedNote}`;
+      statusEl.style.color = readings.length >= 50000 ? "var(--amber)" : "var(--green-dark)";
+      statusEl.style.display = "block";
     }
 
     const deviceName = deviceUid
       ? (DEVICES.find(d => d.uid === deviceUid)?.name || unitName(deviceUid))
       : "All Devices";
 
-    // ── Relay ON check — identical to relayDot() and the history table green dot ──
-    // The green indicator in Device History is: relayDot(r.relay_status_rN) → val > 0.
-    // We use exactly that so the report agrees with what the user sees in the table.
-    const isRelayOn = (r, num) => (r[`relay_status_r${num}`] ?? 0) > 0;
+    // ── Relay ON check — uses bit 3 (0x08) of relay_status_rN ───────────────
+    // parseBubbleUpHex (the frontend's own hex decoder) defines:
+    //   active = (r >> 3) & 1   ← bit 3 = relay physically energised
+    //   load   = r & 1          ← bit 0 = load present on circuit (relay may be OFF)
+    // relayDot() uses val > 0 which catches load-present even when relay is OFF —
+    // that's why the dot lights up even when the relay hasn't changed state.
+    // For transition detection we need bit 3 only: relay is genuinely ON.
+    const isRelayOn = (r, num) => ((r[`relay_status_r${num}`] ?? 0) & 0x08) !== 0;
 
     // ── Compute KPIs ──────────────────────────────────────────────────────
     const watts      = readings.map(r => r.watts_consumed).filter(w => w != null && w > 0);
@@ -2594,7 +2608,7 @@ async function generateHistoryReport() {
 
     // ── Render preview ────────────────────────────────────────────────────
     _renderHistoryReportPreview();
-    if (statusEl) statusEl.style.display = "none";
+    // Status stays visible — it shows the reading count which is useful context
     if (previewEl) previewEl.style.display = "block";
 
   } catch(e) {
