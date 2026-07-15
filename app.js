@@ -2465,17 +2465,18 @@ async function generateHistoryReport() {
     // ── Fetch device readings — paginated so we get ALL rows in the window ──
     // supabaseGet() is capped by PostgREST's server-side row limit (~1000).
     // supabaseGetPaged() uses Range headers to page through all results.
-    let readingQuery = `device_readings?recorded_at=gte.${encodeURIComponent(fromISO)}&recorded_at=lte.${encodeURIComponent(toISO)}&order=recorded_at.asc`;
+    // NOTE: date values must NOT be encodeURIComponent'd — PostgREST needs raw ISO strings.
+    let readingQuery = `device_readings?recorded_at=gte.${fromISO}&recorded_at=lte.${toISO}&order=recorded_at.asc`;
     if (deviceUid) readingQuery += `&device_uid=eq.${encodeURIComponent(deviceUid)}`;
     if (statusEl) statusEl.textContent = "Fetching readings (paging)…";
     const readings = await supabaseGetPaged(readingQuery, 50000, 1000);
 
     // ── Fetch schedule events in window ───────────────────────────────────
-    let evQuery = `schedule_queue?fire_at=gte.${encodeURIComponent(fromISO)}&fire_at=lte.${encodeURIComponent(toISO)}&order=fire_at.asc&limit=200`;
+    let evQuery = `schedule_queue?fire_at=gte.${fromISO}&fire_at=lte.${toISO}&order=fire_at.asc&limit=200`;
     const events = await supabaseGet(evQuery);
 
     // ── Fetch OpenADR events in window ────────────────────────────────────
-    let oadrQuery = `openadr_events?event_start=gte.${encodeURIComponent(fromISO)}&event_start=lte.${encodeURIComponent(toISO)}&order=event_start.asc&limit=50`;
+    let oadrQuery = `openadr_events?event_start=gte.${fromISO}&event_start=lte.${toISO}&order=event_start.asc&limit=50`;
     const oadrEvents = await supabaseGet(oadrQuery).catch(() => []);
 
     if (!Array.isArray(readings) || readings.length === 0) {
