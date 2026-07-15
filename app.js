@@ -8606,6 +8606,48 @@ async function exportEnergyCSV() {
 }
 
 // ── OPENADR VEN ───────────────────────────────────────────────────────────────
+
+// Strategy → cycle time in minutes (matches LC firmware definitions)
+// Strategies 1–3: 7.5 min cycle, 4–9: 15 min, 10–15: 30 min, 16–19: 30 min
+const STRATEGY_CYCLE_MINUTES = {
+  1: 7.5, 2: 7.5, 3: 7.5,
+  4: 15,  5: 15,  6: 15,  7: 15,  8: 15,  9: 15,
+  10: 30, 11: 30, 12: 30, 13: 30, 14: 30, 15: 30,
+  16: 30, 17: 30, 18: 30, 19: 30,
+  61: 0   // restore — no cycle
+};
+function stratCycleMinutes(stratNum) {
+  return STRATEGY_CYCLE_MINUTES[stratNum] ?? 15;
+}
+
+// Parse ISO 8601 duration → minutes (handles PT1800S, PT30M, PT2H, P1D etc.)
+function parseISO8601Duration(dur) {
+  if (!dur) return null;
+  const secM = dur.match(/PT(\d+(?:\.\d+)?)S/);
+  if (secM) return Math.round(parseFloat(secM[1]) / 60);
+  const minM = dur.match(/PT(\d+)M(?!\w)/);
+  if (minM) return parseInt(minM[1]);
+  const hrM  = dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
+  if (hrM && (hrM[1] || hrM[2])) return (parseInt(hrM[1] || 0) * 60) + parseInt(hrM[2] || 0);
+  const dayM = dur.match(/P(\d+)D/);
+  if (dayM) return parseInt(dayM[1]) * 1440;
+  return null;
+}
+
+// SIMPLE signal level → float mapping (SCE sends integer 0–3; OADR float is 0.0–1.0)
+// When signal_level is already a float (0.0–1.0), signalToStrategy handles it.
+// When it's an integer SIMPLE level (0–3), map to float equivalent for signalToStrategy.
+function normalizeSIMPLELevel(raw) {
+  const n = parseFloat(raw);
+  if (isNaN(n)) return 0;
+  // SIMPLE integer levels 0–3 from SCE
+  if (Number.isInteger(n) && n >= 0 && n <= 3) {
+    const map = { 0: 0.0, 1: 0.25, 2: 0.5, 3: 1.0 };
+    return map[n] ?? n / 3;
+  }
+  return n; // already a float 0.0–1.0
+}
+
 let oadrVTNConfig  = null;
 let oadrMappings   = [
   { level: 1.0,  desc: "Emergency Shed",  strategy: 19, mode: "dlc", pct: 100 },
@@ -8904,6 +8946,7 @@ async function initOpenADRConfig() {
 
   renderMappingTable();
   loadDRConfig();
+  loadDRDispatchConfig();
 }
 
 function renderMappingTable() {
@@ -9013,6 +9056,122 @@ async function saveMappings() {
 }
 
 
+// ── DR Dispatch Config (L0–L3 target group + LC action) ──────────────────────
+// In-memory store for the per-level dispatch configuration
+let drDispatchConfig = {
+  L0: { group: "", action: "restore"  },
+  L1: { group: "", action: "all_on"   },
+  L2: { group: "", action: "all_on"   },
+  L3: { group: "", action: "all_on"   }
+};
+
+async function loadDRDispatchConfig() {
+  // Populate group dropdowns with current device groups
+  const groups = await supabaseGet("device_groups?order=name.asc").catch(() => []);
+  for (const level of ["L0","L1","L2","L3"]) {
+    const sel = document.getElementById(`dr-dispatch-${level.toLowerCase()}-group`);
+    if (!sel) continue;
+    // Keep the leading "skip" option and add groups
+    const existing = sel.innerHTML;
+    sel.innerHTML = '<option value="">— Skip (no action) —</option>'
+      + (Array.isArray(groups) ? groups.map(g =>
+          `<option value="${g.id}">${g.name}</option>`
+        ).join("") : "");
+  }
+
+  // Load saved config from program_settings
+  try {
+    const rows = await supabaseGet("program_settings?setting_key=like.dr_dispatch_%");
+    if (Array.isArray(rows)) {
+      rows.forEach(r => {
+        // Keys: dr_dispatch_L0_group, dr_dispatch_L0_action, etc.
+        const m = r.setting_key.match(/^dr_dispatch_(L\d)_(group|action)$/);
+        if (m && drDispatchConfig[m[1]]) {
+          drDispatchConfig[m[1]][m[2]] = r.setting_value || "";
+          const el = document.getElementById(`dr-dispatch-${m[1].toLowerCase()}-${m[2]}`);
+          if (el) el.value = r.setting_value || "";
+        }
+      });
+    }
+  } catch(e) { console.warn("loadDRDispatchConfig:", e); }
+}
+
+async function saveDRDispatchConfig() {
+  const statusEl = document.getElementById("dr-dispatch-config-status");
+  const levels   = ["L0","L1","L2","L3"];
+  const pairs    = [];
+
+  for (const level of levels) {
+    const groupEl  = document.getElementById(`dr-dispatch-${level.toLowerCase()}-group`);
+    const actionEl = document.getElementById(`dr-dispatch-${level.toLowerCase()}-action`);
+    const group    = groupEl?.value  || "";
+    const action   = actionEl?.value || "all_on";
+    drDispatchConfig[level] = { group, action };
+    pairs.push([`dr_dispatch_${level}_group`,  group]);
+    pairs.push([`dr_dispatch_${level}_action`, action]);
+  }
+
+  try {
+    for (const [key, value] of pairs) {
+      await fetch(`${SUPABASE_URL}/rest/v1/program_settings`, {
+        method: "POST",
+        headers: {
+          "apikey":        SUPABASE_KEY,
+          "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+          "Content-Type":  "application/json",
+          "Prefer":        "resolution=merge-duplicates"
+        },
+        body: JSON.stringify({ setting_key: key, setting_value: value })
+      });
+    }
+    if (statusEl) { statusEl.textContent = "✅ DR Dispatch config saved."; statusEl.style.color = "var(--green-dark)"; statusEl.style.display = "block"; }
+    setTimeout(() => { if (statusEl) statusEl.style.display = "none"; }, 3000);
+  } catch(e) {
+    if (statusEl) { statusEl.textContent = `Error: ${e.message}`; statusEl.style.color = "var(--red)"; statusEl.style.display = "block"; }
+  }
+}
+
+// Resolve SIMPLE integer level 0–3 to a dispatch config entry
+function getDRDispatchForSIMPLE(simpleLevel) {
+  const map = { 0: "L0", 1: "L1", 2: "L2", 3: "L3" };
+  const level = map[Math.round(simpleLevel)] || "L2";
+  return { level, ...drDispatchConfig[level] };
+}
+
+// ── VTN Polling UI Controls ───────────────────────────────────────────────────
+let oadrPollIntervalMs = 30000;
+
+function setOADRPollInterval(ms) {
+  oadrPollIntervalMs = ms || 30000;
+  // Restart poller with new interval
+  startOADRPoller();
+  const log = document.getElementById("oadr-poll-log");
+  if (log) {
+    log.style.display = "block";
+    log.textContent = `[${new Date().toLocaleTimeString()}] Poll interval set to ${ms/1000}s\n`;
+  }
+}
+
+async function pollVTNNow() {
+  const badge = document.getElementById("oadr-poller-status-badge");
+  const log   = document.getElementById("oadr-poll-log");
+  if (badge) { badge.textContent = "🔄 Polling…"; badge.style.color = "var(--blue-dark)"; badge.style.background = "var(--blue-lt)"; }
+  if (log)   { log.style.display = "block"; }
+
+  try {
+    const res  = await fetch(`${PROXY_URL}openadr/poll`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const data = await res.json();
+    const msg  = `[${new Date().toLocaleTimeString()}] Poll: HTTP ${data.http_status} · events=${data.has_events} · upserted=${data.events_upserted ?? 0} · code=${data.response_code || "—"}\n`;
+    if (log)   { log.textContent = msg + (log.textContent || ""); log.scrollTop = 0; }
+    if (badge) { badge.textContent = data.has_events ? "🟡 Events Received" : "🟢 No Pending Events"; badge.style.color = data.has_events ? "var(--amber)" : "var(--green-dark)"; badge.style.background = data.has_events ? "var(--amber-lt,#fff8e1)" : "var(--green-bg)"; }
+    if (data.has_events) await loadOpenADREvents();
+  } catch(e) {
+    const msg = `[${new Date().toLocaleTimeString()}] Poll error: ${e.message}\n`;
+    if (log)   { log.textContent = msg + (log.textContent || ""); }
+    if (badge) { badge.textContent = "🔴 Poll Failed"; badge.style.color = "var(--red)"; badge.style.background = "var(--surface2)"; }
+  }
+}
+
 // ── Events Tab ────────────────────────────────────────────────────────────────
 function startOADRPoller() {
   // Starts the background poller — called on login so it runs regardless of which tab is open
@@ -9025,8 +9184,11 @@ function startOADRPoller() {
       await loadOpenADREvents();
       await loadDispatchLog();
     }
-  }, 30000);
-  console.log("OpenADR poller started.");
+  }, oadrPollIntervalMs);
+  // Update poller badge if visible
+  const badge = document.getElementById("oadr-poller-status-badge");
+  if (badge) { badge.textContent = `🟢 Polling every ${oadrPollIntervalMs/1000}s`; badge.style.color = "var(--green-dark)"; badge.style.background = "var(--green-bg)"; }
+  console.log(`OpenADR poller started (${oadrPollIntervalMs/1000}s interval).`);
 }
 
 async function initOpenADREvents() {
@@ -9222,12 +9384,73 @@ async function checkAndFirePendingEvents() {
   for (const evt of rows) {
     try {
       console.log(`Firing OpenADR event: ${evt.vtn_event_id} signal=${evt.signal_level}`);
-      const mapping   = signalToStrategy(evt.signal_level || 0);
-      const schedUnix = Math.floor(new Date(evt.dtstart).getTime() / 1000);
-      const cycleTime = mapping.strategy <= 3 ? 7.5 : 15;
-      const reps      = evt.duration_mins ? Math.max(1, Math.round(evt.duration_mins / cycleTime)) : 1;
+      // Normalize signal level — SCE sends SIMPLE integers 0–3; standard OADR uses 0.0–1.0
+      const normalizedLevel = normalizeSIMPLELevel(evt.signal_level ?? 0);
+      const mapping   = signalToStrategy(normalizedLevel);
+      const schedUnix = Math.floor(new Date(evt.dtstart || Date.now()).getTime() / 1000);
+      // Use proper per-strategy cycle time from the strategy table
+      const cycleTime = stratCycleMinutes(mapping.strategy);
+      // duration_mins may be null if it came from a raw ISO 8601 field — fall back to 30
+      const durationMins = evt.duration_mins || parseISO8601Duration(evt.duration_raw) || 30;
+      const reps      = cycleTime > 0 ? Math.max(1, Math.round(durationMins / cycleTime)) : 1;
 
-      // Config-aware dispatch: respect device DR configuration
+      // ── SIMPLE integer level dispatch (L0–L3 config table) ──────────────────
+      // When the signal is an integer 0–3 AND a DR dispatch group is configured for
+      // that level, use the group to target devices rather than VEN resource assignment.
+      const rawSignal  = evt.signal_level ?? 0;
+      const isIntSIMPLE = Number.isInteger(parseFloat(rawSignal)) && parseFloat(rawSignal) >= 0 && parseFloat(rawSignal) <= 3;
+      if (isIntSIMPLE) {
+        const dispatchCfg = getDRDispatchForSIMPLE(Math.round(parseFloat(rawSignal)));
+        if (dispatchCfg.group) {
+          // Group-targeted dispatch: get members of the configured group
+          let groupMembers = [];
+          try {
+            const mRows = await supabaseGet(`device_group_members?group_id=eq.${dispatchCfg.group}`);
+            if (Array.isArray(mRows)) {
+              groupMembers = mRows.map(m => DEVICES.find(d => d.uid === m.device_uid)).filter(Boolean);
+            }
+          } catch(e2) { console.warn("DR dispatch group lookup failed:", e2); }
+
+          if (groupMembers.length > 0) {
+            const relayAction = dispatchCfg.action === "restore" ? "all_on" : (dispatchCfg.action || "all_on");
+            for (const device of groupMembers) {
+              const hex = dispatchCfg.action === "restore"
+                ? buildRestoreHex("all_on")
+                : buildLCHex(relayAction, mapping.mode, mapping.strategy, reps, schedUnix);
+              await sendLCToDevice(device.uid, hex);
+              await logOADRDispatch(evt, device, null, relayAction, "dispatch_config", dispatchCfg.level, mapping, reps, schedUnix, hex);
+            }
+            // Mark active and schedule restore
+            await supabasePatch(
+              `openadr_events?vtn_event_id=eq.${encodeURIComponent(evt.vtn_event_id)}`,
+              { event_status: "active" }
+            );
+            setTimeout(async () => {
+              for (const device of groupMembers) {
+                await sendLCToDevice(device.uid, buildRestoreHex("all_on"));
+              }
+              await supabasePatch(
+                `openadr_events?vtn_event_id=eq.${encodeURIComponent(evt.vtn_event_id)}`,
+                { event_status: "completed" }
+              );
+              await sendCompletionReport(evt);
+            }, durationMins * 60000);
+            await sendUpdateReport(evt, "x-resourceStatus", "AVAILABLE");
+            continue; // Skip VEN resource path below
+          }
+        }
+        // No group configured for this level → skip dispatch (don't no-op shed all devices)
+        if (!dispatchCfg.group) {
+          console.log(`SIMPLE ${dispatchCfg.level} has no group configured — skipping dispatch for ${evt.vtn_event_id}`);
+          await supabasePatch(
+            `openadr_events?vtn_event_id=eq.${encodeURIComponent(evt.vtn_event_id)}`,
+            { event_status: "active" }
+          );
+          continue;
+        }
+      }
+
+      // Config-aware dispatch: respect device DR configuration (float 0.0–1.0 signals)
       const realDevices = DEVICES.filter(d => !d.uid.includes("PLACEHOLDER"));
       const venDevices  = realDevices.filter(d => drDeviceConfig[d.uid]?.ven_resource === true);
 
@@ -9282,16 +9505,39 @@ async function checkAndFirePendingEvents() {
         { event_status: "active" }
       );
 
-      // Schedule end restore
+      // Schedule end restore — use durationMins (already resolved from raw ISO 8601 if needed)
       setTimeout(async () => {
-        const restoreHex = buildRestoreHex("all_on");
-        for (const device of targetDevices) await sendLCToDevice(device.uid, restoreHex);
+        // Restore: strategy 61, scoped to the same relay action used for shed
+        // For each device we track which relay was fired and restore only that one
+        for (const device of targetDevices) {
+          const devCfg  = drDeviceConfig[device.uid];
+          const devMode = devCfg?.default_mode || "direct_load";
+          let relayRestored = false;
+          for (let rNum = 1; rNum <= 4; rNum++) {
+            const rc = devCfg?.relays?.[rNum] || {};
+            if (rc.enabled === false) continue;
+            const effectiveMode = rc.mode_override ?? devMode;
+            if (effectiveMode === "bas_di" && rc.shed_level) {
+              const restoreHex = buildRestoreHex(`relay${rNum}_on`);
+              await sendLCToDevice(device.uid, restoreHex);
+              relayRestored = true;
+            } else if (effectiveMode !== "bas_di" && rc.is_designated) {
+              const restoreHex = buildRestoreHex(`relay${rNum}_on`);
+              await sendLCToDevice(device.uid, restoreHex);
+              relayRestored = true;
+            }
+          }
+          // Fallback: restore all relays on device if none were targeted
+          if (!relayRestored) {
+            await sendLCToDevice(device.uid, buildRestoreHex("all_on"));
+          }
+        }
         await supabasePatch(
           `openadr_events?vtn_event_id=eq.${encodeURIComponent(evt.vtn_event_id)}`,
           { event_status: "completed" }
         );
         await sendCompletionReport(evt);
-      }, (evt.duration_mins || 30) * 60000);
+      }, durationMins * 60000);
 
       // Send initial telemetry report
       await sendUpdateReport(evt, "x-resourceStatus", "AVAILABLE");
