@@ -2484,17 +2484,17 @@ async function generateHistoryReport() {
       ? (DEVICES.find(d => d.uid === deviceUid)?.name || unitName(deviceUid))
       : "All Devices";
 
-    // ── Helper: correct relay-active check ───────────────────────────────────
-    // relay_status_r1 is the raw bubble-up byte: bit1 (0x02) = relay active, bit0 (0x01) = load present.
-    // relay_active_r1 is the boolean derived from that byte (stored separately).
-    // Using raw > 0 is wrong — 0x01 (load present, relay OFF) evaluates true.
-    // Priority: use the stored boolean; fall back to bit-masking the raw byte.
+    // ── Helper: relay ON check — matches relayDot() and loadHistory() display ──
+    // relay_status_r1 is the raw bubble-up byte. Any non-zero value means the relay
+    // or its associated load is in an active state. This matches the existing history
+    // table display exactly so the report agrees with what the user sees there.
     const isRelayOn = (r, num) => {
-      const activeField = r[`relay_active_r${num}`];
-      if (activeField !== null && activeField !== undefined) return activeField === true;
-      const rawByte = r[`relay_status_r${num}`];
-      if (rawByte !== null && rawByte !== undefined) return (rawByte & 0x02) !== 0;
-      return false;
+      const raw = r[`relay_status_r${num}`];
+      // relay_active_r# is a stored boolean — prefer it if present
+      const active = r[`relay_active_r${num}`];
+      if (active === true)  return true;
+      if (active === false) return false;
+      return raw != null && raw > 0;
     };
 
     // ── Compute KPIs ──────────────────────────────────────────────────────
@@ -2506,38 +2506,74 @@ async function generateHistoryReport() {
     const avgVoltage = voltages.length ? (voltages.reduce((a,b)=>a+b,0) / voltages.length).toFixed(1) : "—";
     const avgCurrent = currents.length ? (currents.reduce((a,b)=>a+b,0) / currents.length).toFixed(2) : "—";
 
-    // Relay ON time per relay (R1–R4) — use correct bit-masked active flag
-    const relayOnCounts = [0,0,0,0];
-    readings.forEach(r => {
-      if (isRelayOn(r, 1)) relayOnCounts[0]++;
-      if (isRelayOn(r, 2)) relayOnCounts[1]++;
-      if (isRelayOn(r, 3)) relayOnCounts[2]++;
-      if (isRelayOn(r, 4)) relayOnCounts[3]++;
-    });
-    const relayOnPcts = relayOnCounts.map(c => readings.length ? Math.round((c / readings.length) * 100) : 0);
+    // ── Relay ON/OFF time accounting — using actual timestamps between readings ──
+    // For each relay, walk readings in chronological order (already sorted asc).
+    // Accumulate ON-minutes and OFF-minutes based on the gap between consecutive
+    // readings, attributed to the state of the EARLIER reading.
+    // This gives real minutes rather than reading counts, handles variable poll rates,
+    // and produces accurate ON/OFF totals even when one state dominates.
+    const relayOnMins  = [0, 0, 0, 0];
+    const relayOffMins = [0, 0, 0, 0];
+    const relayOnCounts = [0, 0, 0, 0];   // still used for on-time % badge
 
-    // Relay state transitions — detect every flip per relay per device
+    // Transition log per relay per device
     const transitions = [];
-    // Track previous state per device+relay so multi-device windows work correctly
-    const prevStateMap = {};  // key: `${device_uid}_${relayNum}`
-    readings.forEach(r => {
-      const devName = DEVICES.find(d => d.uid === r.device_uid)?.name || unitName(r.device_uid) || r.device_uid;
-      for (let i = 1; i <= 4; i++) {
-        const key     = `${r.device_uid}_R${i}`;
-        const curOn   = isRelayOn(r, i);
-        const prevOn  = prevStateMap[key];
-        if (prevOn !== undefined && curOn !== prevOn) {
-          transitions.push({
-            ts:     r.recorded_at,
-            device: devName,
-            relay:  `R${i}`,
-            state:  curOn ? "ON" : "OFF",
-            from:   prevOn ? "ON" : "OFF"
-          });
+    const prevStateMap  = {};  // `${uid}_R${n}` → { on: bool, ts: iso }
+
+    readings.forEach((r, idx) => {
+      const devName  = DEVICES.find(d => d.uid === r.device_uid)?.name || unitName(r.device_uid) || r.device_uid;
+      const thisTs   = new Date(r.recorded_at).getTime();
+
+      for (let n = 1; n <= 4; n++) {
+        const key    = `${r.device_uid}_R${n}`;
+        const curOn  = isRelayOn(r, n);
+        const prev   = prevStateMap[key];
+
+        if (prev !== undefined) {
+          // Gap between readings in minutes
+          const gapMs  = thisTs - prev.ts;
+          const gapMin = gapMs / 60000;
+          // Credit the gap to whichever state the relay was in during that gap
+          if (prev.on) relayOnMins[n-1]  += gapMin;
+          else         relayOffMins[n-1] += gapMin;
+
+          // Detect state flip
+          if (curOn !== prev.on) {
+            transitions.push({
+              ts:     r.recorded_at,
+              device: devName,
+              relay:  `R${n}`,
+              state:  curOn ? "ON" : "OFF",
+              from:   prev.on ? "ON" : "OFF",
+              gapMin: Math.round(gapMin)
+            });
+          }
         }
-        prevStateMap[key] = curOn;
+
+        if (curOn) relayOnCounts[n-1]++;
+        prevStateMap[key] = { on: curOn, ts: thisTs };
       }
     });
+
+    // Format minutes helper
+    const fmtMins = (m) => {
+      const mins = Math.round(m);
+      if (mins < 60)  return `${mins}m`;
+      const h = Math.floor(mins / 60), rem = mins % 60;
+      return rem > 0 ? `${h}h ${rem}m` : `${h}h`;
+    };
+
+    const relayOnPcts = relayOnCounts.map(c => readings.length ? Math.round((c / readings.length) * 100) : 0);
+
+    // Build per-relay summary: { onMins, offMins, onPct, periods }
+    const relaySummary = [0,1,2,3].map(i => ({
+      onMins:   relayOnMins[i],
+      offMins:  relayOffMins[i],
+      totalMins: relayOnMins[i] + relayOffMins[i],
+      onPct:    relayOnPcts[i],
+      onFmt:    fmtMins(relayOnMins[i]),
+      offFmt:   fmtMins(relayOffMins[i])
+    }));
 
     // Duration formatted
     const durationMs = toMs - fromMs;
@@ -2550,10 +2586,9 @@ async function generateHistoryReport() {
     const firstReading = readings[0];
     const initialStates = [1,2,3,4].map(n => isRelayOn(firstReading, n));
 
-    // Count distinct ON periods per relay (OFF→ON transitions)
+    // Count distinct ON periods (OFF→ON transitions + whether it started ON)
     const onPeriodCounts = [0,0,0,0];
     transitions.forEach(t => { if (t.state === "ON") onPeriodCounts[parseInt(t.relay[1])-1]++; });
-    // If relay started ON, that's also an ON period not counted by transitions
     initialStates.forEach((on, i) => { if (on) onPeriodCounts[i]++; });
 
     _historyReportData = {
@@ -2561,8 +2596,8 @@ async function generateHistoryReport() {
       readings, events: Array.isArray(events) ? events : [],
       oadrEvents: Array.isArray(oadrEvents) ? oadrEvents : [],
       avgWatts, peakWatts, avgVoltage, avgCurrent, kWh,
-      relayOnPcts, transitions, initialStates, onPeriodCounts,
-      durationH, totalReadings: readings.length
+      relayOnPcts, relaySummary, transitions, initialStates, onPeriodCounts,
+      durationH, totalReadings: readings.length, fmtMins
     };
 
     // ── Render preview ────────────────────────────────────────────────────
@@ -2600,9 +2635,12 @@ function _renderHistoryReportPreview() {
   const synopsis = document.getElementById("rpt-synopsis");
   if (synopsis) {
     const fmtDt = iso => new Date(iso).toLocaleString([], { dateStyle:"medium", timeStyle:"short" });
-    const relayDesc = d.relayOnPcts.map((p, i) => `R${i+1}: ${p}%`).join(" · ");
+    const relayDesc = d.relaySummary.map((s, i) =>
+      (s.onMins > 0 || s.offMins > 0)
+        ? `R${i+1}: ${s.onFmt} ON / ${s.offFmt} OFF`
+        : null
+    ).filter(Boolean).join(" · ") || "no relay data";
     const initialDesc = d.initialStates.map((on, i) => `R${i+1} ${on?"ON":"OFF"}`).join(", ");
-    const periodDesc  = d.onPeriodCounts.map((c, i) => c > 0 ? `R${i+1}: ${c}` : null).filter(Boolean).join(", ") || "none";
     synopsis.innerHTML =
       `<strong>${d.deviceName}</strong> — ${fmtDt(d.fromISO)} to ${fmtDt(d.toISO)} (${d.durationH} hours)<br>` +
       `<strong>${d.totalReadings.toLocaleString()}</strong> readings captured. ` +
@@ -2610,9 +2648,8 @@ function _renderHistoryReportPreview() {
       `Estimated energy: <strong>${d.kWh} kWh</strong>. ` +
       `Avg voltage: <strong>${d.avgVoltage} V</strong> · Avg current: <strong>${d.avgCurrent} A</strong>.<br>` +
       `<strong>Relay state at window start:</strong> ${initialDesc}.<br>` +
-      `Relay ON-time: <strong>${relayDesc}</strong>. ` +
-      `ON periods detected — ${periodDesc}. ` +
-      `<strong>${d.transitions.length}</strong> relay state transition${d.transitions.length !== 1 ? "s" : ""} in window. ` +
+      `<strong>Relay ON/OFF time:</strong> ${relayDesc}.<br>` +
+      `<strong>${d.transitions.length}</strong> relay state transition${d.transitions.length !== 1 ? "s" : ""} · ` +
       `<strong>${d.events.length}</strong> scheduled event${d.events.length !== 1 ? "s" : ""} · ` +
       `<strong>${d.oadrEvents.length}</strong> OpenADR event${d.oadrEvents.length !== 1 ? "s" : ""}.`;
   }
@@ -2640,29 +2677,63 @@ function _renderHistoryReportPreview() {
       `<text x="${pad}" y="14" font-size="9" fill="#94A3B8">${maxW} W</text>`;
   }
 
-  // ── Relay transition table ─────────────────────────────────────────────────
+  // ── Relay ON/OFF time + transitions ────────────────────────────────────────
   const relayTable = document.getElementById("rpt-relay-table");
   if (relayTable) {
-    if (d.transitions.length === 0) {
-      relayTable.innerHTML = `<div style="padding:12px;font-size:12px;color:var(--text-hint);">No relay state changes detected in this window.</div>`;
-    } else {
-      const rows = d.transitions.map(t =>
-        `<tr><td style="padding:7px 10px;border-bottom:0.5px solid var(--border);font-size:11px;white-space:nowrap;">${new Date(t.ts).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit"})}</td>
-         <td style="padding:7px 10px;border-bottom:0.5px solid var(--border);font-size:11px;">${t.device}</td>
-         <td style="padding:7px 10px;border-bottom:0.5px solid var(--border);font-size:11px;font-weight:700;">${t.relay}</td>
-         <td style="padding:7px 10px;border-bottom:0.5px solid var(--border);">
-           <span style="padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;background:${t.state==="ON"?"var(--green-bg)":"var(--surface2)"};color:${t.state==="ON"?"var(--green-dark)":"var(--text-hint)"};">${t.state==="ON"?"▲ ON":"▼ OFF"}</span>
-         </td></tr>`
-      ).join("");
-      relayTable.innerHTML =
-        `<table style="width:100%;border-collapse:collapse;font-size:11px;">
-          <thead style="position:sticky;top:0;background:var(--surface2);">
-            <tr><th style="padding:8px 10px;text-align:left;border-bottom:0.5px solid var(--border-md);font-size:10px;color:var(--text-hint);font-weight:700;text-transform:uppercase;">Time</th>
-            <th style="padding:8px 10px;text-align:left;border-bottom:0.5px solid var(--border-md);font-size:10px;color:var(--text-hint);font-weight:700;text-transform:uppercase;">Device</th>
-            <th style="padding:8px 10px;text-align:left;border-bottom:0.5px solid var(--border-md);font-size:10px;color:var(--text-hint);font-weight:700;text-transform:uppercase;">Relay</th>
-            <th style="padding:8px 10px;text-align:left;border-bottom:0.5px solid var(--border-md);font-size:10px;color:var(--text-hint);font-weight:700;text-transform:uppercase;">Transition</th></tr>
-          </thead><tbody>${rows}</tbody></table>`;
-    }
+    // Duration bars
+    const summaryBars = d.relaySummary.map((s, i) => {
+      if (s.totalMins === 0) return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:0.5px solid var(--border);font-size:11px;color:var(--text-hint);"><span style="min-width:24px;font-weight:700;">R${i+1}</span><span>No data</span></div>`;
+      const onPct = Math.round((s.onMins / s.totalMins) * 100);
+      const offPct = 100 - onPct;
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:0.5px solid var(--border);">
+        <span style="font-size:12px;font-weight:700;color:var(--text-secondary);min-width:24px;">R${i+1}</span>
+        <div style="flex:1;display:flex;border-radius:4px;overflow:hidden;height:18px;">
+          <div title="${s.onFmt} ON" style="width:${onPct}%;background:var(--green-dark);display:flex;align-items:center;justify-content:center;">
+            ${onPct >= 10 ? `<span style="font-size:9px;font-weight:700;color:#fff;">${onPct}%</span>` : ""}
+          </div>
+          <div title="${s.offFmt} OFF" style="width:${offPct}%;background:var(--surface2);border:0.5px solid var(--border);display:flex;align-items:center;justify-content:center;">
+            ${offPct >= 10 ? `<span style="font-size:9px;font-weight:700;color:var(--text-hint);">${offPct}%</span>` : ""}
+          </div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:var(--green-dark);min-width:54px;">▲ ${s.onFmt}</span>
+        <span style="font-size:11px;color:var(--text-secondary);min-width:54px;">▼ ${s.offFmt}</span>
+        <span style="font-size:10px;color:var(--text-hint);">(started ${d.initialStates[i] ? "ON" : "OFF"})</span>
+      </div>`;
+    }).join("");
+
+    // Transitions
+    const transRows = d.transitions.length === 0
+      ? `<tr><td colspan="4" style="padding:12px 10px;font-size:11px;color:var(--text-hint);text-align:center;">No state transitions detected — relay held steady throughout the window.</td></tr>`
+      : d.transitions.map(t =>
+          `<tr>
+            <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-size:11px;white-space:nowrap;">${new Date(t.ts).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit"})}</td>
+            <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-size:11px;">${t.device}</td>
+            <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);font-size:11px;font-weight:700;">${t.relay}</td>
+            <td style="padding:6px 10px;border-bottom:0.5px solid var(--border);">
+              <span style="padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;background:${t.state==="ON"?"var(--green-bg)":"var(--surface2)"};color:${t.state==="ON"?"var(--green-dark)":"var(--text-hint)"};">${t.from} → ${t.state}</span>
+            </td>
+          </tr>`).join("");
+
+    relayTable.innerHTML = `
+      <div style="padding:7px 10px;background:var(--surface2);border-bottom:0.5px solid var(--border-md);">
+        <span style="font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;">ON/OFF Duration per Relay &nbsp;
+          <span style="display:inline-block;width:10px;height:10px;background:var(--green-dark);border-radius:2px;vertical-align:middle;"></span> ON &nbsp;
+          <span style="display:inline-block;width:10px;height:10px;background:var(--surface2);border:0.5px solid var(--border-md);border-radius:2px;vertical-align:middle;"></span> OFF
+        </span>
+      </div>
+      ${summaryBars}
+      <div style="padding:7px 10px;background:var(--surface2);border-bottom:0.5px solid var(--border-md);margin-top:2px;">
+        <span style="font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.04em;">State Transitions (${d.transitions.length})</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr>
+          <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;background:var(--surface2);">Time</th>
+          <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;background:var(--surface2);">Device</th>
+          <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;background:var(--surface2);">Relay</th>
+          <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--text-hint);text-transform:uppercase;background:var(--surface2);">Change</th>
+        </tr></thead>
+        <tbody>${transRows}</tbody>
+      </table>`;
   }
 
   // ── Schedule events table ─────────────────────────────────────────────────
@@ -2748,17 +2819,25 @@ function openHistoryReportWindow() {
     <text x="${pad}" y="${H-pad+14}" font-size="9" fill="#94A3B8">0 W</text>
   </svg>`;
 
-  // ── Build print synopsis ──────────────────────────────────────────────────
-  const relayBars = d.relayOnPcts.map((pct, i) =>
-    `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-      <div style="font-size:12px;font-weight:700;color:#475569;min-width:24px;">R${i+1}</div>
-      <div style="flex:1;background:#E2E8F0;border-radius:4px;height:10px;overflow:hidden;">
-        <div style="height:10px;border-radius:4px;background:${pct>50?"#16A34A":"#D97706"};width:${pct}%;"></div>
+  // ── Build relay ON/OFF bars for print window ──────────────────────────────
+  const relayBars = d.relaySummary.map((s, i) => {
+    const onPct = s.totalMins > 0 ? Math.round((s.onMins / s.totalMins) * 100) : 0;
+    const offPct = 100 - onPct;
+    return `<div style="margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+        <span style="font-size:12px;font-weight:700;color:#475569;">R${i+1}</span>
+        <span style="font-size:11px;color:#64748B;">start: <strong style="color:${d.initialStates[i]?"#16A34A":"#64748B"};">${d.initialStates[i]?"ON":"OFF"}</strong></span>
       </div>
-      <div style="font-size:12px;font-weight:600;color:#475569;min-width:80px;text-align:right;">${pct}% · ${d.onPeriodCounts[i]} period${d.onPeriodCounts[i]!==1?"s":""}</div>
-      <div style="font-size:11px;color:#94A3B8;min-width:60px;">start: <strong style="color:${d.initialStates[i]?"#16A34A":"#64748B"};">${d.initialStates[i]?"ON":"OFF"}</strong></div>
-     </div>`
-  ).join("");
+      <div style="display:flex;border-radius:4px;overflow:hidden;height:16px;margin-bottom:3px;">
+        <div style="width:${onPct}%;background:#16A34A;"></div>
+        <div style="width:${offPct}%;background:#E2E8F0;"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;">
+        <span style="color:#16A34A;font-weight:700;">▲ ${s.onFmt} ON (${onPct}%)</span>
+        <span style="color:#64748B;">▼ ${s.offFmt} OFF (${offPct}%)</span>
+      </div>
+    </div>`;
+  }).join("");
 
   const periodDesc = d.onPeriodCounts.map((c,i) => c>0 ? `R${i+1}: ${c} period${c!==1?"s":""}` : null).filter(Boolean).join(", ") || "no ON periods";
 
@@ -2769,9 +2848,9 @@ function openHistoryReportWindow() {
          <td style="padding:8px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;">${t.device}</td>
          <td style="padding:8px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;font-weight:700;">${t.relay}</td>
          <td style="padding:8px 12px;border-bottom:1px solid #F1F5F9;">
-           <span style="padding:2px 9px;border-radius:10px;font-size:11px;font-weight:700;background:${t.state==="ON"?"#DCFCE7":"#F1F5F9"};color:${t.state==="ON"?"#166534":"#64748B"};">${t.state==="ON"?"▲ ON":"▼ OFF"}</span>
+           <span style="padding:2px 9px;border-radius:10px;font-size:11px;font-weight:700;background:${t.state==="ON"?"#DCFCE7":"#F1F5F9"};color:${t.state==="ON"?"#166534":"#64748B"};">${t.from} → ${t.state}</span>
          </td></tr>`).join("")
-    : `<tr><td colspan="4" style="padding:14px 12px;text-align:center;color:#94A3B8;font-size:12px;">No relay transitions in this window.</td></tr>`;
+    : `<tr><td colspan="4" style="padding:14px 12px;text-align:center;color:#94A3B8;font-size:12px;">No relay state transitions detected in this window.</td></tr>`;
 
   // ── Schedule events table ─────────────────────────────────────────────────
   const allEvts = [
@@ -2850,10 +2929,10 @@ function openHistoryReportWindow() {
       Estimated energy consumed: <strong>${d.kWh} kWh</strong> at ${d.avgVoltage} V avg, ${d.avgCurrent} A avg.
       At window start: R1 was <strong>${d.initialStates[0]?"ON":"OFF"}</strong>, R2 <strong>${d.initialStates[1]?"ON":"OFF"}</strong>,
       R3 <strong>${d.initialStates[2]?"ON":"OFF"}</strong>, R4 <strong>${d.initialStates[3]?"ON":"OFF"}</strong>.
-      Relay ON periods detected: <strong>${periodDesc}</strong>.
+      Relay ON/OFF time: ${d.relaySummary.map((s,i) => `R${i+1}: <strong>${s.onFmt} ON / ${s.offFmt} OFF</strong>`).join(" · ")}.
       <strong>${d.transitions.length}</strong> state transition${d.transitions.length!==1?"s":""} detected.
       <strong>${d.events.length}</strong> scheduled event${d.events.length!==1?"s":""} and
-      <strong>${d.oadrEvents.length}</strong> OpenADR event${d.oadrEvents.length!==1?"s":""} occurred in this period.
+      <strong>${d.oadrEvents.length}</strong> OpenADR event${d.oadrEvents.length!==1?"s":""} in period.
     </p>
   </div>
 
@@ -2871,9 +2950,8 @@ function openHistoryReportWindow() {
       </div>
     </div>
     <div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.07);border:1px solid #E2E8F0;">
-      <div style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px;">Relay On-Time</div>
+      <div style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px;">Relay ON / OFF Time</div>
       ${relayBars}
-      <div style="font-size:10px;color:#94A3B8;margin-top:10px;">% of readings where relay was active · ON periods detected</div>
     </div>
   </div>
 
