@@ -2484,6 +2484,19 @@ async function generateHistoryReport() {
       ? (DEVICES.find(d => d.uid === deviceUid)?.name || unitName(deviceUid))
       : "All Devices";
 
+    // ── Helper: correct relay-active check ───────────────────────────────────
+    // relay_status_r1 is the raw bubble-up byte: bit1 (0x02) = relay active, bit0 (0x01) = load present.
+    // relay_active_r1 is the boolean derived from that byte (stored separately).
+    // Using raw > 0 is wrong — 0x01 (load present, relay OFF) evaluates true.
+    // Priority: use the stored boolean; fall back to bit-masking the raw byte.
+    const isRelayOn = (r, num) => {
+      const activeField = r[`relay_active_r${num}`];
+      if (activeField !== null && activeField !== undefined) return activeField === true;
+      const rawByte = r[`relay_status_r${num}`];
+      if (rawByte !== null && rawByte !== undefined) return (rawByte & 0x02) !== 0;
+      return false;
+    };
+
     // ── Compute KPIs ──────────────────────────────────────────────────────
     const watts      = readings.map(r => r.watts_consumed).filter(w => w != null && w > 0);
     const voltages   = readings.map(r => r.voltage  != null ? r.voltage  / 10 : null).filter(v => v !== null);
@@ -2493,28 +2506,37 @@ async function generateHistoryReport() {
     const avgVoltage = voltages.length ? (voltages.reduce((a,b)=>a+b,0) / voltages.length).toFixed(1) : "—";
     const avgCurrent = currents.length ? (currents.reduce((a,b)=>a+b,0) / currents.length).toFixed(2) : "—";
 
-    // Relay ON time per relay (R1–R4)
+    // Relay ON time per relay (R1–R4) — use correct bit-masked active flag
     const relayOnCounts = [0,0,0,0];
     readings.forEach(r => {
-      if (r.relay_status_r1 > 0) relayOnCounts[0]++;
-      if (r.relay_status_r2 > 0) relayOnCounts[1]++;
-      if (r.relay_status_r3 > 0) relayOnCounts[2]++;
-      if (r.relay_status_r4 > 0) relayOnCounts[3]++;
+      if (isRelayOn(r, 1)) relayOnCounts[0]++;
+      if (isRelayOn(r, 2)) relayOnCounts[1]++;
+      if (isRelayOn(r, 3)) relayOnCounts[2]++;
+      if (isRelayOn(r, 4)) relayOnCounts[3]++;
     });
     const relayOnPcts = relayOnCounts.map(c => readings.length ? Math.round((c / readings.length) * 100) : 0);
 
-    // Relay state transitions
+    // Relay state transitions — detect every flip per relay per device
     const transitions = [];
-    let prevStates = [null, null, null, null];
+    // Track previous state per device+relay so multi-device windows work correctly
+    const prevStateMap = {};  // key: `${device_uid}_${relayNum}`
     readings.forEach(r => {
-      const cur = [r.relay_status_r1 > 0, r.relay_status_r2 > 0, r.relay_status_r3 > 0, r.relay_status_r4 > 0];
       const devName = DEVICES.find(d => d.uid === r.device_uid)?.name || unitName(r.device_uid) || r.device_uid;
-      for (let i = 0; i < 4; i++) {
-        if (prevStates[i] !== null && cur[i] !== prevStates[i]) {
-          transitions.push({ ts: r.recorded_at, device: devName, relay: `R${i+1}`, state: cur[i] ? "ON" : "OFF", from: prevStates[i] ? "ON" : "OFF" });
+      for (let i = 1; i <= 4; i++) {
+        const key     = `${r.device_uid}_R${i}`;
+        const curOn   = isRelayOn(r, i);
+        const prevOn  = prevStateMap[key];
+        if (prevOn !== undefined && curOn !== prevOn) {
+          transitions.push({
+            ts:     r.recorded_at,
+            device: devName,
+            relay:  `R${i}`,
+            state:  curOn ? "ON" : "OFF",
+            from:   prevOn ? "ON" : "OFF"
+          });
         }
+        prevStateMap[key] = curOn;
       }
-      prevStates = cur;
     });
 
     // Duration formatted
@@ -2524,12 +2546,23 @@ async function generateHistoryReport() {
     // Energy estimate (kWh) — avg watts × duration
     const kWh = avgWatts > 0 ? ((avgWatts / 1000) * (durationMs / 3600000)).toFixed(3) : "—";
 
+    // Initial relay states at the start of the window
+    const firstReading = readings[0];
+    const initialStates = [1,2,3,4].map(n => isRelayOn(firstReading, n));
+
+    // Count distinct ON periods per relay (OFF→ON transitions)
+    const onPeriodCounts = [0,0,0,0];
+    transitions.forEach(t => { if (t.state === "ON") onPeriodCounts[parseInt(t.relay[1])-1]++; });
+    // If relay started ON, that's also an ON period not counted by transitions
+    initialStates.forEach((on, i) => { if (on) onPeriodCounts[i]++; });
+
     _historyReportData = {
       deviceName, deviceUid, fromISO, toISO, fromDate, toDate, fromTime, toTime,
       readings, events: Array.isArray(events) ? events : [],
       oadrEvents: Array.isArray(oadrEvents) ? oadrEvents : [],
       avgWatts, peakWatts, avgVoltage, avgCurrent, kWh,
-      relayOnPcts, transitions, durationH, totalReadings: readings.length
+      relayOnPcts, transitions, initialStates, onPeriodCounts,
+      durationH, totalReadings: readings.length
     };
 
     // ── Render preview ────────────────────────────────────────────────────
@@ -2568,16 +2601,20 @@ function _renderHistoryReportPreview() {
   if (synopsis) {
     const fmtDt = iso => new Date(iso).toLocaleString([], { dateStyle:"medium", timeStyle:"short" });
     const relayDesc = d.relayOnPcts.map((p, i) => `R${i+1}: ${p}%`).join(" · ");
+    const initialDesc = d.initialStates.map((on, i) => `R${i+1} ${on?"ON":"OFF"}`).join(", ");
+    const periodDesc  = d.onPeriodCounts.map((c, i) => c > 0 ? `R${i+1}: ${c}` : null).filter(Boolean).join(", ") || "none";
     synopsis.innerHTML =
       `<strong>${d.deviceName}</strong> — ${fmtDt(d.fromISO)} to ${fmtDt(d.toISO)} (${d.durationH} hours)<br>` +
       `<strong>${d.totalReadings.toLocaleString()}</strong> readings captured. ` +
-      `Average power draw: <strong>${d.avgWatts} W</strong> · Peak: <strong>${d.peakWatts} W</strong> · ` +
-      `Estimated energy: <strong>${d.kWh} kWh</strong>.<br>` +
+      `Average power: <strong>${d.avgWatts} W</strong> · Peak: <strong>${d.peakWatts} W</strong> · ` +
+      `Estimated energy: <strong>${d.kWh} kWh</strong>. ` +
       `Avg voltage: <strong>${d.avgVoltage} V</strong> · Avg current: <strong>${d.avgCurrent} A</strong>.<br>` +
+      `<strong>Relay state at window start:</strong> ${initialDesc}.<br>` +
       `Relay ON-time: <strong>${relayDesc}</strong>. ` +
-      `<strong>${d.transitions.length}</strong> relay state change${d.transitions.length !== 1 ? "s" : ""} detected. ` +
-      `<strong>${d.events.length}</strong> scheduled event${d.events.length !== 1 ? "s" : ""} and ` +
-      `<strong>${d.oadrEvents.length}</strong> OpenADR event${d.oadrEvents.length !== 1 ? "s" : ""} in window.`;
+      `ON periods detected — ${periodDesc}. ` +
+      `<strong>${d.transitions.length}</strong> relay state transition${d.transitions.length !== 1 ? "s" : ""} in window. ` +
+      `<strong>${d.events.length}</strong> scheduled event${d.events.length !== 1 ? "s" : ""} · ` +
+      `<strong>${d.oadrEvents.length}</strong> OpenADR event${d.oadrEvents.length !== 1 ? "s" : ""}.`;
   }
 
   // ── Power SVG spark chart ─────────────────────────────────────────────────
@@ -2711,16 +2748,19 @@ function openHistoryReportWindow() {
     <text x="${pad}" y="${H-pad+14}" font-size="9" fill="#94A3B8">0 W</text>
   </svg>`;
 
-  // ── Relay on-time bars ────────────────────────────────────────────────────
+  // ── Build print synopsis ──────────────────────────────────────────────────
   const relayBars = d.relayOnPcts.map((pct, i) =>
     `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
       <div style="font-size:12px;font-weight:700;color:#475569;min-width:24px;">R${i+1}</div>
       <div style="flex:1;background:#E2E8F0;border-radius:4px;height:10px;overflow:hidden;">
         <div style="height:10px;border-radius:4px;background:${pct>50?"#16A34A":"#D97706"};width:${pct}%;"></div>
       </div>
-      <div style="font-size:12px;font-weight:600;color:#475569;min-width:36px;text-align:right;">${pct}%</div>
+      <div style="font-size:12px;font-weight:600;color:#475569;min-width:80px;text-align:right;">${pct}% · ${d.onPeriodCounts[i]} period${d.onPeriodCounts[i]!==1?"s":""}</div>
+      <div style="font-size:11px;color:#94A3B8;min-width:60px;">start: <strong style="color:${d.initialStates[i]?"#16A34A":"#64748B"};">${d.initialStates[i]?"ON":"OFF"}</strong></div>
      </div>`
   ).join("");
+
+  const periodDesc = d.onPeriodCounts.map((c,i) => c>0 ? `R${i+1}: ${c} period${c!==1?"s":""}` : null).filter(Boolean).join(", ") || "no ON periods";
 
   // ── Transitions table ─────────────────────────────────────────────────────
   const transRows = d.transitions.length
@@ -2805,12 +2845,15 @@ function openHistoryReportWindow() {
     <div style="font-size:11px;font-weight:700;color:#1D4ED8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Synopsis</div>
     <p style="color:#1E3A5F;line-height:1.9;font-size:13px;">
       Report covers <strong>${d.deviceName}</strong> from <strong>${fmtDt(d.fromISO)}</strong> to <strong>${fmtDt(d.toISO)}</strong>
-      (${d.durationH} hours). <strong>${d.totalReadings.toLocaleString()}</strong> telemetry readings were recorded during this window.
+      (${d.durationH} hours). <strong>${d.totalReadings.toLocaleString()}</strong> telemetry readings were recorded.
       Average power draw was <strong>${d.avgWatts} W</strong> with a peak of <strong>${d.peakWatts} W</strong>.
       Estimated energy consumed: <strong>${d.kWh} kWh</strong> at ${d.avgVoltage} V avg, ${d.avgCurrent} A avg.
-      <strong>${d.transitions.length}</strong> relay state transition${d.transitions.length !== 1 ? "s" : ""} were detected.
-      <strong>${d.events.length}</strong> scheduled event${d.events.length !== 1 ? "s" : ""} and
-      <strong>${d.oadrEvents.length}</strong> OpenADR event${d.oadrEvents.length !== 1 ? "s" : ""} occurred in this period.
+      At window start: R1 was <strong>${d.initialStates[0]?"ON":"OFF"}</strong>, R2 <strong>${d.initialStates[1]?"ON":"OFF"}</strong>,
+      R3 <strong>${d.initialStates[2]?"ON":"OFF"}</strong>, R4 <strong>${d.initialStates[3]?"ON":"OFF"}</strong>.
+      Relay ON periods detected: <strong>${periodDesc}</strong>.
+      <strong>${d.transitions.length}</strong> state transition${d.transitions.length!==1?"s":""} detected.
+      <strong>${d.events.length}</strong> scheduled event${d.events.length!==1?"s":""} and
+      <strong>${d.oadrEvents.length}</strong> OpenADR event${d.oadrEvents.length!==1?"s":""} occurred in this period.
     </p>
   </div>
 
@@ -2830,7 +2873,7 @@ function openHistoryReportWindow() {
     <div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.07);border:1px solid #E2E8F0;">
       <div style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px;">Relay On-Time</div>
       ${relayBars}
-      <div style="font-size:10px;color:#94A3B8;margin-top:10px;">% of readings where relay was active (ON)</div>
+      <div style="font-size:10px;color:#94A3B8;margin-top:10px;">% of readings where relay was active · ON periods detected</div>
     </div>
   </div>
 
@@ -2895,13 +2938,17 @@ function exportHistoryReportCSV() {
 
   const rows = d.readings.map(r => {
     const devName = DEVICES.find(dev => dev.uid === r.device_uid)?.name || unitName(r.device_uid) || r.device_uid;
+    // Use relay_active_r# boolean (correct active flag); fall back to bit 1 of raw byte
+    const relOn = (num) => {
+      const a = r[`relay_active_r${num}`];
+      if (a !== null && a !== undefined) return a === true ? "ON" : "OFF";
+      const b = r[`relay_status_r${num}`];
+      return (b != null && (b & 0x02) !== 0) ? "ON" : "OFF";
+    };
     return [
       new Date(r.recorded_at).toLocaleString(),
       devName,
-      r.relay_status_r1 > 0 ? "ON" : "OFF",
-      r.relay_status_r2 > 0 ? "ON" : "OFF",
-      r.relay_status_r3 > 0 ? "ON" : "OFF",
-      r.relay_status_r4 > 0 ? "ON" : "OFF",
+      relOn(1), relOn(2), relOn(3), relOn(4),
       r.voltage   != null ? (r.voltage  / 10).toFixed(1) : "",
       r.current   != null ? (r.current  / 10).toFixed(1) : "",
       r.watts_consumed ?? "",
