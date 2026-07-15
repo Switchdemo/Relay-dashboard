@@ -168,31 +168,31 @@ async function supabaseGet(query) {
   return res.json();
 }
 
-// Paginated fetch — uses Range headers to bypass PostgREST's server-side
-// default row cap (typically 1000). Fetches in pages of pageSize until either
-// all rows are returned or the maxRows ceiling is hit.
+// Paginated fetch — uses PostgREST offset pagination (?limit=N&offset=N)
+// which works reliably regardless of the server-side row cap on the anon role.
+// Range headers require the server to be configured to honour them; offset params
+// are always respected. Fetches in pages of pageSize until all rows are returned
+// or the maxRows ceiling is hit.
 async function supabaseGetPaged(query, maxRows = 20000, pageSize = 1000) {
   let allRows = [];
   let offset  = 0;
+  // Strip any existing limit= from the caller's query so we control it
+  const baseQuery = query.replace(/&limit=\d+/, "").replace(/\?limit=\d+&?/, "?");
   while (true) {
-    const rangeEnd = offset + pageSize - 1;
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${query}`, {
+    const sep = baseQuery.includes("?") ? "&" : "?";
+    const pagedQuery = `${baseQuery}${sep}limit=${pageSize}&offset=${offset}`;
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${pagedQuery}`, {
       headers: {
         "apikey":        SUPABASE_KEY,
         "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
-        "Range":         `${offset}-${rangeEnd}`,
-        "Range-Unit":    "items",
         "Prefer":        "count=none"
       }
     });
-    // 416 = range not satisfiable (no more rows)
-    if (res.status === 416) break;
+    if (!res.ok) break;
     const page = await res.json();
     if (!Array.isArray(page) || page.length === 0) break;
     allRows = allRows.concat(page);
-    // If we got fewer rows than the page size, we've reached the end
-    if (page.length < pageSize) break;
-    // If we've hit the caller's max ceiling, stop
+    if (page.length < pageSize) break;          // fewer than requested = last page
     if (allRows.length >= maxRows) { allRows = allRows.slice(0, maxRows); break; }
     offset += pageSize;
   }
