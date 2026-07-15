@@ -2480,69 +2480,14 @@ async function generateHistoryReport() {
       return;
     }
 
-    // ── DIAGNOSTIC: show raw relay field values from first 8 readings ─────────
-    // This block exposes the actual DB values so we can see exactly what fields
-    // are present and what values they hold. Remove once relay detection is confirmed.
-    const diagSample = readings.slice(0, 8);
-    const diagHtml = `
-      <div id="rpt-diag" style="margin-bottom:14px;background:#1e293b;border-radius:var(--radius-sm);padding:12px 14px;font-family:monospace;font-size:10px;color:#94a3b8;overflow-x:auto;">
-        <div style="color:#f8fafc;font-weight:700;margin-bottom:6px;">🔬 Relay Field Diagnostic — first ${diagSample.length} readings (remove after confirming)</div>
-        <table style="border-collapse:collapse;width:100%;">
-          <thead><tr style="color:#64748b;">
-            <th style="text-align:left;padding:3px 8px;border-bottom:1px solid #334155;">Time</th>
-            <th style="text-align:left;padding:3px 8px;border-bottom:1px solid #334155;">relay_status_r1</th>
-            <th style="text-align:left;padding:3px 8px;border-bottom:1px solid #334155;">relay_active_r1</th>
-            <th style="text-align:left;padding:3px 8px;border-bottom:1px solid #334155;">load_present_r1</th>
-            <th style="text-align:left;padding:3px 8px;border-bottom:1px solid #334155;">relay_status_r2</th>
-            <th style="text-align:left;padding:3px 8px;border-bottom:1px solid #334155;">relay_active_r2</th>
-            <th style="text-align:left;padding:3px 8px;border-bottom:1px solid #334155;">watts</th>
-          </tr></thead>
-          <tbody>${diagSample.map(r => `<tr>
-            <td style="padding:2px 8px;border-bottom:1px solid #1e293b;color:#cbd5e1;">${new Date(r.recorded_at).toLocaleTimeString()}</td>
-            <td style="padding:2px 8px;border-bottom:1px solid #1e293b;color:${r.relay_status_r1 > 0 ? "#4ade80" : "#f87171"};">${JSON.stringify(r.relay_status_r1)} (0x${(r.relay_status_r1||0).toString(16).toUpperCase()})</td>
-            <td style="padding:2px 8px;border-bottom:1px solid #1e293b;color:${r.relay_active_r1 === true ? "#4ade80" : r.relay_active_r1 === false ? "#f87171" : "#f59e0b"};">${JSON.stringify(r.relay_active_r1)}</td>
-            <td style="padding:2px 8px;border-bottom:1px solid #1e293b;">${JSON.stringify(r.load_present_r1)}</td>
-            <td style="padding:2px 8px;border-bottom:1px solid #1e293b;color:${r.relay_status_r2 > 0 ? "#4ade80" : "#f87171"};">${JSON.stringify(r.relay_status_r2)}</td>
-            <td style="padding:2px 8px;border-bottom:1px solid #1e293b;color:${r.relay_active_r2 === true ? "#4ade80" : r.relay_active_r2 === false ? "#f87171" : "#f59e0b"};">${JSON.stringify(r.relay_active_r2)}</td>
-            <td style="padding:2px 8px;border-bottom:1px solid #1e293b;">${r.watts_consumed ?? "null"}</td>
-          </tr>`).join("")}</tbody>
-        </table>
-        <div style="margin-top:8px;color:#64748b;">
-          Fields present in row[0]: ${Object.keys(readings[0]).filter(k => k.includes("relay") || k.includes("load_present")).sort().join(", ")}
-        </div>
-        <div style="margin-top:4px;color:#64748b;">
-          Unique relay_status_r1 values in window: ${[...new Set(readings.map(r => r.relay_status_r1))].sort((a,b)=>a-b).join(", ")}
-        </div>
-        <div style="margin-top:4px;color:#64748b;">
-          Unique relay_active_r1 values: ${[...new Set(readings.map(r => String(r.relay_active_r1)))].join(", ")}
-        </div>
-      </div>`;
-
-    // Inject diagnostic into preview area immediately
-    const previewEl2 = document.getElementById("history-report-preview");
-    if (previewEl2) {
-      previewEl2.style.display = "block";
-      const existingDiag = document.getElementById("rpt-diag");
-      if (existingDiag) existingDiag.remove();
-      previewEl2.insertAdjacentHTML("afterbegin", diagHtml);
-    }
-
     const deviceName = deviceUid
       ? (DEVICES.find(d => d.uid === deviceUid)?.name || unitName(deviceUid))
       : "All Devices";
 
-    // ── Helper: relay ON check — matches relayDot() and loadHistory() display ──
-    // relay_status_r1 is the raw bubble-up byte. Any non-zero value means the relay
-    // or its associated load is in an active state. This matches the existing history
-    // table display exactly so the report agrees with what the user sees there.
-    const isRelayOn = (r, num) => {
-      const raw = r[`relay_status_r${num}`];
-      // relay_active_r# is a stored boolean — prefer it if present
-      const active = r[`relay_active_r${num}`];
-      if (active === true)  return true;
-      if (active === false) return false;
-      return raw != null && raw > 0;
-    };
+    // ── Relay ON check — identical to relayDot() and the history table green dot ──
+    // The green indicator in Device History is: relayDot(r.relay_status_rN) → val > 0.
+    // We use exactly that so the report agrees with what the user sees in the table.
+    const isRelayOn = (r, num) => (r[`relay_status_r${num}`] ?? 0) > 0;
 
     // ── Compute KPIs ──────────────────────────────────────────────────────
     const watts      = readings.map(r => r.watts_consumed).filter(w => w != null && w > 0);
