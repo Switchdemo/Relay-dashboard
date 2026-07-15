@@ -4772,13 +4772,12 @@
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
           <div>
-            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Signal Level</label>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Signal Level (SIMPLE)</label>
             <select id="oadr-test-signal" class="sched-select" style="width:100%;font-size:12px;">
-              <option value="1.0">1.0 — 100% Shed</option>
-              <option value="0.75">0.75 — 75% Shed</option>
-              <option value="0.5" selected>0.5 — 50% Shed</option>
-              <option value="0.25">0.25 — 25% Shed</option>
-              <option value="0.0">0.0 — Restore All</option>
+              <option value="3">L3 — Emergency / Full Shed</option>
+              <option value="2" selected>L2 — High Shed</option>
+              <option value="1">L1 — Moderate Shed</option>
+              <option value="0">L0 — Normal / Restore</option>
             </select>
           </div>
           <div>
