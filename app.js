@@ -9066,64 +9066,68 @@ let drDispatchConfig = {
 };
 
 async function loadDRDispatchConfig() {
-  // Populate group dropdowns with current device groups
-  const groups = await supabaseGet("device_groups?order=name.asc").catch(() => []);
-  for (const level of ["L0","L1","L2","L3"]) {
-    const sel = document.getElementById(`dr-dispatch-${level.toLowerCase()}-group`);
-    if (!sel) continue;
-    // Keep the leading "skip" option and add groups
-    const existing = sel.innerHTML;
-    sel.innerHTML = '<option value="">— Skip (no action) —</option>'
-      + (Array.isArray(groups) ? groups.map(g =>
-          `<option value="${g.id}">${g.name}</option>`
-        ).join("") : "");
-  }
-
-  // Load saved config from program_settings
+  // Build group options from device_groups table using group_number as value (matches worker's resolveDevices)
   try {
-    const rows = await supabaseGet("program_settings?setting_key=like.dr_dispatch_%");
-    if (Array.isArray(rows)) {
-      rows.forEach(r => {
-        // Keys: dr_dispatch_L0_group, dr_dispatch_L0_action, etc.
-        const m = r.setting_key.match(/^dr_dispatch_(L\d)_(group|action)$/);
-        if (m && drDispatchConfig[m[1]]) {
-          drDispatchConfig[m[1]][m[2]] = r.setting_value || "";
-          const el = document.getElementById(`dr-dispatch-${m[1].toLowerCase()}-${m[2]}`);
-          if (el) el.value = r.setting_value || "";
+    const groups = await supabaseGet("device_groups?order=group_number.asc").catch(() => []);
+    const uniqueGroups = {};
+    if (Array.isArray(groups)) {
+      groups.forEach(g => {
+        if (g.group_number && !uniqueGroups[g.group_number]) {
+          uniqueGroups[g.group_number] = g.group_name || `Group ${g.group_number}`;
         }
       });
+    }
+    const groupOptions = Object.entries(uniqueGroups)
+      .map(([num, name]) => `<option value="group_${num}">${name}</option>`).join("");
+    const baseOptions = `<option value="all">All Devices</option>${groupOptions}<option value="none">None (skip)</option>`;
+    for (const level of [0,1,2,3]) {
+      const sel = document.getElementById(`dr-dispatch-l${level}-group`);
+      if (sel) sel.innerHTML = baseOptions;
+    }
+  } catch(e) { console.warn("loadDRDispatchConfig groups:", e); }
+
+  // Load saved config from the single oadr_dispatch_config blob
+  try {
+    const rows = await supabaseGet("program_settings?setting_key=eq.oadr_dispatch_config&select=setting_value");
+    if (rows?.[0]?.setting_value) {
+      const cfg = JSON.parse(rows[0].setting_value);
+      for (const level of [0,1,2,3]) {
+        const targetSel = document.getElementById(`dr-dispatch-l${level}-group`);
+        const actionSel = document.getElementById(`dr-dispatch-l${level}-action`);
+        if (targetSel && cfg[`l${level}_target`]) targetSel.value = cfg[`l${level}_target`];
+        if (actionSel && cfg[`l${level}_action`]) actionSel.value = cfg[`l${level}_action`];
+        drDispatchConfig[`L${level}`] = {
+          group:  cfg[`l${level}_target`] || "",
+          action: cfg[`l${level}_action`] || "all_on"
+        };
+      }
     }
   } catch(e) { console.warn("loadDRDispatchConfig:", e); }
 }
 
 async function saveDRDispatchConfig() {
   const statusEl = document.getElementById("dr-dispatch-config-status");
-  const levels   = ["L0","L1","L2","L3"];
-  const pairs    = [];
-
-  for (const level of levels) {
-    const groupEl  = document.getElementById(`dr-dispatch-${level.toLowerCase()}-group`);
-    const actionEl = document.getElementById(`dr-dispatch-${level.toLowerCase()}-action`);
-    const group    = groupEl?.value  || "";
-    const action   = actionEl?.value || "all_on";
-    drDispatchConfig[level] = { group, action };
-    pairs.push([`dr_dispatch_${level}_group`,  group]);
-    pairs.push([`dr_dispatch_${level}_action`, action]);
+  const cfg = {};
+  for (const level of [0,1,2,3]) {
+    const groupEl  = document.getElementById(`dr-dispatch-l${level}-group`);
+    const actionEl = document.getElementById(`dr-dispatch-l${level}-action`);
+    cfg[`l${level}_target`] = groupEl?.value  || "none";
+    cfg[`l${level}_action`] = actionEl?.value || "all_on";
+    drDispatchConfig[`L${level}`] = { group: groupEl?.value || "", action: actionEl?.value || "all_on" };
   }
 
   try {
-    for (const [key, value] of pairs) {
-      await fetch(`${SUPABASE_URL}/rest/v1/program_settings`, {
-        method: "POST",
-        headers: {
-          "apikey":        SUPABASE_KEY,
-          "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
-          "Content-Type":  "application/json",
-          "Prefer":        "resolution=merge-duplicates"
-        },
-        body: JSON.stringify({ setting_key: key, setting_value: value })
-      });
-    }
+    // Save as a single JSON blob — this is what the worker reads via resolveDispatch()
+    await fetch(`${SUPABASE_URL}/rest/v1/program_settings?on_conflict=setting_key`, {
+      method: "POST",
+      headers: {
+        "apikey":        SUPABASE_KEY,
+        "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+        "Content-Type":  "application/json",
+        "Prefer":        "resolution=merge-duplicates,return=minimal"
+      },
+      body: JSON.stringify({ setting_key: "oadr_dispatch_config", setting_value: JSON.stringify(cfg) })
+    });
     if (statusEl) { statusEl.textContent = "✅ DR Dispatch config saved."; statusEl.style.color = "var(--green-dark)"; statusEl.style.display = "block"; }
     setTimeout(() => { if (statusEl) statusEl.style.display = "none"; }, 3000);
   } catch(e) {
@@ -9651,47 +9655,66 @@ function buildOADRPayload(type, data) {
   return { json, xml };
 }
 
-// ── Simulate incoming OpenADR event (for testing) ─────────────────────────────
 async function simulateOpenADREvent() {
-  const signalLevel = parseFloat(document.getElementById("oadr-test-signal")?.value || "0.5");
-  const startMins   = parseInt(document.getElementById("oadr-test-start")?.value || "1");
+  const signalLevel = parseInt(document.getElementById("oadr-test-signal")?.value || "2");
+  const startMins   = parseInt(document.getElementById("oadr-test-start")?.value   || "1");
   const duration    = parseInt(document.getElementById("oadr-test-duration")?.value || "30");
   const statusEl    = document.getElementById("oadr-test-status");
 
-  const dtstart = new Date(Date.now() + startMins * 60000).toISOString();
-  const mapping = signalToStrategy(signalLevel);
-  const vtnEventId = `TEST-${Date.now()}`;
-
-  if (statusEl) { statusEl.textContent = "Simulating incoming OpenADR event..."; statusEl.style.color = "var(--text-secondary)"; statusEl.style.display = "block"; }
+  if (statusEl) { statusEl.textContent = "Sending test event to worker..."; statusEl.style.color = "var(--text-hint)"; statusEl.style.display = "block"; }
 
   try {
-    // Insert simulated event
-    await fetch(`${SUPABASE_URL}/rest/v1/openadr_events`, {
+    const dtstart  = new Date(Date.now() + startMins * 60000).toISOString();
+    const eventId  = `TEST-EVENT-${Date.now()}`;
+    // Build a real oadrDistributeEvent XML — identical to what SCE's VTN sends.
+    // Posting XML to /openadr/event triggers the full worker dispatch pipeline
+    // (parse → DR level lookup → LC command → Notehub → schedule_queue insert).
+    const testXml = `<?xml version="1.0" encoding="UTF-8"?>
+<oadrPayload xmlns:oadr="http://openadr.org/oadr-2.0b/2012/07" xmlns:ei="http://docs.oasis-open.org/ns/energyinterop/201110" xmlns:xcal="urn:ietf:params:xml:ns:icalendar-2.0">
+  <oadr:oadrSignedObject>
+    <oadr:oadrDistributeEvent ei:schemaVersion="2.0b">
+      <ei:eiRequestID>TEST-${Date.now()}</ei:eiRequestID>
+      <ei:eventDescriptor>
+        <ei:eventID>${eventId}</ei:eventID>
+        <ei:modificationNumber>0</ei:modificationNumber>
+      </ei:eventDescriptor>
+      <oadr:oadrEvent>
+        <ei:eiActivePeriod>
+          <xcal:properties>
+            <xcal:dtstart><xcal:date-time>${dtstart}</xcal:date-time></xcal:dtstart>
+            <xcal:duration><xcal:duration>PT${duration}M</xcal:duration></xcal:duration>
+          </xcal:properties>
+        </ei:eiActivePeriod>
+        <ei:eiEventSignals>
+          <ei:eiEventSignal>
+            <ei:signalName>SIMPLE</ei:signalName>
+            <ei:signalType>LOAD_DISPATCH</ei:signalType>
+            <ei:intervals>
+              <ei:interval><ei:uid><ei:text>0</ei:text></ei:uid>
+                <ei:signalPayload><ei:payloadFloat><ei:value>${signalLevel}</ei:value></ei:payloadFloat></ei:signalPayload>
+              </ei:interval>
+            </ei:intervals>
+          </ei:eiEventSignal>
+        </ei:eiEventSignals>
+      </oadr:oadrEvent>
+    </oadr:oadrDistributeEvent>
+  </oadr:oadrSignedObject>
+</oadrPayload>`;
+
+    const res  = await fetch(`${PROXY_URL}openadr/event`, {
       method: "POST",
-      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
-        "Content-Type": "application/json", "Prefer": "return=minimal" },
-      body: JSON.stringify({
-        vtn_event_id:  vtnEventId,
-        event_status:  "near",
-        opt_type:      "optIn",
-        signal_name:   "SIMPLE",
-        signal_type:   "LOAD_DISPATCH",
-        signal_level:  signalLevel,
-        target_all:    true,
-        dtstart,
-        duration_mins: duration,
-        created_dt:    new Date().toISOString(),
-        lc_strategy:   mapping.strategy,
-        lc_mode:       mapping.mode,
-        raw_payload:   JSON.stringify({ simulated: true, signalLevel, mapping })
-      })
+      headers: { "Content-Type": "application/xml" },
+      body: testXml
     });
+    const text = await res.text();
 
-    if (statusEl) { statusEl.textContent = `✅ Simulated event created — ${mapping.desc} (${mapping.pct}% shed) starting in ${startMins} min. Switch to OpenADR Events tab to monitor.`; statusEl.style.color = "var(--green-dark)"; }
+    if (res.ok) {
+      if (statusEl) { statusEl.textContent = `✅ Test event sent — DR Level ${signalLevel}, starting in ${startMins} min, ${duration} min duration. Worker dispatched LC commands.`; statusEl.style.color = "var(--green-dark)"; }
+    } else {
+      if (statusEl) { statusEl.textContent = `⚠ Worker returned ${res.status}: ${text.slice(0, 200)}`; statusEl.style.color = "var(--amber)"; }
+    }
 
-    // Load events immediately
-    await loadOpenADREvents();
-
+    setTimeout(() => initOpenADREvents(), 1500);
   } catch(e) {
     console.error("simulateOpenADREvent:", e);
     if (statusEl) { statusEl.textContent = `Error: ${e.message}`; statusEl.style.color = "var(--red)"; }
