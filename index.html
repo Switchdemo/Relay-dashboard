@@ -4609,6 +4609,132 @@
         <div id="oadr-mapping-status" style="font-size:11px;margin-top:8px;display:none;"></div>
       </div>
 
+      <!-- DR Dispatch Configuration — per SIMPLE level target group + action mapping -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">DR Dispatch Configuration</div>
+          <button class="queue-refresh" onclick="saveDRDispatchConfig()" style="color:var(--green-dark);border-color:var(--green);">Save</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:12px;">
+          Map each SIMPLE signal level (L0–L3) to a target device group and LC action. When SCE sends a SIMPLE level, dispatch fires against the configured group with the configured action. Leave target blank to skip that level.
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead><tr style="background:var(--surface2);">
+              <th style="text-align:left;padding:8px 10px;border-bottom:0.5px solid var(--border-md);font-size:10px;color:var(--text-hint);font-weight:600;">Level</th>
+              <th style="text-align:left;padding:8px 10px;border-bottom:0.5px solid var(--border-md);font-size:10px;color:var(--text-hint);font-weight:600;">Description</th>
+              <th style="text-align:left;padding:8px 10px;border-bottom:0.5px solid var(--border-md);font-size:10px;color:var(--text-hint);font-weight:600;">Target Group</th>
+              <th style="text-align:left;padding:8px 10px;border-bottom:0.5px solid var(--border-md);font-size:10px;color:var(--text-hint);font-weight:600;">LC Action</th>
+            </tr></thead>
+            <tbody>
+              <tr>
+                <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);"><span style="font-size:11px;font-weight:700;font-family:monospace;background:var(--surface2);padding:2px 7px;border-radius:4px;">L0</span></td>
+                <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);font-size:11px;color:var(--text-secondary);">Normal / Restore</td>
+                <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);">
+                  <select id="dr-dispatch-l0-group" class="sched-select" style="width:100%;font-size:11px;">
+                    <option value="">— Skip (no action) —</option>
+                  </select>
+                </td>
+                <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);">
+                  <select id="dr-dispatch-l0-action" class="sched-select" style="width:100%;font-size:11px;">
+                    <option value="restore">🟢 Restore All</option>
+                    <option value="all_on">⚡ All On (Shed)</option>
+                    <option value="relay1_on">Relay 1 On</option>
+                    <option value="relay2_on">Relay 2 On</option>
+                    <option value="relay3_on">Relay 3 On</option>
+                    <option value="relay4_on">Relay 4 On</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);"><span style="font-size:11px;font-weight:700;font-family:monospace;background:var(--amber-lt,#fff8e1);color:var(--amber);padding:2px 7px;border-radius:4px;">L1</span></td>
+                <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);font-size:11px;color:var(--text-secondary);">Low — Moderate Shed</td>
+                <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);">
+                  <select id="dr-dispatch-l1-group" class="sched-select" style="width:100%;font-size:11px;">
+                    <option value="">— Skip (no action) —</option>
+                  </select>
+                </td>
+                <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);">
+                  <select id="dr-dispatch-l1-action" class="sched-select" style="width:100%;font-size:11px;">
+                    <option value="all_on">⚡ All On (Shed)</option>
+                    <option value="relay1_on">Relay 1 On</option>
+                    <option value="relay2_on">Relay 2 On</option>
+                    <option value="relay3_on">Relay 3 On</option>
+                    <option value="relay4_on">Relay 4 On</option>
+                    <option value="restore">🟢 Restore All</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);"><span style="font-size:11px;font-weight:700;font-family:monospace;background:#fff3e0;color:#e65100;padding:2px 7px;border-radius:4px;">L2</span></td>
+                <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);font-size:11px;color:var(--text-secondary);">High — Heavy Shed</td>
+                <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);">
+                  <select id="dr-dispatch-l2-group" class="sched-select" style="width:100%;font-size:11px;">
+                    <option value="">— Skip (no action) —</option>
+                  </select>
+                </td>
+                <td style="padding:8px 10px;border-bottom:0.5px solid var(--border);">
+                  <select id="dr-dispatch-l2-action" class="sched-select" style="width:100%;font-size:11px;">
+                    <option value="all_on">⚡ All On (Shed)</option>
+                    <option value="relay1_on">Relay 1 On</option>
+                    <option value="relay2_on">Relay 2 On</option>
+                    <option value="relay3_on">Relay 3 On</option>
+                    <option value="relay4_on">Relay 4 On</option>
+                    <option value="restore">🟢 Restore All</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:8px 10px;"><span style="font-size:11px;font-weight:700;font-family:monospace;background:var(--red-lt,#ffebee);color:var(--red);padding:2px 7px;border-radius:4px;">L3</span></td>
+                <td style="padding:8px 10px;font-size:11px;color:var(--text-secondary);">Emergency — Full Shed</td>
+                <td style="padding:8px 10px;">
+                  <select id="dr-dispatch-l3-group" class="sched-select" style="width:100%;font-size:11px;">
+                    <option value="">— Skip (no action) —</option>
+                  </select>
+                </td>
+                <td style="padding:8px 10px;">
+                  <select id="dr-dispatch-l3-action" class="sched-select" style="width:100%;font-size:11px;">
+                    <option value="all_on">⚡ All On (Shed)</option>
+                    <option value="relay1_on">Relay 1 On</option>
+                    <option value="relay2_on">Relay 2 On</option>
+                    <option value="relay3_on">Relay 3 On</option>
+                    <option value="relay4_on">Relay 4 On</option>
+                    <option value="restore">🟢 Restore All</option>
+                  </select>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="dr-dispatch-config-status" style="font-size:11px;margin-top:8px;display:none;"></div>
+      </div>
+
+      <!-- VTN Polling Configuration -->
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">⏱ VTN Polling</div>
+          <button class="queue-refresh" onclick="pollVTNNow()" style="color:var(--blue-dark);border-color:var(--blue-dark);">▶ Poll Now</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:12px;">
+          Background polling sends oadrPoll to the VTN at regular intervals to fetch pending events. The poller runs automatically after login.
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Poll Interval</label>
+            <select id="oadr-poll-interval" class="sched-select" style="font-size:12px;min-width:160px;"
+              onchange="setOADRPollInterval(parseInt(this.value))">
+              <option value="15000">15 seconds</option>
+              <option value="30000" selected>30 seconds</option>
+              <option value="60000">1 minute</option>
+              <option value="120000">2 minutes</option>
+              <option value="300000">5 minutes</option>
+            </select>
+          </div>
+          <div id="oadr-poller-status-badge" style="font-size:11px;padding:4px 12px;border-radius:10px;background:var(--surface2);color:var(--text-hint);align-self:flex-end;">⚫ Idle</div>
+        </div>
+        <div id="oadr-poll-log" style="margin-top:12px;font-size:11px;font-family:monospace;color:var(--text-hint);max-height:120px;overflow-y:auto;background:var(--surface2);border-radius:var(--radius-sm);padding:8px 10px;display:none;"></div>
+      </div>
+
       <!-- DR Device Configuration -->
       <div class="sched-card">
         <div class="sched-card-header">
