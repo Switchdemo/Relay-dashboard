@@ -2495,14 +2495,12 @@ async function generateHistoryReport() {
       ? (DEVICES.find(d => d.uid === deviceUid)?.name || unitName(deviceUid))
       : "All Devices";
 
-    // ── Relay ON check — uses bit 3 (0x08) of relay_status_rN ───────────────
-    // parseBubbleUpHex (the frontend's own hex decoder) defines:
-    //   active = (r >> 3) & 1   ← bit 3 = relay physically energised
-    //   load   = r & 1          ← bit 0 = load present on circuit (relay may be OFF)
-    // relayDot() uses val > 0 which catches load-present even when relay is OFF —
-    // that's why the dot lights up even when the relay hasn't changed state.
-    // For transition detection we need bit 3 only: relay is genuinely ON.
-    const isRelayOn = (r, num) => ((r[`relay_status_r${num}`] ?? 0) & 0x08) !== 0;
+    // ── Relay ON check — mirrors exportHistory() and relayDot() exactly ─────
+    // exportHistory writes: r.relay_status_r1 > 0 ? "On" : "Off"
+    // relayDot uses:        val > 0
+    // Both agree. Use the same test so the report matches the CSV export and
+    // the green dot the user sees in the history table.
+    const isRelayOn = (r, num) => (r[`relay_status_r${num}`] ?? 0) > 0;
 
     // ── Compute KPIs ──────────────────────────────────────────────────────
     const watts      = readings.map(r => r.watts_consumed).filter(w => w != null && w > 0);
