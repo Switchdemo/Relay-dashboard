@@ -997,6 +997,53 @@
 
         <div id="charts-empty" style="text-align:center;padding:1rem;color:var(--text-hint);font-size:13px;display:none;">No data available for selected range.</div>
       </div>
+
+    <!-- Device History Report -->
+    <div class="history-panel" style="margin-top:16px;" id="history-report-panel">
+      <div class="history-header">
+        <div class="history-title">📄 Device Activity Report</div>
+        <div class="history-controls" style="flex-wrap:wrap;gap:8px;">
+          <select class="history-select" id="rpt-device-select">
+            <option value="">All Devices</option>
+          </select>
+          <input type="date" id="rpt-from-date" class="history-select" style="padding:5px 8px;font-size:11px;" />
+          <span style="font-size:11px;color:var(--text-hint);align-self:center;">to</span>
+          <input type="date" id="rpt-to-date" class="history-select" style="padding:5px 8px;font-size:11px;" />
+          <input type="time" id="rpt-from-time" class="history-select" style="padding:5px 8px;font-size:11px;width:110px;" value="00:00" />
+          <span style="font-size:11px;color:var(--text-hint);align-self:center;">–</span>
+          <input type="time" id="rpt-to-time" class="history-select" style="padding:5px 8px;font-size:11px;width:110px;" value="23:59" />
+          <button class="history-load-btn" onclick="generateHistoryReport()" style="background:var(--text-primary);color:#fff;border-color:var(--text-primary);font-weight:600;padding:5px 14px;">Generate Report</button>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text-hint);margin-bottom:14px;">
+        Select a device and date/time window to generate a printable activity report with relay state summary, power analysis, and event log.
+      </div>
+      <!-- Report preview area -->
+      <div id="history-report-preview" style="display:none;">
+        <!-- KPI bar -->
+        <div id="rpt-kpi-bar" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;"></div>
+        <!-- Synopsis -->
+        <div id="rpt-synopsis" style="background:var(--blue-bg,#EFF6FF);border-left:4px solid var(--blue-dark);border-radius:var(--radius-sm);padding:14px 18px;margin-bottom:16px;font-size:12px;color:var(--text-secondary);line-height:1.8;"></div>
+        <!-- Power chart -->
+        <div id="rpt-chart-wrap" style="margin-bottom:16px;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Power (W) — Time Series</div>
+          <svg id="rpt-power-svg" style="width:100%;display:block;" viewBox="0 0 800 160" preserveAspectRatio="none"></svg>
+        </div>
+        <!-- Relay state table -->
+        <div style="font-size:11px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Relay State Transitions</div>
+        <div id="rpt-relay-table" style="overflow-x:auto;border:0.5px solid var(--border-md);border-radius:var(--radius-sm);margin-bottom:16px;max-height:280px;overflow-y:auto;"></div>
+        <!-- Schedule events in window -->
+        <div style="font-size:11px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Schedule Events in Window</div>
+        <div id="rpt-events-table" style="overflow-x:auto;border:0.5px solid var(--border-md);border-radius:var(--radius-sm);margin-bottom:16px;"></div>
+        <!-- Actions -->
+        <div style="display:flex;gap:10px;margin-top:4px;">
+          <button onclick="openHistoryReportWindow()" style="padding:8px 20px;border-radius:var(--radius-sm);border:none;background:var(--text-primary);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">🖨 Open Printable Report</button>
+          <button onclick="exportHistoryReportCSV()" class="history-load-btn" style="color:var(--green-dark);border-color:var(--green);">⬇ Export CSV</button>
+        </div>
+      </div>
+      <div id="history-report-status" style="font-size:12px;color:var(--text-hint);display:none;padding:8px 0;"></div>
+    </div>
+
   </div>
 </div>
 
