@@ -2430,8 +2430,497 @@ async function exportHistory() {
   } catch(e) { setStatus("error", "Export failed."); console.error(e); }
 }
 
+// ── Device History Report ─────────────────────────────────────────────────────
+// Holds last-generated report data for print window + CSV export
+let _historyReportData = null;
+
+async function generateHistoryReport() {
+  const deviceUid = document.getElementById("rpt-device-select")?.value || "";
+  const fromDate  = document.getElementById("rpt-from-date")?.value;
+  const toDate    = document.getElementById("rpt-to-date")?.value;
+  const fromTime  = document.getElementById("rpt-from-time")?.value || "00:00";
+  const toTime    = document.getElementById("rpt-to-time")?.value   || "23:59";
+  const statusEl  = document.getElementById("history-report-status");
+  const previewEl = document.getElementById("history-report-preview");
+
+  if (!fromDate || !toDate) {
+    if (statusEl) { statusEl.textContent = "Please select a start and end date."; statusEl.style.color = "var(--red)"; statusEl.style.display = "block"; }
+    return;
+  }
+
+  const fromISO = `${fromDate}T${fromTime}:00`;
+  const toISO   = `${toDate}T${toTime}:59`;
+  const fromMs  = new Date(fromISO).getTime();
+  const toMs    = new Date(toISO).getTime();
+
+  if (fromMs >= toMs) {
+    if (statusEl) { statusEl.textContent = "Start must be before end."; statusEl.style.color = "var(--red)"; statusEl.style.display = "block"; }
+    return;
+  }
+
+  if (statusEl) { statusEl.textContent = "Loading data…"; statusEl.style.color = "var(--text-hint)"; statusEl.style.display = "block"; }
+  if (previewEl) previewEl.style.display = "none";
+
+  try {
+    // ── Fetch device readings ──────────────────────────────────────────────
+    let readingQuery = `device_readings?recorded_at=gte.${encodeURIComponent(fromISO)}&recorded_at=lte.${encodeURIComponent(toISO)}&order=recorded_at.asc&limit=5000`;
+    if (deviceUid) readingQuery += `&device_uid=eq.${encodeURIComponent(deviceUid)}`;
+    const readings = await supabaseGet(readingQuery);
+
+    // ── Fetch schedule events in window ───────────────────────────────────
+    let evQuery = `schedule_queue?fire_at=gte.${encodeURIComponent(fromISO)}&fire_at=lte.${encodeURIComponent(toISO)}&order=fire_at.asc&limit=200`;
+    const events = await supabaseGet(evQuery);
+
+    // ── Fetch OpenADR events in window ────────────────────────────────────
+    let oadrQuery = `openadr_events?event_start=gte.${encodeURIComponent(fromISO)}&event_start=lte.${encodeURIComponent(toISO)}&order=event_start.asc&limit=50`;
+    const oadrEvents = await supabaseGet(oadrQuery).catch(() => []);
+
+    if (!Array.isArray(readings) || readings.length === 0) {
+      if (statusEl) { statusEl.textContent = "No device readings found for the selected period."; statusEl.style.color = "var(--amber)"; }
+      return;
+    }
+
+    const deviceName = deviceUid
+      ? (DEVICES.find(d => d.uid === deviceUid)?.name || unitName(deviceUid))
+      : "All Devices";
+
+    // ── Compute KPIs ──────────────────────────────────────────────────────
+    const watts      = readings.map(r => r.watts_consumed).filter(w => w != null && w > 0);
+    const voltages   = readings.map(r => r.voltage  != null ? r.voltage  / 10 : null).filter(v => v !== null);
+    const currents   = readings.map(r => r.current  != null ? r.current  / 10 : null).filter(c => c !== null);
+    const avgWatts   = watts.length   ? Math.round(watts.reduce((a,b)=>a+b,0)   / watts.length)   : 0;
+    const peakWatts  = watts.length   ? Math.max(...watts)                                         : 0;
+    const avgVoltage = voltages.length ? (voltages.reduce((a,b)=>a+b,0) / voltages.length).toFixed(1) : "—";
+    const avgCurrent = currents.length ? (currents.reduce((a,b)=>a+b,0) / currents.length).toFixed(2) : "—";
+
+    // Relay ON time per relay (R1–R4)
+    const relayOnCounts = [0,0,0,0];
+    readings.forEach(r => {
+      if (r.relay_status_r1 > 0) relayOnCounts[0]++;
+      if (r.relay_status_r2 > 0) relayOnCounts[1]++;
+      if (r.relay_status_r3 > 0) relayOnCounts[2]++;
+      if (r.relay_status_r4 > 0) relayOnCounts[3]++;
+    });
+    const relayOnPcts = relayOnCounts.map(c => readings.length ? Math.round((c / readings.length) * 100) : 0);
+
+    // Relay state transitions
+    const transitions = [];
+    let prevStates = [null, null, null, null];
+    readings.forEach(r => {
+      const cur = [r.relay_status_r1 > 0, r.relay_status_r2 > 0, r.relay_status_r3 > 0, r.relay_status_r4 > 0];
+      const devName = DEVICES.find(d => d.uid === r.device_uid)?.name || unitName(r.device_uid) || r.device_uid;
+      for (let i = 0; i < 4; i++) {
+        if (prevStates[i] !== null && cur[i] !== prevStates[i]) {
+          transitions.push({ ts: r.recorded_at, device: devName, relay: `R${i+1}`, state: cur[i] ? "ON" : "OFF", from: prevStates[i] ? "ON" : "OFF" });
+        }
+      }
+      prevStates = cur;
+    });
+
+    // Duration formatted
+    const durationMs = toMs - fromMs;
+    const durationH  = (durationMs / 3600000).toFixed(1);
+
+    // Energy estimate (kWh) — avg watts × duration
+    const kWh = avgWatts > 0 ? ((avgWatts / 1000) * (durationMs / 3600000)).toFixed(3) : "—";
+
+    _historyReportData = {
+      deviceName, deviceUid, fromISO, toISO, fromDate, toDate, fromTime, toTime,
+      readings, events: Array.isArray(events) ? events : [],
+      oadrEvents: Array.isArray(oadrEvents) ? oadrEvents : [],
+      avgWatts, peakWatts, avgVoltage, avgCurrent, kWh,
+      relayOnPcts, transitions, durationH, totalReadings: readings.length
+    };
+
+    // ── Render preview ────────────────────────────────────────────────────
+    _renderHistoryReportPreview();
+    if (statusEl) statusEl.style.display = "none";
+    if (previewEl) previewEl.style.display = "block";
+
+  } catch(e) {
+    console.error("generateHistoryReport:", e);
+    if (statusEl) { statusEl.textContent = `Error: ${e.message}`; statusEl.style.color = "var(--red)"; }
+  }
+}
+
+function _renderHistoryReportPreview() {
+  const d = _historyReportData;
+  if (!d) return;
+
+  // ── KPI cards ────────────────────────────────────────────────────────────
+  const kpiBar = document.getElementById("rpt-kpi-bar");
+  if (kpiBar) {
+    const card = (val, lbl, unit, color, bg) =>
+      `<div style="padding:14px 12px;border-radius:var(--radius);background:${bg};border-left:4px solid ${color};text-align:center;">
+        <div style="font-size:24px;font-weight:800;color:${color};line-height:1;">${val}</div>
+        <div style="font-size:10px;color:#64748B;margin-top:2px;font-weight:600;">${unit}</div>
+        <div style="font-size:10px;color:#94A3B8;margin-top:2px;text-transform:uppercase;letter-spacing:.04em;">${lbl}</div>
+      </div>`;
+    kpiBar.innerHTML =
+      card(d.avgWatts || "—", "Avg Power", "W", "#D97706", "#FFF8E1") +
+      card(d.peakWatts || "—", "Peak Power", "W", "#DC2626", "#FEF2F2") +
+      card(d.kWh, "Est. Energy", "kWh", "#7C3AED", "#F5F3FF") +
+      card(d.totalReadings.toLocaleString(), "Readings", "data points", "#0EA5E9", "#F0F9FF");
+  }
+
+  // ── Synopsis ──────────────────────────────────────────────────────────────
+  const synopsis = document.getElementById("rpt-synopsis");
+  if (synopsis) {
+    const fmtDt = iso => new Date(iso).toLocaleString([], { dateStyle:"medium", timeStyle:"short" });
+    const relayDesc = d.relayOnPcts.map((p, i) => `R${i+1}: ${p}%`).join(" · ");
+    synopsis.innerHTML =
+      `<strong>${d.deviceName}</strong> — ${fmtDt(d.fromISO)} to ${fmtDt(d.toISO)} (${d.durationH} hours)<br>` +
+      `<strong>${d.totalReadings.toLocaleString()}</strong> readings captured. ` +
+      `Average power draw: <strong>${d.avgWatts} W</strong> · Peak: <strong>${d.peakWatts} W</strong> · ` +
+      `Estimated energy: <strong>${d.kWh} kWh</strong>.<br>` +
+      `Avg voltage: <strong>${d.avgVoltage} V</strong> · Avg current: <strong>${d.avgCurrent} A</strong>.<br>` +
+      `Relay ON-time: <strong>${relayDesc}</strong>. ` +
+      `<strong>${d.transitions.length}</strong> relay state change${d.transitions.length !== 1 ? "s" : ""} detected. ` +
+      `<strong>${d.events.length}</strong> scheduled event${d.events.length !== 1 ? "s" : ""} and ` +
+      `<strong>${d.oadrEvents.length}</strong> OpenADR event${d.oadrEvents.length !== 1 ? "s" : ""} in window.`;
+  }
+
+  // ── Power SVG spark chart ─────────────────────────────────────────────────
+  const svg = document.getElementById("rpt-power-svg");
+  if (svg && d.readings.length > 1) {
+    const W = 800, H = 160, pad = 10;
+    const pts = d.readings.map(r => r.watts_consumed ?? 0);
+    const maxW = Math.max(...pts, 1);
+    const xStep = (W - 2*pad) / (pts.length - 1);
+    const polyPts = pts.map((w, i) => {
+      const x = pad + i * xStep;
+      const y = pad + (H - 2*pad) * (1 - w / maxW);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+    // Area fill
+    const firstX = pad, lastX = pad + (pts.length-1)*xStep;
+    const fillPts = `${firstX},${H-pad} ${polyPts} ${lastX.toFixed(1)},${H-pad}`;
+    svg.innerHTML =
+      `<rect width="${W}" height="${H}" fill="#F8FAFC" rx="4"/>` +
+      `<polygon points="${fillPts}" fill="#D97706" opacity="0.15"/>` +
+      `<polyline points="${polyPts}" fill="none" stroke="#D97706" stroke-width="2" stroke-linejoin="round"/>` +
+      `<text x="${pad}" y="${H-2}" font-size="9" fill="#94A3B8">0 W</text>` +
+      `<text x="${pad}" y="14" font-size="9" fill="#94A3B8">${maxW} W</text>`;
+  }
+
+  // ── Relay transition table ─────────────────────────────────────────────────
+  const relayTable = document.getElementById("rpt-relay-table");
+  if (relayTable) {
+    if (d.transitions.length === 0) {
+      relayTable.innerHTML = `<div style="padding:12px;font-size:12px;color:var(--text-hint);">No relay state changes detected in this window.</div>`;
+    } else {
+      const rows = d.transitions.map(t =>
+        `<tr><td style="padding:7px 10px;border-bottom:0.5px solid var(--border);font-size:11px;white-space:nowrap;">${new Date(t.ts).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit"})}</td>
+         <td style="padding:7px 10px;border-bottom:0.5px solid var(--border);font-size:11px;">${t.device}</td>
+         <td style="padding:7px 10px;border-bottom:0.5px solid var(--border);font-size:11px;font-weight:700;">${t.relay}</td>
+         <td style="padding:7px 10px;border-bottom:0.5px solid var(--border);">
+           <span style="padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;background:${t.state==="ON"?"var(--green-bg)":"var(--surface2)"};color:${t.state==="ON"?"var(--green-dark)":"var(--text-hint)"};">${t.state==="ON"?"▲ ON":"▼ OFF"}</span>
+         </td></tr>`
+      ).join("");
+      relayTable.innerHTML =
+        `<table style="width:100%;border-collapse:collapse;font-size:11px;">
+          <thead style="position:sticky;top:0;background:var(--surface2);">
+            <tr><th style="padding:8px 10px;text-align:left;border-bottom:0.5px solid var(--border-md);font-size:10px;color:var(--text-hint);font-weight:700;text-transform:uppercase;">Time</th>
+            <th style="padding:8px 10px;text-align:left;border-bottom:0.5px solid var(--border-md);font-size:10px;color:var(--text-hint);font-weight:700;text-transform:uppercase;">Device</th>
+            <th style="padding:8px 10px;text-align:left;border-bottom:0.5px solid var(--border-md);font-size:10px;color:var(--text-hint);font-weight:700;text-transform:uppercase;">Relay</th>
+            <th style="padding:8px 10px;text-align:left;border-bottom:0.5px solid var(--border-md);font-size:10px;color:var(--text-hint);font-weight:700;text-transform:uppercase;">Transition</th></tr>
+          </thead><tbody>${rows}</tbody></table>`;
+    }
+  }
+
+  // ── Schedule events table ─────────────────────────────────────────────────
+  const evTable = document.getElementById("rpt-events-table");
+  if (evTable) {
+    const allEvts = [
+      ...d.events.map(e => ({ ts: e.fire_at, name: e.name || e.target_name || "—", type: e.source || "scheduled", detail: `${e.relay_action||""} · ${e.duration_minutes||"?"}min · ${e.target_name||""}`, status: e.status })),
+      ...d.oadrEvents.map(e => ({ ts: e.event_start || e.received_at, name: `OpenADR DR L${e.dr_level??e.signal_level??"?"}`, type: "openadr", detail: `${e.duration_mins||"?"}min · ${e.event_status||""}`, status: e.event_status }))
+    ].sort((a,b) => new Date(a.ts) - new Date(b.ts));
+
+    if (!allEvts.length) {
+      evTable.innerHTML = `<div style="padding:12px;font-size:12px;color:var(--text-hint);">No events found in this time window.</div>`;
+    } else {
+      const typeColor = { scheduled:"#3B82F6", openadr:"#D97706", autopilot:"#DC2626", manual:"#7C3AED" };
+      const rows = allEvts.map(e =>
+        `<tr><td style="padding:7px 10px;border-bottom:0.5px solid var(--border);font-size:11px;white-space:nowrap;">${new Date(e.ts).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}</td>
+         <td style="padding:7px 10px;border-bottom:0.5px solid var(--border);font-size:11px;font-weight:600;">${e.name}</td>
+         <td style="padding:7px 10px;border-bottom:0.5px solid var(--border);">
+           <span style="padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;background:${(typeColor[e.type]||"#64748B")}22;color:${typeColor[e.type]||"#64748B"};">${e.type}</span>
+         </td>
+         <td style="padding:7px 10px;border-bottom:0.5px solid var(--border);font-size:10px;color:var(--text-hint);">${e.detail}</td>
+         <td style="padding:7px 10px;border-bottom:0.5px solid var(--border);font-size:10px;color:var(--text-hint);">${e.status||"—"}</td></tr>`
+      ).join("");
+      evTable.innerHTML =
+        `<table style="width:100%;border-collapse:collapse;font-size:11px;">
+          <thead style="background:var(--surface2);">
+            <tr><th style="padding:8px 10px;text-align:left;border-bottom:0.5px solid var(--border-md);font-size:10px;color:var(--text-hint);font-weight:700;text-transform:uppercase;">Time</th>
+            <th style="padding:8px 10px;text-align:left;border-bottom:0.5px solid var(--border-md);font-size:10px;color:var(--text-hint);font-weight:700;text-transform:uppercase;">Name</th>
+            <th style="padding:8px 10px;text-align:left;border-bottom:0.5px solid var(--border-md);font-size:10px;color:var(--text-hint);font-weight:700;text-transform:uppercase;">Type</th>
+            <th style="padding:8px 10px;text-align:left;border-bottom:0.5px solid var(--border-md);font-size:10px;color:var(--text-hint);font-weight:700;text-transform:uppercase;">Detail</th>
+            <th style="padding:8px 10px;text-align:left;border-bottom:0.5px solid var(--border-md);font-size:10px;color:var(--text-hint);font-weight:700;text-transform:uppercase;">Status</th></tr>
+          </thead><tbody>${rows}</tbody></table>`;
+    }
+  }
+}
+
+function openHistoryReportWindow() {
+  const d = _historyReportData;
+  if (!d) { alert("Generate a report first."); return; }
+
+  const fmtDt = iso => new Date(iso).toLocaleString([], { dateStyle:"medium", timeStyle:"short" });
+  const reportDate = new Date().toLocaleString();
+
+  // ── Build power chart SVG (for print window — higher res) ────────────────
+  const W = 900, H = 200, pad = 32;
+  const pts = d.readings.map(r => r.watts_consumed ?? 0);
+  const maxPts = Math.max(...pts, 1);
+  const xStep = pts.length > 1 ? (W - 2*pad) / (pts.length - 1) : 1;
+  const polyPts = pts.map((w, i) => {
+    const x = pad + i * xStep;
+    const y = pad + (H - 2*pad) * (1 - w / maxPts);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  const firstX = pad, lastX = pad + (pts.length-1)*xStep;
+  const fillPts = `${firstX},${H-pad} ${polyPts} ${lastX.toFixed(1)},${H-pad}`;
+
+  // Tick labels: sample up to 8 evenly spaced timestamps
+  const tickCount = Math.min(8, pts.length);
+  const tickStep  = Math.floor(pts.length / tickCount);
+  const ticks = [...Array(tickCount)].map((_, i) => {
+    const idx = i * tickStep;
+    const x   = pad + idx * xStep;
+    const ts  = new Date(d.readings[idx].recorded_at).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+    return `<text x="${x.toFixed(1)}" y="${H+12}" font-size="9" text-anchor="middle" fill="#94A3B8">${ts}</text>
+            <line x1="${x.toFixed(1)}" y1="${H-pad}" x2="${x.toFixed(1)}" y2="${H-pad+4}" stroke="#E2E8F0" stroke-width="1"/>`;
+  }).join("");
+
+  // Y axis gridlines at 25%, 50%, 75%
+  const grids = [0.25, 0.5, 0.75].map(pct => {
+    const y = pad + (H - 2*pad) * (1 - pct);
+    return `<line x1="${pad}" y1="${y.toFixed(1)}" x2="${W-pad}" y2="${y.toFixed(1)}" stroke="#E2E8F0" stroke-width="1" stroke-dasharray="4,3"/>
+            <text x="${pad-4}" y="${(y+3).toFixed(1)}" font-size="9" text-anchor="end" fill="#94A3B8">${Math.round(maxPts*pct)}</text>`;
+  }).join("");
+
+  const chartSVG = `<svg width="100%" viewBox="0 0 ${W} ${H+24}" preserveAspectRatio="none" style="display:block;border-radius:6px;">
+    <rect width="${W}" height="${H+24}" fill="#F8FAFC" rx="6"/>
+    ${grids}
+    <polygon points="${fillPts}" fill="#D97706" opacity="0.12"/>
+    <polyline points="${polyPts}" fill="none" stroke="#D97706" stroke-width="2.5" stroke-linejoin="round"/>
+    ${ticks}
+    <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${H-pad}" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="${pad}" y="${pad-6}" font-size="9" fill="#94A3B8">${maxPts} W</text>
+    <text x="${pad}" y="${H-pad+14}" font-size="9" fill="#94A3B8">0 W</text>
+  </svg>`;
+
+  // ── Relay on-time bars ────────────────────────────────────────────────────
+  const relayBars = d.relayOnPcts.map((pct, i) =>
+    `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+      <div style="font-size:12px;font-weight:700;color:#475569;min-width:24px;">R${i+1}</div>
+      <div style="flex:1;background:#E2E8F0;border-radius:4px;height:10px;overflow:hidden;">
+        <div style="height:10px;border-radius:4px;background:${pct>50?"#16A34A":"#D97706"};width:${pct}%;"></div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:#475569;min-width:36px;text-align:right;">${pct}%</div>
+     </div>`
+  ).join("");
+
+  // ── Transitions table ─────────────────────────────────────────────────────
+  const transRows = d.transitions.length
+    ? d.transitions.map(t =>
+        `<tr><td style="padding:8px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;white-space:nowrap;">${new Date(t.ts).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit"})}</td>
+         <td style="padding:8px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;">${t.device}</td>
+         <td style="padding:8px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;font-weight:700;">${t.relay}</td>
+         <td style="padding:8px 12px;border-bottom:1px solid #F1F5F9;">
+           <span style="padding:2px 9px;border-radius:10px;font-size:11px;font-weight:700;background:${t.state==="ON"?"#DCFCE7":"#F1F5F9"};color:${t.state==="ON"?"#166534":"#64748B"};">${t.state==="ON"?"▲ ON":"▼ OFF"}</span>
+         </td></tr>`).join("")
+    : `<tr><td colspan="4" style="padding:14px 12px;text-align:center;color:#94A3B8;font-size:12px;">No relay transitions in this window.</td></tr>`;
+
+  // ── Schedule events table ─────────────────────────────────────────────────
+  const allEvts = [
+    ...d.events.map(e => ({ ts: e.fire_at, name: e.name || e.target_name || "—", type: e.source || "scheduled", detail: `${e.relay_action||""} · ${e.duration_minutes||"?"}min · ${e.target_name||""}`, status: e.status })),
+    ...d.oadrEvents.map(e => ({ ts: e.event_start || e.received_at, name: `OpenADR DR L${e.dr_level??e.signal_level??"?"}`, type: "openadr", detail: `${e.duration_mins||"?"}min · ${e.event_status||""}`, status: e.event_status }))
+  ].sort((a,b) => new Date(a.ts) - new Date(b.ts));
+
+  const evtRows = allEvts.length
+    ? allEvts.map(e =>
+        `<tr><td style="padding:8px 12px;border-bottom:1px solid #F1F5F9;font-size:11px;white-space:nowrap;">${new Date(e.ts).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}</td>
+         <td style="padding:8px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;font-weight:600;">${e.name}</td>
+         <td style="padding:8px 12px;border-bottom:1px solid #F1F5F9;"><span style="padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;background:#F1F5F9;color:#475569;">${e.type}</span></td>
+         <td style="padding:8px 12px;border-bottom:1px solid #F1F5F9;font-size:11px;color:#94A3B8;">${e.detail}</td>
+         <td style="padding:8px 12px;border-bottom:1px solid #F1F5F9;font-size:11px;color:#94A3B8;">${e.status||"—"}</td></tr>`).join("")
+    : `<tr><td colspan="5" style="padding:14px 12px;text-align:center;color:#94A3B8;font-size:12px;">No scheduled or OpenADR events in this window.</td></tr>`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Device Activity Report — ${d.deviceName}</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#F8FAFC; color:#0F172A; font-size:14px; }
+  @media print { body { background:#fff; } .no-print { display:none !important; } }
+</style>
+</head>
+<body>
+<div style="max-width:960px;margin:0 auto;padding:36px 28px;">
+
+  <!-- Header -->
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:32px;padding-bottom:24px;border-bottom:2px solid #E2E8F0;">
+    <div>
+      <div style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;">Device Activity Report</div>
+      <div style="font-size:30px;font-weight:800;color:#0F172A;line-height:1.2;">${d.deviceName}</div>
+      <div style="font-size:14px;color:#64748B;margin-top:6px;">${fmtDt(d.fromISO)} — ${fmtDt(d.toISO)}</div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:11px;color:#94A3B8;">Generated</div>
+      <div style="font-size:13px;font-weight:600;color:#475569;">${reportDate}</div>
+      <button class="no-print" onclick="window.print()" style="margin-top:10px;padding:8px 16px;border-radius:6px;border:none;background:#0F172A;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">🖨 Print / Save PDF</button>
+    </div>
+  </div>
+
+  <!-- KPI Cards -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px;">
+    <div style="text-align:center;padding:20px 14px;border-radius:12px;background:#FFF8E1;border-left:4px solid #D97706;">
+      <div style="font-size:32px;font-weight:800;color:#D97706;line-height:1;">${d.avgWatts || "—"}</div>
+      <div style="font-size:11px;color:#64748B;margin-top:3px;font-weight:600;">W</div>
+      <div style="font-size:11px;color:#94A3B8;margin-top:3px;text-transform:uppercase;letter-spacing:.04em;">Avg Power</div>
+    </div>
+    <div style="text-align:center;padding:20px 14px;border-radius:12px;background:#FEF2F2;border-left:4px solid #DC2626;">
+      <div style="font-size:32px;font-weight:800;color:#DC2626;line-height:1;">${d.peakWatts || "—"}</div>
+      <div style="font-size:11px;color:#64748B;margin-top:3px;font-weight:600;">W</div>
+      <div style="font-size:11px;color:#94A3B8;margin-top:3px;text-transform:uppercase;letter-spacing:.04em;">Peak Power</div>
+    </div>
+    <div style="text-align:center;padding:20px 14px;border-radius:12px;background:#F5F3FF;border-left:4px solid #7C3AED;">
+      <div style="font-size:32px;font-weight:800;color:#7C3AED;line-height:1;">${d.kWh}</div>
+      <div style="font-size:11px;color:#64748B;margin-top:3px;font-weight:600;">kWh</div>
+      <div style="font-size:11px;color:#94A3B8;margin-top:3px;text-transform:uppercase;letter-spacing:.04em;">Est. Energy</div>
+    </div>
+    <div style="text-align:center;padding:20px 14px;border-radius:12px;background:#F0F9FF;border-left:4px solid #0EA5E9;">
+      <div style="font-size:32px;font-weight:800;color:#0EA5E9;line-height:1;">${d.totalReadings.toLocaleString()}</div>
+      <div style="font-size:11px;color:#64748B;margin-top:3px;font-weight:600;">data points</div>
+      <div style="font-size:11px;color:#94A3B8;margin-top:3px;text-transform:uppercase;letter-spacing:.04em;">Readings</div>
+    </div>
+  </div>
+
+  <!-- Synopsis -->
+  <div style="background:#EFF6FF;border-radius:12px;padding:20px 24px;margin-bottom:28px;border-left:4px solid #3B82F6;">
+    <div style="font-size:11px;font-weight:700;color:#1D4ED8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Synopsis</div>
+    <p style="color:#1E3A5F;line-height:1.9;font-size:13px;">
+      Report covers <strong>${d.deviceName}</strong> from <strong>${fmtDt(d.fromISO)}</strong> to <strong>${fmtDt(d.toISO)}</strong>
+      (${d.durationH} hours). <strong>${d.totalReadings.toLocaleString()}</strong> telemetry readings were recorded during this window.
+      Average power draw was <strong>${d.avgWatts} W</strong> with a peak of <strong>${d.peakWatts} W</strong>.
+      Estimated energy consumed: <strong>${d.kWh} kWh</strong> at ${d.avgVoltage} V avg, ${d.avgCurrent} A avg.
+      <strong>${d.transitions.length}</strong> relay state transition${d.transitions.length !== 1 ? "s" : ""} were detected.
+      <strong>${d.events.length}</strong> scheduled event${d.events.length !== 1 ? "s" : ""} and
+      <strong>${d.oadrEvents.length}</strong> OpenADR event${d.oadrEvents.length !== 1 ? "s" : ""} occurred in this period.
+    </p>
+  </div>
+
+  <!-- Two-column: Electrical params + Relay on-time -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:28px;">
+    <div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.07);border:1px solid #E2E8F0;">
+      <div style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px;">Electrical Parameters</div>
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        <div style="display:flex;justify-content:space-between;"><span style="color:#94A3B8;font-size:12px;">Avg Voltage</span><span style="font-weight:700;font-size:13px;">${d.avgVoltage} V</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#94A3B8;font-size:12px;">Avg Current</span><span style="font-weight:700;font-size:13px;">${d.avgCurrent} A</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#94A3B8;font-size:12px;">Avg Power</span><span style="font-weight:700;font-size:13px;">${d.avgWatts} W</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#94A3B8;font-size:12px;">Peak Power</span><span style="font-weight:700;font-size:13px;">${d.peakWatts} W</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#94A3B8;font-size:12px;">Est. Energy</span><span style="font-weight:700;font-size:13px;">${d.kWh} kWh</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#94A3B8;font-size:12px;">Period</span><span style="font-weight:600;font-size:12px;">${d.durationH} hours</span></div>
+      </div>
+    </div>
+    <div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.07);border:1px solid #E2E8F0;">
+      <div style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px;">Relay On-Time</div>
+      ${relayBars}
+      <div style="font-size:10px;color:#94A3B8;margin-top:10px;">% of readings where relay was active (ON)</div>
+    </div>
+  </div>
+
+  <!-- Power Chart -->
+  <div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.07);border:1px solid #E2E8F0;margin-bottom:28px;">
+    <div style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px;">Power (W) — Time Series (${d.totalReadings.toLocaleString()} samples)</div>
+    ${chartSVG}
+  </div>
+
+  <!-- Relay Transitions -->
+  <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.07);border:1px solid #E2E8F0;margin-bottom:28px;">
+    <div style="padding:16px 20px;border-bottom:1px solid #F1F5F9;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.08em;">
+      Relay State Transitions (${d.transitions.length})
+    </div>
+    <div style="max-height:360px;overflow-y:auto;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead style="background:#F8FAFC;"><tr>
+          <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748B;border-bottom:1px solid #E2E8F0;">Time</th>
+          <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748B;border-bottom:1px solid #E2E8F0;">Device</th>
+          <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748B;border-bottom:1px solid #E2E8F0;">Relay</th>
+          <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748B;border-bottom:1px solid #E2E8F0;">State</th>
+        </tr></thead>
+        <tbody>${transRows}</tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Events Table -->
+  <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.07);border:1px solid #E2E8F0;margin-bottom:28px;">
+    <div style="padding:16px 20px;border-bottom:1px solid #F1F5F9;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.08em;">
+      Events in Window (${allEvts.length})
+    </div>
+    <table style="width:100%;border-collapse:collapse;">
+      <thead style="background:#F8FAFC;"><tr>
+        <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748B;border-bottom:1px solid #E2E8F0;">Time</th>
+        <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748B;border-bottom:1px solid #E2E8F0;">Name</th>
+        <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748B;border-bottom:1px solid #E2E8F0;">Type</th>
+        <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748B;border-bottom:1px solid #E2E8F0;">Detail</th>
+        <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748B;border-bottom:1px solid #E2E8F0;">Status</th>
+      </tr></thead>
+      <tbody>${evtRows}</tbody>
+    </table>
+  </div>
+
+  <!-- Footer -->
+  <div style="text-align:center;font-size:10px;color:#94A3B8;padding-top:16px;border-top:1px solid #F1F5F9;">
+    Generated ${reportDate} · ${d.deviceName} · ${d.totalReadings.toLocaleString()} readings · Device Activity Report
+  </div>
+
+</div>
+</body>
+</html>`;
+
+  const win = window.open("", "_blank", "width=1040,height=900");
+  if (win) { win.document.write(html); win.document.close(); }
+  else alert("Pop-up blocked. Please allow pop-ups for this page.");
+}
+
+function exportHistoryReportCSV() {
+  const d = _historyReportData;
+  if (!d) { alert("Generate a report first."); return; }
+
+  const rows = d.readings.map(r => {
+    const devName = DEVICES.find(dev => dev.uid === r.device_uid)?.name || unitName(r.device_uid) || r.device_uid;
+    return [
+      new Date(r.recorded_at).toLocaleString(),
+      devName,
+      r.relay_status_r1 > 0 ? "ON" : "OFF",
+      r.relay_status_r2 > 0 ? "ON" : "OFF",
+      r.relay_status_r3 > 0 ? "ON" : "OFF",
+      r.relay_status_r4 > 0 ? "ON" : "OFF",
+      r.voltage   != null ? (r.voltage  / 10).toFixed(1) : "",
+      r.current   != null ? (r.current  / 10).toFixed(1) : "",
+      r.watts_consumed ?? "",
+      r.customer_comfort > 0 ? "ON" : "OFF"
+    ].map(v => `"${v}"`).join(",");
+  });
+
+  const header = ["Time","Device","R1","R2","R3","R4","Voltage (V)","Current (A)","Watts (W)","Comfort"];
+  const csv = [header.join(","), ...rows].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = `device_activity_${d.deviceName.replace(/\s+/g,"_")}_${d.fromDate}_to_${d.toDate}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 async function loadCharts() {
-  const deviceFilter = document.getElementById("chart-device-select")?.value;
   const hours = parseInt(document.getElementById("chart-range")?.value || "24");
   const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
   const empty = document.getElementById("charts-empty");
@@ -9863,6 +10352,15 @@ function buildDataCards() {
   const grid = document.getElementById("data-grid");
   grid.innerHTML = "";
   const sel = document.getElementById("history-device-select");
+
+  // Default report dates to today
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600000).toISOString().slice(0, 10);
+  const rptFrom = document.getElementById("rpt-from-date");
+  const rptTo   = document.getElementById("rpt-to-date");
+  if (rptFrom && !rptFrom.value) rptFrom.value = sevenDaysAgo;
+  if (rptTo   && !rptTo.value)   rptTo.value   = todayStr;
+
   DEVICES.forEach(device => {
     const card = document.createElement("div");
     card.className = "data-card";
@@ -9880,12 +10378,19 @@ function buildDataCards() {
     const opt = document.createElement("option");
     opt.value = device.uid; opt.textContent = device.name;
     sel.appendChild(opt);
-    // Also populate chart device selector
+    // Populate chart device selector
     const chartSel = document.getElementById("chart-device-select");
     if (chartSel) {
       const copt = document.createElement("option");
       copt.value = device.uid; copt.textContent = device.name;
       chartSel.appendChild(copt);
+    }
+    // Populate report device selector
+    const rptSel = document.getElementById("rpt-device-select");
+    if (rptSel) {
+      const ropt = document.createElement("option");
+      ropt.value = device.uid; ropt.textContent = device.name;
+      rptSel.appendChild(ropt);
     }
   });
 }
