@@ -9995,13 +9995,17 @@ async function assignDevice(uid, groupNum, checked) {
 // ── Data Loading ──────────────────────────────────────────────────────────────
 function relayDot(val, loadPresent) {
   // relay_status_rN byte layout (per parseBubbleUpHex frontend decoder):
-  //   bit 3 (0x08) = relay physically active (contact closed / shed running)
+  //   bit 3 (0x08) = relay physically active (contact closed)
   //   bit 0 (0x01) = load present on line side (load is calling for power)
-  const active = (val & 0x08) !== 0;
+  // Show calling indicator regardless of relay state — operator always wants
+  // to know the load is demanding power, whether the relay is open or closed.
+  const active  = (val & 0x08) !== 0;
   const calling = loadPresent === true || loadPresent === 1 || (val & 0x01) !== 0;
-  if (active)        return `<span class="relay-dot on"></span>On`;
-  if (calling)       return `<span class="relay-dot calling"></span><span style="color:#b45309;font-weight:600;">Calling</span>`;
-  return             `<span class="relay-dot off"></span>Off`;
+  const dot     = active ? "on" : (calling ? "calling" : "off");
+  const label   = active
+    ? (calling ? `On <span style="color:#b45309;font-size:10px;font-weight:600;">● Calling</span>` : "On")
+    : (calling ? `<span style="color:#b45309;font-weight:600;">Calling</span>` : "Off");
+  return `<span class="relay-dot ${dot}"></span>${label}`;
 }
 async function requestHealthCheck(uid, deviceId) {
   // Set _restart env var to force Notecard restart → new session → _session.qo fires
@@ -10095,16 +10099,15 @@ async function loadLatestDevice(deviceId) {
     </div>`;
     tsEl.textContent = `Last updated: ${new Date(r.recorded_at).toLocaleString()}`;
 
-    // Sync load calling badges on the relay control card if this device has sensing.
-    // Bit 3 (0x08) = relay active; bit 0 (0x01) = load calling while relay open.
+    // Sync load calling badges — show whenever load is present, relay open or closed.
+    // Bit 3 (0x08) = relay active; bit 0 (0x01) = load calling.
     if (device.sensing_capable) {
       [1,2,3,4].forEach(n => {
         const badge = document.getElementById(`lcbadge-${deviceId}-${n}`);
         if (!badge) return;
         const statusByte = r[`relay_status_r${n}`] ?? 0;
-        const active  = (statusByte & 0x08) !== 0;
         const calling = r[`load_present_r${n}`] === true || r[`load_present_r${n}`] === 1 || (statusByte & 0x01) !== 0;
-        badge.style.display = (!active && calling) ? "" : "none";
+        badge.style.display = calling ? "" : "none";
       });
     }
 
