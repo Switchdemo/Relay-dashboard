@@ -1795,7 +1795,7 @@
         <div class="sched-card-header">
           <div class="sched-card-title">Post-Event Participation</div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <select class="history-select" id="participation-date-range" style="font-size:11px;">
+            <select class="history-select" id="participation-date-range" style="font-size:11px;" onchange="refreshParticipationEvents()">
               <option value="1">Last 24 hours</option>
               <option value="3">Last 3 days</option>
               <option value="7" selected>Last 7 days</option>
