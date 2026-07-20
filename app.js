@@ -2877,7 +2877,8 @@ async function populateParticipationEventSelect() {
 async function refreshParticipationEvents() {
   const sel = document.getElementById("participation-event-select");
   if (!sel) return;
-  const days = parseInt(document.getElementById("participation-date-range")?.value || "7");
+  const rangeVal = document.getElementById("participation-date-range")?.value;
+  const days = rangeVal !== "" && rangeVal != null ? parseInt(rangeVal) : null;
   const since = days ? new Date(Date.now() - days * 86400000).toISOString() : null;
   let q = "schedule_queue?order=fire_at.desc&limit=200&select=name,fire_at,status,target_type,target_id";
   if (since) q += `&fire_at=gte.${since}`;
