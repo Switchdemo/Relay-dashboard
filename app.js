@@ -9,7 +9,6 @@ function unitName(uid) { return "Unit " + uid.slice(-4); }
 // DEVICES seeded with defaults immediately; refreshed from Supabase after login
 let DEVICES = [
   { id: "device1", uid: "dev:868032061596023", name: "Unit 6023" },
-  { id: "device2", uid: "dev:868050045717135", name: "Unit 7135" },
 ];
 
 async function loadDevicesFromDB() {
@@ -20,14 +19,12 @@ async function loadDevicesFromDB() {
     } else {
       DEVICES = [
         { id: "device1", uid: "dev:868032061596023", name: "Unit 6023", type:"relay" },
-        { id: "device2", uid: "dev:868050045717135", name: "Unit 7135", type:"relay" },
       ];
     }
   } catch(e) {
     console.warn("Could not load devices from Supabase, using defaults:", e);
     DEVICES = [
       { id: "device1", uid: "dev:868032061596023", name: "Unit 6023", type:"relay" },
-      { id: "device2", uid: "dev:868050045717135", name: "Unit 7135", type:"relay" },
     ];
   }
 
