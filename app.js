@@ -4831,6 +4831,7 @@ async function onSignedIn(session) {
   await loadDevicesFromDB();
   buildControls();
   buildDataCards();
+  loadLatest();  // Initialize device badges (online/offline) immediately on login
   // Load LC event ID counter from Supabase to prevent cross-device collisions
   loadLCEventId().catch(e => console.warn("loadLCEventId:", e.message));
   // Load Pelican sites in background (non-blocking)
@@ -9992,13 +9993,10 @@ async function assignDevice(uid, groupNum, checked) {
 
 // ── Data Loading ──────────────────────────────────────────────────────────────
 function relayDot(val, loadPresent) {
-  // relay_status_rN byte layout (per parseBubbleUpHex frontend decoder):
-  //   bit 3 (0x08) = relay physically active (contact closed)
-  //   bit 0 (0x01) = load present on line side (load is calling for power)
-  // Show calling indicator regardless of relay state — operator always wants
-  // to know the load is demanding power, whether the relay is open or closed.
-  const active  = (val & 0x08) !== 0;
-  const calling = loadPresent === true || loadPresent === 1 || (val & 0x01) !== 0;
+  // relay_status_rN — non-zero means relay is active/energized
+  // loadPresent flag indicates load is calling for power on the line side
+  const active  = val > 0;
+  const calling = loadPresent === true || loadPresent === 1;
   const dot     = active ? "on" : (calling ? "calling" : "off");
   const label   = active
     ? (calling ? `On <span style="color:#b45309;font-size:10px;font-weight:600;">● Calling</span>` : "On")
