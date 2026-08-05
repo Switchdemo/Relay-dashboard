@@ -21977,7 +21977,14 @@ function getEnodeScopes(vendorType) {
     inverter: ["inverter:read:data", "inverter:read:location"],
     battery:  ["battery:read:data", "battery:read:location", "battery:control:operation_mode"]
   };
-  return scopeMap[vendorType] || undefined;
+  // If no vendorType specified, return all scopes so the user can pick any device
+  return scopeMap[vendorType] || [
+    "vehicle:read:data", "vehicle:read:location", "vehicle:control:charging",
+    "charger:read:data", "charger:control:charging",
+    "hvac:read:data", "hvac:control:mode",
+    "inverter:read:data", "inverter:read:location",
+    "battery:read:data", "battery:read:location", "battery:control:operation_mode"
+  ];
 }
 
 // Listen for link completion
