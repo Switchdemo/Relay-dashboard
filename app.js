@@ -22045,11 +22045,11 @@ function renderEnodeOverview() {
         <div style="font-size:14px;font-weight:600;margin-bottom:8px;">No Enode devices connected yet</div>
         <div style="font-size:12px;color:var(--text-hint);margin-bottom:16px;">Link your Tesla, ChargePoint, Honeywell, SolarEdge, or Powerwall accounts to get started.</div>
         <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
-          <button class="card-action" style="background:var(--green-bg);color:var(--green-dark);border-color:var(--green);" onclick="enodeLinkDevice('vehicle','TESLA')">🚗 Link Tesla EV</button>
-          <button class="card-action" style="background:var(--blue-lt);color:var(--blue-dark);border-color:var(--blue);" onclick="enodeLinkDevice('charger','CHARGEPOINT')">⚡ Link ChargePoint</button>
-          <button class="card-action" style="background:var(--amber-bg);color:var(--amber);border-color:var(--amber);" onclick="enodeLinkDevice('hvac','HONEYWELL')">🌡️ Link Honeywell</button>
-          <button class="card-action" style="background:var(--green-bg);color:var(--green-dark);border-color:var(--green);" onclick="enodeLinkDevice('inverter','SOLAREDGE')">☀️ Link SolarEdge</button>
-          <button class="card-action" style="background:var(--blue-lt);color:var(--blue-dark);border-color:var(--blue);" onclick="enodeLinkDevice('battery','TESLA')">🔋 Link Powerwall</button>
+          <button class="data-refresh-btn" style="background:rgba(22,163,74,0.1);color:#166534;border-color:#16a34a;" onclick="enodeLinkDevice('vehicle','TESLA')">🚗 Link Tesla EV</button>
+          <button class="data-refresh-btn" style="background:rgba(37,99,235,0.1);color:#1e40af;border-color:#3b82f6;" onclick="enodeLinkDevice('charger','CHARGEPOINT')">⚡ Link ChargePoint</button>
+          <button class="data-refresh-btn" style="background:rgba(180,83,9,0.1);color:#92400e;border-color:#d97706;" onclick="enodeLinkDevice('hvac','HONEYWELL')">🌡️ Link Honeywell</button>
+          <button class="data-refresh-btn" style="background:rgba(217,119,6,0.1);color:#92400e;border-color:#d97706;" onclick="enodeLinkDevice('inverter','SOLAREDGE')">☀️ Link SolarEdge</button>
+          <button class="data-refresh-btn" style="background:rgba(22,163,74,0.1);color:#166534;border-color:#16a34a;" onclick="enodeLinkDevice('battery','TESLA')">🔋 Link Powerwall</button>
         </div>
       </div>`;
     return;
@@ -22059,9 +22059,9 @@ function renderEnodeOverview() {
 
   // ── Vehicles (Tesla) ──
   if (enodeDevices.vehicles.length) {
-    html += `<div class="card" style="margin-bottom:14px;">
-      <div class="card-header"><div class="card-title">🚗 Electric Vehicles (${enodeDevices.vehicles.length})</div>
-        <button class="card-action" onclick="enodeLinkDevice('vehicle','TESLA')">+ Link Vehicle</button></div>`;
+    html += `<div class="sched-card" style="margin-bottom:14px;">
+      <div class="sched-card-header"><div class="sched-card-title">🚗 Electric Vehicles (${enodeDevices.vehicles.length})</div>
+        <button class="data-refresh-btn" onclick="enodeLinkDevice('vehicle','TESLA')">+ Link Vehicle</button></div>`;
     enodeDevices.vehicles.forEach(v => {
       const cs = v.chargeState || {};
       const info = v.information || {};
@@ -22090,8 +22090,8 @@ function renderEnodeOverview() {
         </div>
         <div style="display:flex;gap:6px;">
           ${cs.isCharging
-            ? `<button class="card-action" style="color:var(--red);border-color:var(--red);" onclick="enodeControlCharging('vehicles','${v.id}','stop')">Stop Charging</button>`
-            : `<button class="card-action" style="color:var(--green-dark);border-color:var(--green);" onclick="enodeControlCharging('vehicles','${v.id}','start')">Start Charging</button>`}
+            ? `<button class="data-refresh-btn" style="color:var(--red);border-color:var(--red);" onclick="enodeControlCharging('vehicles','${v.id}','stop')">Stop Charging</button>`
+            : `<button class="data-refresh-btn" style="color:var(--green-dark);border-color:var(--green);" onclick="enodeControlCharging('vehicles','${v.id}','start')">Start Charging</button>`}
         </div>
       </div>`;
     });
@@ -22100,9 +22100,9 @@ function renderEnodeOverview() {
 
   // ── Chargers (ChargePoint) ──
   if (enodeDevices.chargers.length) {
-    html += `<div class="card" style="margin-bottom:14px;">
-      <div class="card-header"><div class="card-title">⚡ EV Chargers (${enodeDevices.chargers.length})</div>
-        <button class="card-action" onclick="enodeLinkDevice('charger','CHARGEPOINT')">+ Link Charger</button></div>`;
+    html += `<div class="sched-card" style="margin-bottom:14px;">
+      <div class="sched-card-header"><div class="sched-card-title">⚡ EV Chargers (${enodeDevices.chargers.length})</div>
+        <button class="data-refresh-btn" onclick="enodeLinkDevice('charger','CHARGEPOINT')">+ Link Charger</button></div>`;
     enodeDevices.chargers.forEach(c => {
       const cs = c.chargeState || {};
       const info = c.information || {};
@@ -22122,8 +22122,8 @@ function renderEnodeOverview() {
         </div>
         <div style="display:flex;gap:6px;">
           ${cs.isCharging
-            ? `<button class="card-action" style="color:var(--red);border-color:var(--red);" onclick="enodeControlCharging('chargers','${c.id}','stop')">Stop</button>`
-            : `<button class="card-action" style="color:var(--green-dark);border-color:var(--green);" onclick="enodeControlCharging('chargers','${c.id}','start')">Start</button>`}
+            ? `<button class="data-refresh-btn" style="color:var(--red);border-color:var(--red);" onclick="enodeControlCharging('chargers','${c.id}','stop')">Stop</button>`
+            : `<button class="data-refresh-btn" style="color:var(--green-dark);border-color:var(--green);" onclick="enodeControlCharging('chargers','${c.id}','start')">Start</button>`}
         </div>
       </div>`;
     });
@@ -22132,9 +22132,9 @@ function renderEnodeOverview() {
 
   // ── HVAC / Thermostats (Honeywell) ──
   if (enodeDevices.hvacs.length) {
-    html += `<div class="card" style="margin-bottom:14px;">
-      <div class="card-header"><div class="card-title">🌡️ Thermostats (${enodeDevices.hvacs.length})</div>
-        <button class="card-action" onclick="enodeLinkDevice('hvac','HONEYWELL')">+ Link Thermostat</button></div>`;
+    html += `<div class="sched-card" style="margin-bottom:14px;">
+      <div class="sched-card-header"><div class="sched-card-title">🌡️ Thermostats (${enodeDevices.hvacs.length})</div>
+        <button class="data-refresh-btn" onclick="enodeLinkDevice('hvac','HONEYWELL')">+ Link Thermostat</button></div>`;
     enodeDevices.hvacs.forEach(h => {
       const info = h.information || {};
       const ts = h.thermostatState || {};
@@ -22160,8 +22160,8 @@ function renderEnodeOverview() {
           <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Mode: ${mode}</div>
         </div>
         <div style="display:flex;gap:6px;">
-          <button class="card-action" onclick="enodeSetHVACHold('${h.id}')">Set Hold</button>
-          <button class="card-action" onclick="enodeSetHVACSchedule('${h.id}')">Follow Schedule</button>
+          <button class="data-refresh-btn" onclick="enodeSetHVACHold('${h.id}')">Set Hold</button>
+          <button class="data-refresh-btn" onclick="enodeSetHVACSchedule('${h.id}')">Follow Schedule</button>
         </div>
       </div>`;
     });
@@ -22170,9 +22170,9 @@ function renderEnodeOverview() {
 
   // ── Solar Inverters (SolarEdge) ──
   if (enodeDevices.inverters.length) {
-    html += `<div class="card" style="margin-bottom:14px;">
-      <div class="card-header"><div class="card-title">☀️ Solar Inverters (${enodeDevices.inverters.length})</div>
-        <button class="card-action" onclick="enodeLinkDevice('inverter','SOLAREDGE')">+ Link Inverter</button></div>`;
+    html += `<div class="sched-card" style="margin-bottom:14px;">
+      <div class="sched-card-header"><div class="sched-card-title">☀️ Solar Inverters (${enodeDevices.inverters.length})</div>
+        <button class="data-refresh-btn" onclick="enodeLinkDevice('inverter','SOLAREDGE')">+ Link Inverter</button></div>`;
     enodeDevices.inverters.forEach(inv => {
       const info = inv.information || {};
       const ps = inv.productionState || {};
@@ -22189,7 +22189,7 @@ function renderEnodeOverview() {
           <div style="font-size:22px;font-weight:700;color:${isProducing?"#D97706":"var(--text-hint)"};">${production}</div>
           <div style="font-size:10px;color:var(--text-hint);">${isProducing?"Producing":"Idle"}</div>
         </div>
-        <button class="card-action" onclick="enodeRefresh('inverters','${inv.id}')">↻ Refresh</button>
+        <button class="data-refresh-btn" onclick="enodeRefresh('inverters','${inv.id}')">↻ Refresh</button>
       </div>`;
     });
     html += `</div>`;
@@ -22197,9 +22197,9 @@ function renderEnodeOverview() {
 
   // ── Batteries (Tesla Powerwall) ──
   if (enodeDevices.batteries.length) {
-    html += `<div class="card" style="margin-bottom:14px;">
-      <div class="card-header"><div class="card-title">🔋 Home Batteries (${enodeDevices.batteries.length})</div>
-        <button class="card-action" onclick="enodeLinkDevice('battery','TESLA')">+ Link Battery</button></div>`;
+    html += `<div class="sched-card" style="margin-bottom:14px;">
+      <div class="sched-card-header"><div class="sched-card-title">🔋 Home Batteries (${enodeDevices.batteries.length})</div>
+        <button class="data-refresh-btn" onclick="enodeLinkDevice('battery','TESLA')">+ Link Battery</button></div>`;
     enodeDevices.batteries.forEach(b => {
       const info = b.information || {};
       const cs = b.chargeState || {};
@@ -22236,7 +22236,7 @@ function renderEnodeOverview() {
             <option value="EXPORT_FOCUS" ${opMode==="EXPORT_FOCUS"?"selected":""}>Discharge (Export)</option>
             <option value="IDLE" ${opMode==="IDLE"?"selected":""}>Idle</option>
           </select>
-          <button class="card-action" style="font-size:10px;" onclick="enodeSetBatteryMode('${b.id}')">Set Mode</button>
+          <button class="data-refresh-btn" style="font-size:10px;" onclick="enodeSetBatteryMode('${b.id}')">Set Mode</button>
         </div>
       </div>`;
     });
@@ -22245,12 +22245,12 @@ function renderEnodeOverview() {
 
   // ── Link more devices ──
   html += `<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:16px;">
-    <button class="card-action" style="background:var(--green-bg);color:var(--green-dark);border-color:var(--green);" onclick="enodeLinkDevice('vehicle','TESLA')">🚗 + Tesla EV</button>
-    <button class="card-action" style="background:var(--blue-lt);color:var(--blue-dark);border-color:var(--blue);" onclick="enodeLinkDevice('charger','CHARGEPOINT')">⚡ + ChargePoint</button>
-    <button class="card-action" style="background:var(--amber-bg);color:var(--amber);border-color:var(--amber);" onclick="enodeLinkDevice('hvac','HONEYWELL')">🌡️ + Honeywell</button>
-    <button class="card-action" style="background:#FEF3C7;color:#92400E;border-color:#D97706;" onclick="enodeLinkDevice('inverter','SOLAREDGE')">☀️ + SolarEdge</button>
-    <button class="card-action" style="background:var(--green-bg);color:var(--green-dark);border-color:var(--green);" onclick="enodeLinkDevice('battery','TESLA')">🔋 + Powerwall</button>
-    <button class="card-action" onclick="enodeLinkDevice()">🔗 Link Any Device</button>
+    <button class="data-refresh-btn" style="background:var(--green-bg);color:var(--green-dark);border-color:var(--green);" onclick="enodeLinkDevice('vehicle','TESLA')">🚗 + Tesla EV</button>
+    <button class="data-refresh-btn" style="background:var(--blue-lt);color:var(--blue-dark);border-color:var(--blue);" onclick="enodeLinkDevice('charger','CHARGEPOINT')">⚡ + ChargePoint</button>
+    <button class="data-refresh-btn" style="background:var(--amber-bg);color:var(--amber);border-color:var(--amber);" onclick="enodeLinkDevice('hvac','HONEYWELL')">🌡️ + Honeywell</button>
+    <button class="data-refresh-btn" style="background:#FEF3C7;color:#92400E;border-color:#D97706;" onclick="enodeLinkDevice('inverter','SOLAREDGE')">☀️ + SolarEdge</button>
+    <button class="data-refresh-btn" style="background:var(--green-bg);color:var(--green-dark);border-color:var(--green);" onclick="enodeLinkDevice('battery','TESLA')">🔋 + Powerwall</button>
+    <button class="data-refresh-btn" onclick="enodeLinkDevice()">🔗 Link Any Device</button>
   </div>`;
 
   container.innerHTML = html;
