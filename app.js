@@ -4843,8 +4843,18 @@ async function onSignedIn(session) {
   buildControls();
   buildDataCards();
   loadLatest();  // Initialize device badges (online/offline) immediately on login
-  // Load Enode devices and inject into fleet
-  loadAllEnodeDevices().then(() => { enodeInjectDevices(); }).catch(e => console.warn("Enode load:", e.message));
+  // Re-run summary tab now that real devices are loaded
+  initSummaryTab();
+  // Load Enode devices and inject into fleet — rebuild UI after injection
+  loadAllEnodeDevices().then(() => {
+    enodeInjectDevices();
+    buildControls();
+    buildDataCards();
+    loadLatest();
+    initSummaryTab();  // Re-run summary with Enode devices included
+    if (typeof populateTargetSelector === "function") populateTargetSelector();
+    console.log("[Enode] Fleet injection complete — UI rebuilt with", DEVICES.filter(d=>d._enodeId).length, "Enode device(s).");
+  }).catch(e => console.warn("Enode load:", e.message));
   // Load LC event ID counter from Supabase to prevent cross-device collisions
   loadLCEventId().catch(e => console.warn("loadLCEventId:", e.message));
   // Load Pelican sites in background (non-blocking)
@@ -22033,6 +22043,7 @@ async function loadAllEnodeDevices() {
 async function initEnodeTab() {
   setStatus("sending", "Loading Enode devices…");
   await loadAllEnodeDevices();
+  enodeInjectDevices();
   renderEnodeOverview();
   setStatus("ready", `Enode: ${Object.values(enodeDevices).reduce((s,a) => s+a.length, 0)} device(s) loaded.`);
 }
