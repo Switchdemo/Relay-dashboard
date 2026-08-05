@@ -267,6 +267,7 @@ function switchMain(main, btn) {
   else if (main === "devices") { const s = currentSub.devices||"data"; activatePane(s); activateSubBtn("devices",s); }
   else if (main === "monitor") { const s = currentSub.monitor||"monitor-triggers"; activatePane(s); activateSubBtn("monitor",s); }
   else if (main === "vp")   { activatePane("vp"); initVPTab(); }
+  else if (main === "enode") { activatePane("enode"); initEnodeTab(); }
   else if (main === "lora") { activatePane("lora"); loraInit(); }
   else if (main === "ami")  { const s = currentSub.ami||"ami-ingest"; activatePane(s); activateSubBtn("ami",s); initAMITab(s); }
 }
