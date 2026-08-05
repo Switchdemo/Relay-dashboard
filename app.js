@@ -3,6 +3,7 @@ const LCP_VERSION  = "2.1.0";
 const PROXY_URL    = "https://patient-shadow-e2b7.hurd71185.workers.dev/";
 const SUPABASE_URL = "https://diurqiuzknxzcdxqjfig.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRpdXJxaXV6a254emNkeHFqZmlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5ODQ3OTYsImV4cCI6MjA5MzU2MDc5Nn0.jUs0QYAyaOQmirQgCTjP7ldGqn9hhpzBunGLMVv0x8U";
+const ENODE_PROXY_URL = "https://enode-proxy.hurd71185.workers.dev";  // Enode API proxy worker
 
 function unitName(uid) { return "Unit " + uid.slice(-4); }
 
@@ -336,6 +337,7 @@ function runTabInit(name) {
   if (name === "generators")       { initGeneratorsTab(); }
   if (name === "thermostats")      { initThermostatsTab(); }
   if (name === "vp")               { initVPTab(); }
+  if (name === "enode")            { initEnodeTab(); }
 }
 
 function switchTab(name, btn) { switchMain(name, btn); }
@@ -21912,6 +21914,408 @@ function initDerapiEventTimes() {
 }
 
 // ── DR Programs (non-OpenADR) ─────────────────────────────────────────────────
+
+// ── Enode Integration ─────────────────────────────────────────────────────────
+// Unified API for Tesla EVs, ChargePoint chargers, Honeywell thermostats,
+// SolarEdge inverters, and Tesla Powerwall batteries via Enode.
+// All API calls go through the enode-proxy Cloudflare Worker.
+
+let enodeDevices = { vehicles: [], chargers: [], hvacs: [], inverters: [], batteries: [] };
+let enodeUserId = "dashboard-user-1";
+
+async function enodeGet(path) {
+  try {
+    const res = await fetch(`${ENODE_PROXY_URL}/enode${path}`, {
+      headers: { "X-Dashboard-User": enodeUserId }
+    });
+    if (!res.ok) { console.warn(`Enode GET ${path}: ${res.status}`); return null; }
+    return res.json();
+  } catch(e) { console.warn("Enode GET error:", e.message); return null; }
+}
+
+async function enodePost(path, body) {
+  try {
+    const res = await fetch(`${ENODE_PROXY_URL}/enode${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Dashboard-User": enodeUserId },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) { console.warn(`Enode POST ${path}: ${res.status}`); return null; }
+    return res.json();
+  } catch(e) { console.warn("Enode POST error:", e.message); return null; }
+}
+
+// ── Device Link (onboarding) ─────────────────────────────────────────────────
+async function enodeLinkDevice(vendorType, vendor) {
+  try {
+    const res = await fetch(`${ENODE_PROXY_URL}/link`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: enodeUserId,
+        vendorType: vendorType || undefined,
+        vendor: vendor || undefined,
+        scopes: getEnodeScopes(vendorType),
+        redirectUri: window.location.origin + "/enode-link-complete"
+      })
+    });
+    const data = await res.json();
+    if (data.linkUrl) {
+      window.open(data.linkUrl, "enode_link", "width=500,height=700,menubar=no,toolbar=no");
+    } else {
+      alert("Failed to create link session: " + JSON.stringify(data));
+    }
+  } catch(e) { alert("Enode link error: " + e.message); }
+}
+
+function getEnodeScopes(vendorType) {
+  const scopeMap = {
+    vehicle:  ["vehicle:read:data", "vehicle:read:location", "vehicle:control:charging"],
+    charger:  ["charger:read:data", "charger:control:charging"],
+    hvac:     ["hvac:read:data", "hvac:control:mode"],
+    inverter: ["inverter:read:data", "inverter:read:location"],
+    battery:  ["battery:read:data", "battery:read:location", "battery:control:operation_mode"]
+  };
+  return scopeMap[vendorType] || undefined;
+}
+
+// Listen for link completion
+window.addEventListener("message", (e) => {
+  if (e.data?.type === "enode-link-complete") {
+    setStatus("ready", "✅ Device linked via Enode!");
+    loadAllEnodeDevices();
+  }
+});
+
+// ── Load all Enode devices ───────────────────────────────────────────────────
+async function loadAllEnodeDevices() {
+  const [vehicles, chargers, hvacs, inverters, batteries] = await Promise.all([
+    enodeGet("/vehicles"),
+    enodeGet("/chargers"),
+    enodeGet("/hvacs"),
+    enodeGet("/inverters"),
+    enodeGet("/batteries")
+  ]);
+  enodeDevices.vehicles  = vehicles?.data || [];
+  enodeDevices.chargers  = chargers?.data || [];
+  enodeDevices.hvacs     = hvacs?.data || [];
+  enodeDevices.inverters = inverters?.data || [];
+  enodeDevices.batteries = batteries?.data || [];
+  console.log("[Enode] Loaded:", {
+    vehicles: enodeDevices.vehicles.length,
+    chargers: enodeDevices.chargers.length,
+    hvacs: enodeDevices.hvacs.length,
+    inverters: enodeDevices.inverters.length,
+    batteries: enodeDevices.batteries.length
+  });
+  return enodeDevices;
+}
+
+// ── Render Enode tab ─────────────────────────────────────────────────────────
+async function initEnodeTab() {
+  setStatus("sending", "Loading Enode devices…");
+  await loadAllEnodeDevices();
+  renderEnodeOverview();
+  setStatus("ready", `Enode: ${Object.values(enodeDevices).reduce((s,a) => s+a.length, 0)} device(s) loaded.`);
+}
+
+function renderEnodeOverview() {
+  const container = document.getElementById("enode-devices-container");
+  if (!container) return;
+
+  // Update stat counters
+  ["vehicles","chargers","hvacs","inverters","batteries"].forEach(k => {
+    const el = document.getElementById(`enode-count-${k}`);
+    if (el) el.textContent = enodeDevices[k].length || "0";
+  });
+
+  const total = Object.values(enodeDevices).reduce((s,a) => s+a.length, 0);
+  if (total === 0) {
+    container.innerHTML = `
+      <div class="sched-empty" style="padding:2rem;">
+        <div style="font-size:28px;margin-bottom:12px;">🔌</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:8px;">No Enode devices connected yet</div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:16px;">Link your Tesla, ChargePoint, Honeywell, SolarEdge, or Powerwall accounts to get started.</div>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+          <button class="card-action" style="background:var(--green-bg);color:var(--green-dark);border-color:var(--green);" onclick="enodeLinkDevice('vehicle','TESLA')">🚗 Link Tesla EV</button>
+          <button class="card-action" style="background:var(--blue-lt);color:var(--blue-dark);border-color:var(--blue);" onclick="enodeLinkDevice('charger','CHARGEPOINT')">⚡ Link ChargePoint</button>
+          <button class="card-action" style="background:var(--amber-bg);color:var(--amber);border-color:var(--amber);" onclick="enodeLinkDevice('hvac','HONEYWELL')">🌡️ Link Honeywell</button>
+          <button class="card-action" style="background:var(--green-bg);color:var(--green-dark);border-color:var(--green);" onclick="enodeLinkDevice('inverter','SOLAREDGE')">☀️ Link SolarEdge</button>
+          <button class="card-action" style="background:var(--blue-lt);color:var(--blue-dark);border-color:var(--blue);" onclick="enodeLinkDevice('battery','TESLA')">🔋 Link Powerwall</button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  let html = '';
+
+  // ── Vehicles (Tesla) ──
+  if (enodeDevices.vehicles.length) {
+    html += `<div class="card" style="margin-bottom:14px;">
+      <div class="card-header"><div class="card-title">🚗 Electric Vehicles (${enodeDevices.vehicles.length})</div>
+        <button class="card-action" onclick="enodeLinkDevice('vehicle','TESLA')">+ Link Vehicle</button></div>`;
+    enodeDevices.vehicles.forEach(v => {
+      const cs = v.chargeState || {};
+      const info = v.information || {};
+      const reachable = v.isReachable;
+      const battPct = cs.batteryLevel != null ? cs.batteryLevel : "—";
+      const charging = cs.isCharging ? "Charging" : cs.isPluggedIn ? "Plugged In" : "Unplugged";
+      const chargeRate = cs.chargeRate != null ? `${cs.chargeRate} kW` : "";
+      const range = cs.range != null ? `${Math.round(cs.range * 0.621371)} mi` : "";
+      html += `<div style="display:flex;align-items:center;gap:14px;padding:12px;border-bottom:0.5px solid var(--border);flex-wrap:wrap;">
+        ${info.imageUrl ? `<img src="${info.imageUrl}?width=80&height=60&fit=contain" style="width:80px;height:60px;object-fit:contain;border-radius:6px;" />` : '<div style="width:80px;height:60px;background:var(--surface2);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:28px;">🚗</div>'}
+        <div style="flex:1;min-width:150px;">
+          <div style="font-size:13px;font-weight:600;">${info.brand || ""} ${info.model || "Vehicle"}</div>
+          <div style="font-size:11px;color:var(--text-hint);">VIN: ${info.vin || "—"} &bull; ${v.vendor}</div>
+          <div style="font-size:11px;color:${reachable?"var(--green-dark)":"var(--red)"};">${reachable?"● Online":"○ Offline"}</div>
+        </div>
+        <div style="min-width:120px;text-align:center;">
+          <div style="font-size:22px;font-weight:700;color:var(--green-dark);">${battPct}%</div>
+          <div style="height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin:4px 0;">
+            <div style="height:100%;width:${battPct}%;background:${battPct>20?"var(--green)":battPct>10?"var(--amber)":"var(--red)"};border-radius:3px;"></div>
+          </div>
+          <div style="font-size:10px;color:var(--text-hint);">${range}</div>
+        </div>
+        <div style="min-width:100px;text-align:center;">
+          <div style="font-size:12px;font-weight:500;color:${cs.isCharging?"var(--green-dark)":"var(--text-secondary)"};">${charging}</div>
+          <div style="font-size:10px;color:var(--text-hint);">${chargeRate}</div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          ${cs.isCharging
+            ? `<button class="card-action" style="color:var(--red);border-color:var(--red);" onclick="enodeControlCharging('vehicles','${v.id}','stop')">Stop Charging</button>`
+            : `<button class="card-action" style="color:var(--green-dark);border-color:var(--green);" onclick="enodeControlCharging('vehicles','${v.id}','start')">Start Charging</button>`}
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // ── Chargers (ChargePoint) ──
+  if (enodeDevices.chargers.length) {
+    html += `<div class="card" style="margin-bottom:14px;">
+      <div class="card-header"><div class="card-title">⚡ EV Chargers (${enodeDevices.chargers.length})</div>
+        <button class="card-action" onclick="enodeLinkDevice('charger','CHARGEPOINT')">+ Link Charger</button></div>`;
+    enodeDevices.chargers.forEach(c => {
+      const cs = c.chargeState || {};
+      const info = c.information || {};
+      const state = cs.powerDeliveryState || "UNKNOWN";
+      const stateLabel = state.replace("PLUGGED_IN:","").replace(/_/g," ");
+      const stateColor = cs.isCharging ? "var(--green-dark)" : cs.isPluggedIn ? "var(--blue-dark)" : "var(--text-hint)";
+      html += `<div style="display:flex;align-items:center;gap:14px;padding:12px;border-bottom:0.5px solid var(--border);flex-wrap:wrap;">
+        <div style="width:50px;height:50px;background:var(--blue-lt);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;">⚡</div>
+        <div style="flex:1;min-width:150px;">
+          <div style="font-size:13px;font-weight:600;">${info.brand || ""} ${info.model || "Charger"}</div>
+          <div style="font-size:11px;color:var(--text-hint);">${info.displayName || info.serialNumber || "—"} &bull; ${c.vendor}</div>
+          <div style="font-size:11px;color:${c.isReachable?"var(--green-dark)":"var(--red)"};">${c.isReachable?"● Online":"○ Offline"}</div>
+        </div>
+        <div style="min-width:120px;text-align:center;">
+          <div style="font-size:14px;font-weight:600;color:${stateColor};">${stateLabel}</div>
+          <div style="font-size:10px;color:var(--text-hint);">${cs.chargeRate != null ? cs.chargeRate + " kW" : ""}</div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          ${cs.isCharging
+            ? `<button class="card-action" style="color:var(--red);border-color:var(--red);" onclick="enodeControlCharging('chargers','${c.id}','stop')">Stop</button>`
+            : `<button class="card-action" style="color:var(--green-dark);border-color:var(--green);" onclick="enodeControlCharging('chargers','${c.id}','start')">Start</button>`}
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // ── HVAC / Thermostats (Honeywell) ──
+  if (enodeDevices.hvacs.length) {
+    html += `<div class="card" style="margin-bottom:14px;">
+      <div class="card-header"><div class="card-title">🌡️ Thermostats (${enodeDevices.hvacs.length})</div>
+        <button class="card-action" onclick="enodeLinkDevice('hvac','HONEYWELL')">+ Link Thermostat</button></div>`;
+    enodeDevices.hvacs.forEach(h => {
+      const info = h.information || {};
+      const ts = h.thermostatState || {};
+      const temp = h.temperatureState || {};
+      const currentTemp = temp.currentTemperature != null ? `${Math.round(temp.currentTemperature * 9/5 + 32)}°F` : "—";
+      const setpoint = ts.heatSetpoint != null ? `Heat: ${Math.round(ts.heatSetpoint * 9/5 + 32)}°F` : "";
+      const coolpoint = ts.coolSetpoint != null ? `Cool: ${Math.round(ts.coolSetpoint * 9/5 + 32)}°F` : "";
+      const mode = ts.mode || "UNKNOWN";
+      html += `<div style="display:flex;align-items:center;gap:14px;padding:12px;border-bottom:0.5px solid var(--border);flex-wrap:wrap;">
+        <div style="width:50px;height:50px;background:var(--amber-bg);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;">🌡️</div>
+        <div style="flex:1;min-width:150px;">
+          <div style="font-size:13px;font-weight:600;">${info.brand || ""} ${info.model || "Thermostat"}</div>
+          <div style="font-size:11px;color:var(--text-hint);">${info.displayName || "—"} &bull; ${h.vendor}</div>
+          <div style="font-size:11px;color:${h.isReachable?"var(--green-dark)":"var(--red)"};">${h.isReachable?"● Online":"○ Offline"}</div>
+        </div>
+        <div style="min-width:100px;text-align:center;">
+          <div style="font-size:22px;font-weight:700;color:var(--text-primary);">${currentTemp}</div>
+          <div style="font-size:10px;color:var(--text-hint);">Current</div>
+        </div>
+        <div style="min-width:120px;text-align:center;">
+          <div style="font-size:11px;color:var(--text-secondary);">${setpoint}</div>
+          <div style="font-size:11px;color:var(--blue-dark);">${coolpoint}</div>
+          <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Mode: ${mode}</div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button class="card-action" onclick="enodeSetHVACHold('${h.id}')">Set Hold</button>
+          <button class="card-action" onclick="enodeSetHVACSchedule('${h.id}')">Follow Schedule</button>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // ── Solar Inverters (SolarEdge) ──
+  if (enodeDevices.inverters.length) {
+    html += `<div class="card" style="margin-bottom:14px;">
+      <div class="card-header"><div class="card-title">☀️ Solar Inverters (${enodeDevices.inverters.length})</div>
+        <button class="card-action" onclick="enodeLinkDevice('inverter','SOLAREDGE')">+ Link Inverter</button></div>`;
+    enodeDevices.inverters.forEach(inv => {
+      const info = inv.information || {};
+      const ps = inv.productionState || {};
+      const production = ps.productionRate != null ? `${ps.productionRate.toFixed(1)} kW` : "—";
+      const isProducing = ps.isProducing;
+      html += `<div style="display:flex;align-items:center;gap:14px;padding:12px;border-bottom:0.5px solid var(--border);flex-wrap:wrap;">
+        <div style="width:50px;height:50px;background:#FEF3C7;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;">☀️</div>
+        <div style="flex:1;min-width:150px;">
+          <div style="font-size:13px;font-weight:600;">${info.brand || ""} ${info.model || "Inverter"}</div>
+          <div style="font-size:11px;color:var(--text-hint);">${info.siteName || "—"} &bull; ${inv.vendor}</div>
+          <div style="font-size:11px;color:${inv.isReachable?"var(--green-dark)":"var(--red)"};">${inv.isReachable?"● Online":"○ Offline"}</div>
+        </div>
+        <div style="min-width:120px;text-align:center;">
+          <div style="font-size:22px;font-weight:700;color:${isProducing?"#D97706":"var(--text-hint)"};">${production}</div>
+          <div style="font-size:10px;color:var(--text-hint);">${isProducing?"Producing":"Idle"}</div>
+        </div>
+        <button class="card-action" onclick="enodeRefresh('inverters','${inv.id}')">↻ Refresh</button>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // ── Batteries (Tesla Powerwall) ──
+  if (enodeDevices.batteries.length) {
+    html += `<div class="card" style="margin-bottom:14px;">
+      <div class="card-header"><div class="card-title">🔋 Home Batteries (${enodeDevices.batteries.length})</div>
+        <button class="card-action" onclick="enodeLinkDevice('battery','TESLA')">+ Link Battery</button></div>`;
+    enodeDevices.batteries.forEach(b => {
+      const info = b.information || {};
+      const cs = b.chargeState || {};
+      const cfg = b.config || {};
+      const level = cs.batteryLevel != null ? cs.batteryLevel : "—";
+      const capacity = cs.batteryCapacity != null ? `${cs.batteryCapacity} kWh` : "";
+      const status = cs.status || "UNKNOWN";
+      const opMode = cfg.operationMode || "UNKNOWN";
+      const opModeLabel = opMode.replace(/_/g, " ").toLowerCase();
+      const statusColor = status === "CHARGING" ? "var(--green-dark)" : status === "DISCHARGING" ? "var(--blue-dark)" : "var(--text-hint)";
+      html += `<div style="display:flex;align-items:center;gap:14px;padding:12px;border-bottom:0.5px solid var(--border);flex-wrap:wrap;">
+        <div style="width:50px;height:50px;background:var(--green-bg);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;">🔋</div>
+        <div style="flex:1;min-width:150px;">
+          <div style="font-size:13px;font-weight:600;">${info.brand || ""} ${info.model || "Battery"}</div>
+          <div style="font-size:11px;color:var(--text-hint);">${info.siteName || "—"} &bull; ${capacity}</div>
+          <div style="font-size:11px;color:${b.isReachable?"var(--green-dark)":"var(--red)"};">${b.isReachable?"● Online":"○ Offline"}</div>
+        </div>
+        <div style="min-width:100px;text-align:center;">
+          <div style="font-size:22px;font-weight:700;color:var(--green-dark);">${level}%</div>
+          <div style="height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin:4px 0;">
+            <div style="height:100%;width:${level}%;background:${level>20?"var(--green)":level>10?"var(--amber)":"var(--red)"};border-radius:3px;"></div>
+          </div>
+          <div style="font-size:10px;color:var(--text-hint);">${cs.chargeRate != null ? cs.chargeRate + " kW" : ""}</div>
+        </div>
+        <div style="min-width:120px;text-align:center;">
+          <div style="font-size:12px;font-weight:600;color:${statusColor};">${status}</div>
+          <div style="font-size:10px;color:var(--text-hint);text-transform:capitalize;">${opModeLabel}</div>
+        </div>
+        <div style="display:flex;gap:4px;flex-direction:column;">
+          <select class="history-select" id="enode-batt-mode-${b.id}" style="font-size:10px;">
+            <option value="SELF_RELIANCE" ${opMode==="SELF_RELIANCE"?"selected":""}>Self Reliance</option>
+            <option value="TIME_OF_USE" ${opMode==="TIME_OF_USE"?"selected":""}>Time of Use</option>
+            <option value="IMPORT_FOCUS" ${opMode==="IMPORT_FOCUS"?"selected":""}>Charge (Import)</option>
+            <option value="EXPORT_FOCUS" ${opMode==="EXPORT_FOCUS"?"selected":""}>Discharge (Export)</option>
+            <option value="IDLE" ${opMode==="IDLE"?"selected":""}>Idle</option>
+          </select>
+          <button class="card-action" style="font-size:10px;" onclick="enodeSetBatteryMode('${b.id}')">Set Mode</button>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // ── Link more devices ──
+  html += `<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:16px;">
+    <button class="card-action" style="background:var(--green-bg);color:var(--green-dark);border-color:var(--green);" onclick="enodeLinkDevice('vehicle','TESLA')">🚗 + Tesla EV</button>
+    <button class="card-action" style="background:var(--blue-lt);color:var(--blue-dark);border-color:var(--blue);" onclick="enodeLinkDevice('charger','CHARGEPOINT')">⚡ + ChargePoint</button>
+    <button class="card-action" style="background:var(--amber-bg);color:var(--amber);border-color:var(--amber);" onclick="enodeLinkDevice('hvac','HONEYWELL')">🌡️ + Honeywell</button>
+    <button class="card-action" style="background:#FEF3C7;color:#92400E;border-color:#D97706;" onclick="enodeLinkDevice('inverter','SOLAREDGE')">☀️ + SolarEdge</button>
+    <button class="card-action" style="background:var(--green-bg);color:var(--green-dark);border-color:var(--green);" onclick="enodeLinkDevice('battery','TESLA')">🔋 + Powerwall</button>
+    <button class="card-action" onclick="enodeLinkDevice()">🔗 Link Any Device</button>
+  </div>`;
+
+  container.innerHTML = html;
+}
+
+// ── Enode Control Commands ───────────────────────────────────────────────────
+async function enodeControlCharging(deviceType, deviceId, action) {
+  // deviceType: "vehicles" or "chargers"
+  setStatus("sending", `${action === "start" ? "Starting" : "Stopping"} charging…`);
+  const res = await enodePost(`/${deviceType}/${deviceId}/charging`, { action });
+  if (res) {
+    setStatus("ready", `✅ Charging ${action} command sent.`);
+    setTimeout(() => loadAllEnodeDevices().then(renderEnodeOverview), 5000);
+  } else {
+    setStatus("error", `Failed to ${action} charging.`);
+  }
+}
+
+async function enodeSetBatteryMode(batteryId) {
+  const mode = document.getElementById(`enode-batt-mode-${batteryId}`)?.value;
+  if (!mode) return;
+  setStatus("sending", `Setting battery mode to ${mode.replace(/_/g," ")}…`);
+  const res = await enodePost(`/batteries/${batteryId}/operation-mode`, { operationMode: mode });
+  if (res) {
+    setStatus("ready", `✅ Battery mode set to ${mode.replace(/_/g," ")}.`);
+    setTimeout(() => loadAllEnodeDevices().then(renderEnodeOverview), 5000);
+  } else {
+    setStatus("error", "Failed to set battery mode.");
+  }
+}
+
+async function enodeSetHVACHold(hvacId) {
+  const temp = prompt("Enter hold temperature in °F:");
+  if (!temp) return;
+  const tempC = (parseFloat(temp) - 32) * 5/9;
+  setStatus("sending", `Setting thermostat hold to ${temp}°F…`);
+  const res = await enodePost(`/hvacs/${hvacId}/mode`, {
+    mode: "PERMANENT_HOLD",
+    heatSetpoint: tempC,
+    coolSetpoint: tempC + 2
+  });
+  if (res) {
+    setStatus("ready", `✅ Thermostat hold set to ${temp}°F.`);
+    setTimeout(() => loadAllEnodeDevices().then(renderEnodeOverview), 5000);
+  } else {
+    setStatus("error", "Failed to set thermostat hold.");
+  }
+}
+
+async function enodeSetHVACSchedule(hvacId) {
+  setStatus("sending", "Setting thermostat to follow schedule…");
+  const res = await enodePost(`/hvacs/${hvacId}/mode`, { mode: "FOLLOW_SCHEDULE" });
+  if (res) {
+    setStatus("ready", "✅ Thermostat set to follow schedule.");
+    setTimeout(() => loadAllEnodeDevices().then(renderEnodeOverview), 5000);
+  } else {
+    setStatus("error", "Failed to set thermostat to follow schedule.");
+  }
+}
+
+async function enodeRefresh(deviceType, deviceId) {
+  setStatus("sending", "Requesting data refresh…");
+  const res = await enodePost(`/${deviceType}/${deviceId}/refresh-hint`, {});
+  if (res !== null) {
+    setStatus("ready", "✅ Refresh requested — data will update shortly.");
+    setTimeout(() => loadAllEnodeDevices().then(renderEnodeOverview), 10000);
+  } else {
+    setStatus("error", "Failed to request refresh.");
+  }
+}
+
+// ── End Enode Integration ────────────────────────────────────────────────────
+
 
 let drPrograms      = [];   // all configured programs
 let drpEditingId    = null; // null = new, else program id being edited
