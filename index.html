@@ -5139,20 +5139,20 @@
 <div class="tab-pane" id="tab-enode">
   <div class="scroll-content">
     <div style="max-width:960px;margin:0 auto;padding-bottom:40px;">
-      <div class="card" style="margin-bottom:14px;">
-        <div class="card-header">
-          <div class="card-title">🔌 Enode — Connected Energy Devices</div>
+      <div class="sched-card" style="margin-bottom:14px;">
+        <div class="sched-card-header">
+          <div class="sched-card-title">🔌 Enode — Connected Energy Devices</div>
           <div style="display:flex;gap:8px;">
-            <button class="card-action" onclick="initEnodeTab()">↻ Refresh All</button>
-            <button class="card-action" style="background:var(--green-bg);color:var(--green-dark);border-color:var(--green);" onclick="enodeLinkDevice()">+ Link Device</button>
+            <button class="data-refresh-btn" onclick="initEnodeTab()">↻ Refresh All</button>
+            <button class="data-refresh-btn" style="background:rgba(22,163,74,0.1);color:#166534;border-color:#16a34a;" onclick="enodeLinkDevice()">+ Link Device</button>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px;">
-          <div class="stat-pill"><div class="stat-label">Tesla EVs</div><div class="stat-value" id="enode-count-vehicles" style="color:var(--green-dark);">—</div></div>
-          <div class="stat-pill"><div class="stat-label">Chargers</div><div class="stat-value" id="enode-count-chargers" style="color:var(--blue-dark);">—</div></div>
-          <div class="stat-pill"><div class="stat-label">Thermostats</div><div class="stat-value" id="enode-count-hvacs" style="color:var(--amber);">—</div></div>
-          <div class="stat-pill"><div class="stat-label">Solar</div><div class="stat-value" id="enode-count-inverters" style="color:#D97706;">—</div></div>
-          <div class="stat-pill"><div class="stat-label">Batteries</div><div class="stat-value" id="enode-count-batteries" style="color:var(--green-dark);">—</div></div>
+          <div class="vp-stat"><div style="font-size:11px;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.04em;">Tesla EVs</div><div class="vp-stat-val" id="enode-count-vehicles" style="color:#166534;">—</div></div>
+          <div class="vp-stat"><div style="font-size:11px;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.04em;">Chargers</div><div class="vp-stat-val" id="enode-count-chargers" style="color:var(--blue-dark);">—</div></div>
+          <div class="vp-stat"><div style="font-size:11px;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.04em;">Thermostats</div><div class="vp-stat-val" id="enode-count-hvacs" style="color:#b45309;">—</div></div>
+          <div class="vp-stat"><div style="font-size:11px;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.04em;">Solar</div><div class="vp-stat-val" id="enode-count-inverters" style="color:#D97706;">—</div></div>
+          <div class="vp-stat"><div style="font-size:11px;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.04em;">Batteries</div><div class="vp-stat-val" id="enode-count-batteries" style="color:#166534;">—</div></div>
         </div>
         <div id="enode-devices-container">
           <div class="sched-empty">Click Refresh to load Enode devices, or Link Device to get started.</div>
