@@ -22460,15 +22460,6 @@ function enodeInjectDevices() {
   });
 
   console.log(`[Enode] Injected ${DEVICES.filter(d=>d._enodeId).length} Enode device(s) into DEVICES array.`);
-
-  // Refresh selectors and groups
-  // Inject Enode devices (Tesla EV, ChargePoint, Honeywell, SolarEdge, Powerwall)
-  if (typeof enodeInjectDevices === "function" && typeof enodeDevices !== "undefined") {
-    enodeInjectDevices();
-  }
-
-  if (typeof refreshGroupSelectors === "function") refreshGroupSelectors();
-  if (typeof populateTargetSelector === "function") populateTargetSelector();
 }
 
 // ── Level 2: DR Event Dispatch for Enode Devices ─────────────────────────────
