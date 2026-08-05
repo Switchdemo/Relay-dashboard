@@ -750,6 +750,7 @@
     <button class="tab-btn" id="main-devices" onclick="switchMain('devices', this)">Devices</button>
     <button class="tab-btn" id="main-weather" onclick="switchMain('weather', this)">Weather</button>
     <button class="tab-btn" id="main-vp" onclick="switchMain('vp', this)">Virtual Peaker</button>
+    <button class="tab-btn" id="main-enode" onclick="switchMain('enode', this)">🔌 Enode</button>
     <button class="tab-btn" id="main-lora" onclick="switchMain('lora', this)">📡 LoRa</button>
     <button class="tab-btn" id="main-monitor" onclick="switchMain('monitor', this)">Monitor</button>
     <button class="tab-btn" id="main-ami" onclick="switchMain('ami', this)">⚡ AMI Data</button>
@@ -5134,7 +5135,33 @@
 </div>
 
 
-<!-- ── MONITOR TRIGGERS TAB (main tab alias) ── -->
+<!-- ══════════════════════════════════════════════════════ Enode Integration ══ -->
+<div class="tab-pane" id="tab-enode">
+  <div class="scroll-content">
+    <div style="max-width:960px;margin:0 auto;padding-bottom:40px;">
+      <div class="card" style="margin-bottom:14px;">
+        <div class="card-header">
+          <div class="card-title">🔌 Enode — Connected Energy Devices</div>
+          <div style="display:flex;gap:8px;">
+            <button class="card-action" onclick="initEnodeTab()">↻ Refresh All</button>
+            <button class="card-action" style="background:var(--green-bg);color:var(--green-dark);border-color:var(--green);" onclick="enodeLinkDevice()">+ Link Device</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px;">
+          <div class="stat-pill"><div class="stat-label">Tesla EVs</div><div class="stat-value" id="enode-count-vehicles" style="color:var(--green-dark);">—</div></div>
+          <div class="stat-pill"><div class="stat-label">Chargers</div><div class="stat-value" id="enode-count-chargers" style="color:var(--blue-dark);">—</div></div>
+          <div class="stat-pill"><div class="stat-label">Thermostats</div><div class="stat-value" id="enode-count-hvacs" style="color:var(--amber);">—</div></div>
+          <div class="stat-pill"><div class="stat-label">Solar</div><div class="stat-value" id="enode-count-inverters" style="color:#D97706;">—</div></div>
+          <div class="stat-pill"><div class="stat-label">Batteries</div><div class="stat-value" id="enode-count-batteries" style="color:var(--green-dark);">—</div></div>
+        </div>
+        <div id="enode-devices-container">
+          <div class="sched-empty">Click Refresh to load Enode devices, or Link Device to get started.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════════════════════════════════════════════════ LoRa Command Generator ══ -->
 <!-- ══════════════════════════════════════════════════ LoRa Command Generator ══ -->
 <div class="tab-pane" id="tab-lora">
