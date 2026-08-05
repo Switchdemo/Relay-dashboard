@@ -621,9 +621,16 @@ function populateTargetSelector() {
       return `<option value="group_${n}">Group ${n}: ${name}${tag}</option>`;
     }).join("");
   } else {
-    // Separate relay devices from EV chargers with optgroups
-    const relayDevs = DEVICES.filter(d => d.type !== "ev" && !d.uid.includes("PLACEHOLDER"));
-    const evDevs    = DEVICES.filter(d => d.type === "ev");
+    // Separate all device types into clear optgroups
+    const relayDevs    = DEVICES.filter(d => (d.type === "relay" || !d.type) && !d.uid.includes("PLACEHOLDER"));
+    const evDevs       = DEVICES.filter(d => d.type === "ev" && d._enodeType === "vehicles");
+    const chargerDevs  = DEVICES.filter(d => d.type === "ev" && d._enodeType === "chargers");
+    const legacyEVs    = DEVICES.filter(d => d.type === "ev" && !d._enodeType);
+    const battDevs     = DEVICES.filter(d => d.type === "battery");
+    const genDevs      = DEVICES.filter(d => d.type === "generator");
+    const thermDevs    = DEVICES.filter(d => d.type === "thermostat");
+    const inverterDevs = DEVICES.filter(d => d.type === "inverter");
+    const meterDevs    = DEVICES.filter(d => d.type === "meter");
     let html = placeholder;
     if (relayDevs.length) {
       html += `<optgroup label="Relay Devices">` +
@@ -631,32 +638,38 @@ function populateTargetSelector() {
         `</optgroup>`;
     }
     if (evDevs.length) {
-      html += `<optgroup label="EV Chargers">` +
-        evDevs.map(d => `<option value="${d.uid}">⚡ ${d.name}</option>`).join("") +
+      html += `<optgroup label="🚗 Electric Vehicles">` +
+        evDevs.map(d => `<option value="${d.uid}">🚗 ${d.name}${d._enodeId?" (Enode)":""}</option>`).join("") +
         `</optgroup>`;
     }
-    const battDevs = DEVICES.filter(d => d.type === "battery");
+    if (chargerDevs.length || legacyEVs.length) {
+      html += `<optgroup label="⚡ EV Chargers">` +
+        [...chargerDevs, ...legacyEVs].map(d => `<option value="${d.uid}">⚡ ${d.name}${d._enodeId?" (Enode)":""}</option>`).join("") +
+        `</optgroup>`;
+    }
     if (battDevs.length) {
-      html += `<optgroup label="Battery Systems">` +
-        battDevs.map(d => `<option value="${d.uid}">🔋 ${d.name}</option>`).join("") +
+      html += `<optgroup label="🔋 Battery Systems">` +
+        battDevs.map(d => `<option value="${d.uid}">🔋 ${d.name}${d._enodeId?" (Enode)":""}</option>`).join("") +
         `</optgroup>`;
     }
-    const genDevs = DEVICES.filter(d => d.type === "generator");
     if (genDevs.length) {
-      html += `<optgroup label="Generators">` +
+      html += `<optgroup label="⚡ Generators">` +
         genDevs.map(d => `<option value="${d.uid}">⚡ ${d.name}</option>`).join("") +
         `</optgroup>`;
     }
-    const thermDevs = DEVICES.filter(d => d.type === "thermostat");
     if (thermDevs.length) {
-      html += `<optgroup label="Thermostats">` +
+      html += `<optgroup label="🌡️ Thermostats">` +
         thermDevs.map(d => `<option value="${d.uid}">🌡️ ${d.name}${d._enodeId?" (Enode)":""}</option>`).join("") +
         `</optgroup>`;
     }
-    const inverterDevs = DEVICES.filter(d => d.type === "inverter");
     if (inverterDevs.length) {
-      html += `<optgroup label="Solar Inverters">` +
+      html += `<optgroup label="☀️ Solar Inverters">` +
         inverterDevs.map(d => `<option value="${d.uid}">☀️ ${d.name}${d._enodeId?" (Enode)":""}</option>`).join("") +
+        `</optgroup>`;
+    }
+    if (meterDevs.length) {
+      html += `<optgroup label="📊 Meters">` +
+        meterDevs.map(d => `<option value="${d.uid}">📊 ${d.name}${d._enodeId?" (Enode)":""}</option>`).join("") +
         `</optgroup>`;
     }
     sel.innerHTML = html;
@@ -21941,7 +21954,7 @@ function initDerapiEventTimes() {
 // SolarEdge inverters, and Tesla Powerwall batteries via Enode.
 // All API calls go through the enode-proxy Cloudflare Worker.
 
-let enodeDevices = { vehicles: [], chargers: [], hvacs: [], inverters: [], batteries: [] };
+let enodeDevices = { vehicles: [], chargers: [], hvacs: [], inverters: [], batteries: [], meters: [] };
 let enodeUserId = "dashboard-user-1";
 
 async function enodeGet(path) {
@@ -22017,24 +22030,27 @@ window.addEventListener("message", (e) => {
 
 // ── Load all Enode devices ───────────────────────────────────────────────────
 async function loadAllEnodeDevices() {
-  const [vehicles, chargers, hvacs, inverters, batteries] = await Promise.all([
+  const [vehicles, chargers, hvacs, inverters, batteries, meters] = await Promise.all([
     enodeGet("/vehicles"),
     enodeGet("/chargers"),
     enodeGet("/hvacs"),
     enodeGet("/inverters"),
-    enodeGet("/batteries")
+    enodeGet("/batteries"),
+    enodeGet("/meters")
   ]);
   enodeDevices.vehicles  = vehicles?.data || [];
   enodeDevices.chargers  = chargers?.data || [];
   enodeDevices.hvacs     = hvacs?.data || [];
   enodeDevices.inverters = inverters?.data || [];
   enodeDevices.batteries = batteries?.data || [];
+  enodeDevices.meters    = meters?.data || [];
   console.log("[Enode] Loaded:", {
     vehicles: enodeDevices.vehicles.length,
     chargers: enodeDevices.chargers.length,
     hvacs: enodeDevices.hvacs.length,
     inverters: enodeDevices.inverters.length,
-    batteries: enodeDevices.batteries.length
+    batteries: enodeDevices.batteries.length,
+    meters: enodeDevices.meters.length
   });
   return enodeDevices;
 }
@@ -22053,7 +22069,7 @@ function renderEnodeOverview() {
   if (!container) return;
 
   // Update stat counters
-  ["vehicles","chargers","hvacs","inverters","batteries"].forEach(k => {
+  ["vehicles","chargers","hvacs","inverters","batteries","meters"].forEach(k => {
     const el = document.getElementById(`enode-count-${k}`);
     if (el) el.textContent = enodeDevices[k].length || "0";
   });
@@ -22459,6 +22475,27 @@ function enodeInjectDevices() {
     if (!relayState[uid]) relayState[uid] = {1:false,2:false,3:false,4:false,all:false};
   });
 
+  // ── Meters → type "meter" (energy accounting)
+  (enodeDevices.meters || []).forEach(m => {
+    const uid = `enode_meter_${m.id}`;
+    const info = m.information || {};
+    const es = m.energyState || {};
+    const loc = m.location || {};
+    DEVICES.push({
+      id: uid, uid, type: "meter", _enodeId: m.id, _enodeType: "meters",
+      name: `${info.brand||""} ${info.model||"Meter"}`.trim(),
+      enodeAsset: m,
+      meterAsset: {
+        meter_id: m.id, name: `${info.brand||""} ${info.model||""}`.trim(),
+        protocol: "enode", vendor: m.vendor,
+        power_kw: es.power != null ? es.power / 1000 : null,
+        energy_kwh: es.cumulativeConsumption,
+        lat: loc.latitude, lon: loc.longitude
+      }
+    });
+    if (!relayState[uid]) relayState[uid] = {1:false,2:false,3:false,4:false,all:false};
+  });
+
   console.log(`[Enode] Injected ${DEVICES.filter(d=>d._enodeId).length} Enode device(s) into DEVICES array.`);
 }
 
@@ -22548,10 +22585,10 @@ function enodeAddToMap() {
 
   const enodeDevs = DEVICES.filter(d => d._enodeId);
   const typeIcons = {
-    ev: "🚗", charger: "⚡", thermostat: "🌡️", inverter: "☀️", battery: "🔋"
+    ev: "🚗", charger: "⚡", thermostat: "🌡️", inverter: "☀️", battery: "🔋", meter: "📊"
   };
   const typeColors = {
-    ev: "#16a34a", charger: "#3b82f6", thermostat: "#d97706", inverter: "#eab308", battery: "#059669"
+    ev: "#16a34a", charger: "#3b82f6", thermostat: "#d97706", inverter: "#eab308", battery: "#059669", meter: "#6366f1"
   };
 
   enodeDevs.forEach(d => {
