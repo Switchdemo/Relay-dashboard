@@ -378,6 +378,8 @@ async function loadMap() {
     }
   }
   if (pinned.length > 0) map.fitBounds(L.featureGroup(pinned).getBounds().pad(0.3));
+  // Add Enode devices to map (Tesla, ChargePoint, Honeywell, SolarEdge, Powerwall)
+  if (typeof enodeAddToMap === "function") enodeAddToMap();
   setTimeout(() => map.invalidateSize(), 100);
 }
 
@@ -648,7 +650,13 @@ function populateTargetSelector() {
     const thermDevs = DEVICES.filter(d => d.type === "thermostat");
     if (thermDevs.length) {
       html += `<optgroup label="Thermostats">` +
-        thermDevs.map(d => `<option value="${d.uid}">🌡️ ${d.name}</option>`).join("") +
+        thermDevs.map(d => `<option value="${d.uid}">🌡️ ${d.name}${d._enodeId?" (Enode)":""}</option>`).join("") +
+        `</optgroup>`;
+    }
+    const inverterDevs = DEVICES.filter(d => d.type === "inverter");
+    if (inverterDevs.length) {
+      html += `<optgroup label="Solar Inverters">` +
+        inverterDevs.map(d => `<option value="${d.uid}">☀️ ${d.name}${d._enodeId?" (Enode)":""}</option>`).join("") +
         `</optgroup>`;
     }
     sel.innerHTML = html;
@@ -4835,6 +4843,8 @@ async function onSignedIn(session) {
   buildControls();
   buildDataCards();
   loadLatest();  // Initialize device badges (online/offline) immediately on login
+  // Load Enode devices and inject into fleet
+  loadAllEnodeDevices().then(() => { enodeInjectDevices(); }).catch(e => console.warn("Enode load:", e.message));
   // Load LC event ID counter from Supabase to prevent cross-device collisions
   loadLCEventId().catch(e => console.warn("loadLCEventId:", e.message));
   // Load Pelican sites in background (non-blocking)
@@ -22323,6 +22333,293 @@ async function enodeRefresh(deviceType, deviceId) {
 }
 
 // ── End Enode Integration ────────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Enode Fleet Integration — Levels 1-3
+// Injects Enode devices into DEVICES array, DR targets, map, and fleet health
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Level 1: Inject Enode devices into DEVICES array ─────────────────────────
+function enodeInjectDevices() {
+  // Remove any previously injected Enode devices to avoid duplicates
+  DEVICES = DEVICES.filter(d => !d._enodeId);
+
+  // ── Tesla EVs → type "ev"
+  enodeDevices.vehicles.forEach(v => {
+    const uid = `enode_ev_${v.id}`;
+    const info = v.information || {};
+    const cs = v.chargeState || {};
+    const loc = v.location || {};
+    DEVICES.push({
+      id: uid, uid, type: "ev", _enodeId: v.id, _enodeType: "vehicles",
+      name: `${info.brand||""} ${info.model||"EV"}`.trim(),
+      enodeAsset: v,
+      evAsset: {
+        station_id: v.id, name: `${info.brand||""} ${info.model||""}`.trim(),
+        protocol: "enode", vendor: v.vendor,
+        status: cs.isCharging ? "Charging" : cs.isPluggedIn ? "Plugged In" : "Available",
+        power_kw: cs.chargeRate || 0, soc_pct: cs.batteryLevel,
+        lat: loc.latitude, lon: loc.longitude
+      }
+    });
+    if (!relayState[uid]) relayState[uid] = {1:false,2:false,3:false,4:false,all:false};
+  });
+
+  // ── ChargePoint → type "ev" (charger subtype)
+  enodeDevices.chargers.forEach(c => {
+    const uid = `enode_charger_${c.id}`;
+    const info = c.information || {};
+    const cs = c.chargeState || {};
+    const loc = c.location || {};
+    DEVICES.push({
+      id: uid, uid, type: "ev", _enodeId: c.id, _enodeType: "chargers",
+      name: `${info.brand||""} ${info.model||"Charger"}`.trim(),
+      enodeAsset: c,
+      evAsset: {
+        station_id: c.id, name: `${info.brand||""} ${info.model||""}`.trim(),
+        protocol: "enode", vendor: c.vendor,
+        status: cs.isCharging ? "Charging" : cs.isPluggedIn ? "Plugged In" : "Available",
+        power_kw: cs.chargeRate || 0,
+        lat: loc.latitude, lon: loc.longitude
+      }
+    });
+    if (!relayState[uid]) relayState[uid] = {1:false,2:false,3:false,4:false,all:false};
+  });
+
+  // ── Honeywell → type "thermostat"
+  enodeDevices.hvacs.forEach(h => {
+    const uid = `enode_hvac_${h.id}`;
+    const info = h.information || {};
+    const ts = h.thermostatState || {};
+    const temp = h.temperatureState || {};
+    const loc = h.location || {};
+    DEVICES.push({
+      id: uid, uid, type: "thermostat", _enodeId: h.id, _enodeType: "hvacs",
+      name: `${info.brand||""} ${info.model||"Thermostat"}`.trim(),
+      enodeAsset: h,
+      thermAsset: {
+        asset_id: h.id, name: `${info.brand||""} ${info.model||""}`.trim(),
+        protocol: "enode", vendor: h.vendor,
+        current_temp_f: temp.currentTemperature != null ? Math.round(temp.currentTemperature * 9/5 + 32) : null,
+        heat_setpoint_f: ts.heatSetpoint != null ? Math.round(ts.heatSetpoint * 9/5 + 32) : null,
+        cool_setpoint_f: ts.coolSetpoint != null ? Math.round(ts.coolSetpoint * 9/5 + 32) : null,
+        mode: ts.mode,
+        lat: loc.latitude, lon: loc.longitude
+      }
+    });
+    if (!relayState[uid]) relayState[uid] = {1:false,2:false,3:false,4:false,all:false};
+  });
+
+  // ── SolarEdge → type "inverter"
+  enodeDevices.inverters.forEach(inv => {
+    const uid = `enode_inverter_${inv.id}`;
+    const info = inv.information || {};
+    const ps = inv.productionState || {};
+    const loc = inv.location || {};
+    DEVICES.push({
+      id: uid, uid, type: "inverter", _enodeId: inv.id, _enodeType: "inverters",
+      name: `${info.brand||""} ${info.model||"Inverter"}`.trim(),
+      enodeAsset: inv,
+      lat: loc.latitude, lon: loc.longitude
+    });
+    if (!relayState[uid]) relayState[uid] = {1:false,2:false,3:false,4:false,all:false};
+  });
+
+  // ── Tesla Powerwall → type "battery"
+  enodeDevices.batteries.forEach(b => {
+    const uid = `enode_batt_${b.id}`;
+    const info = b.information || {};
+    const cs = b.chargeState || {};
+    const cfg = b.config || {};
+    const loc = b.location || {};
+    DEVICES.push({
+      id: uid, uid, type: "battery", _enodeId: b.id, _enodeType: "batteries",
+      name: `${info.brand||""} ${info.model||"Battery"}`.trim(),
+      enodeAsset: b,
+      battAsset: {
+        asset_id: b.id, name: `${info.brand||""} ${info.model||""}`.trim(),
+        protocol: "enode", vendor: b.vendor,
+        soc_pct: cs.batteryLevel, capacity_kwh: cs.batteryCapacity,
+        charge_rate_kw: cs.chargeRate, status: cs.status,
+        operation_mode: cfg.operationMode,
+        lat: loc.latitude, lon: loc.longitude
+      }
+    });
+    if (!relayState[uid]) relayState[uid] = {1:false,2:false,3:false,4:false,all:false};
+  });
+
+  console.log(`[Enode] Injected ${DEVICES.filter(d=>d._enodeId).length} Enode device(s) into DEVICES array.`);
+
+  // Refresh selectors and groups
+  // Inject Enode devices (Tesla EV, ChargePoint, Honeywell, SolarEdge, Powerwall)
+  if (typeof enodeInjectDevices === "function" && typeof enodeDevices !== "undefined") {
+    enodeInjectDevices();
+  }
+
+  if (typeof refreshGroupSelectors === "function") refreshGroupSelectors();
+  if (typeof populateTargetSelector === "function") populateTargetSelector();
+}
+
+// ── Level 2: DR Event Dispatch for Enode Devices ─────────────────────────────
+async function enodeDRDispatch(device, eventConfig) {
+  if (!device._enodeId || !device._enodeType) return { success: false, error: "Not an Enode device" };
+
+  const type = device._enodeType;
+  const id = device._enodeId;
+
+  try {
+    let result;
+
+    if (type === "vehicles") {
+      // Pause EV charging during DR event
+      result = await enodePost(`/vehicles/${id}/charging`, { action: "stop" });
+      console.log(`[Enode DR] Stopped charging on vehicle ${id}`);
+
+    } else if (type === "chargers") {
+      // Pause charger during DR event
+      result = await enodePost(`/chargers/${id}/charging`, { action: "stop" });
+      console.log(`[Enode DR] Stopped charging on charger ${id}`);
+
+    } else if (type === "hvacs") {
+      // Thermostat setback — raise cooling setpoint by offset
+      const offset = eventConfig?.setbackDegF || 4;
+      const asset = device.enodeAsset;
+      const currentCool = asset?.thermostatState?.coolSetpoint;
+      if (currentCool != null) {
+        const newCoolC = currentCool + (offset * 5/9);
+        result = await enodePost(`/hvacs/${id}/mode`, {
+          mode: "PERMANENT_HOLD",
+          coolSetpoint: newCoolC,
+          heatSetpoint: asset.thermostatState.heatSetpoint
+        });
+        console.log(`[Enode DR] Set thermostat ${id} hold — cool setpoint raised by ${offset}°F`);
+      }
+
+    } else if (type === "batteries") {
+      // Discharge battery during DR event
+      result = await enodePost(`/batteries/${id}/operation-mode`, { operationMode: "EXPORT_FOCUS" });
+      console.log(`[Enode DR] Set battery ${id} to EXPORT_FOCUS (discharge)`);
+
+    } else if (type === "inverters") {
+      // Solar inverters — read-only, no DR action available
+      console.log(`[Enode DR] Inverter ${id} — no DR action (read-only)`);
+      return { success: true, action: "none", reason: "Inverters are read-only" };
+    }
+
+    return { success: true, result };
+  } catch(e) {
+    console.error(`[Enode DR] Dispatch error for ${type} ${id}:`, e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+// Restore devices after DR event ends
+async function enodeDRRestore(device, restoreConfig) {
+  if (!device._enodeId || !device._enodeType) return;
+
+  const type = device._enodeType;
+  const id = device._enodeId;
+
+  try {
+    if (type === "vehicles" || type === "chargers") {
+      // Resume charging
+      await enodePost(`/${type}/${id}/charging`, { action: "start" });
+      console.log(`[Enode DR] Resumed charging on ${type} ${id}`);
+
+    } else if (type === "hvacs") {
+      // Return thermostat to schedule
+      await enodePost(`/hvacs/${id}/mode`, { mode: "FOLLOW_SCHEDULE" });
+      console.log(`[Enode DR] Restored thermostat ${id} to schedule`);
+
+    } else if (type === "batteries") {
+      // Return battery to self-reliance
+      const defaultMode = restoreConfig?.defaultBatteryMode || "SELF_RELIANCE";
+      await enodePost(`/batteries/${id}/operation-mode`, { operationMode: defaultMode });
+      console.log(`[Enode DR] Restored battery ${id} to ${defaultMode}`);
+    }
+  } catch(e) { console.warn(`[Enode DR] Restore error for ${type} ${id}:`, e.message); }
+}
+
+// ── Level 3: Map Integration for Enode Devices ───────────────────────────────
+function enodeAddToMap() {
+  if (!map || !mapInitialized) return;
+
+  const enodeDevs = DEVICES.filter(d => d._enodeId);
+  const typeIcons = {
+    ev: "🚗", charger: "⚡", thermostat: "🌡️", inverter: "☀️", battery: "🔋"
+  };
+  const typeColors = {
+    ev: "#16a34a", charger: "#3b82f6", thermostat: "#d97706", inverter: "#eab308", battery: "#059669"
+  };
+
+  enodeDevs.forEach(d => {
+    const asset = d.enodeAsset;
+    const loc = asset?.location;
+    const lat = loc?.latitude || d.lat || d.evAsset?.lat || d.battAsset?.lat || d.thermAsset?.lat;
+    const lon = loc?.longitude || d.lon || d.evAsset?.lon || d.battAsset?.lon || d.thermAsset?.lon;
+    if (!lat || !lon) return;
+
+    // Remove existing marker if present
+    if (mapMarkers[d.uid]) { map.removeLayer(mapMarkers[d.uid]); }
+
+    const color = typeColors[d.type] || "#6b7280";
+    const icon = typeIcons[d.type] || "📡";
+    const online = asset?.isReachable;
+
+    const markerIcon = L.divIcon({
+      html: `<div style="width:32px;height:32px;background:${color};border:2px solid white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 6px rgba(0,0,0,0.3);">${icon}</div>`,
+      className: "",
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+      popupAnchor: [0, -20]
+    });
+
+    const marker = L.marker([lat, lon], { icon: markerIcon });
+
+    // Build popup content based on device type
+    let popupExtra = "";
+    if (d.type === "ev" && d.evAsset) {
+      popupExtra = `<div>Battery: ${d.evAsset.soc_pct||d.enodeAsset?.chargeState?.batteryLevel||"—"}% &bull; ${d.evAsset.status||"—"}</div>`;
+    } else if (d.type === "battery" && d.battAsset) {
+      popupExtra = `<div>SOC: ${d.battAsset.soc_pct||"—"}% &bull; ${d.battAsset.operation_mode||"—"}</div>`;
+    } else if (d.type === "thermostat" && d.thermAsset) {
+      popupExtra = `<div>Temp: ${d.thermAsset.current_temp_f||"—"}°F &bull; Mode: ${d.thermAsset.mode||"—"}</div>`;
+    } else if (d.type === "inverter") {
+      const ps = d.enodeAsset?.productionState;
+      popupExtra = `<div>Production: ${ps?.productionRate != null ? ps.productionRate.toFixed(1)+" kW" : "—"}</div>`;
+    }
+
+    marker.bindPopup(`<div style="font-family:-apple-system,sans-serif;min-width:160px;">
+      <div style="font-weight:600;font-size:13px;margin-bottom:4px;">${icon} ${d.name}</div>
+      <div style="font-size:11px;color:${online?"#0F6E56":"#888780"};margin-bottom:4px;">${online?"● Online via Enode":"○ Offline"}</div>
+      ${popupExtra}
+      <div style="font-size:10px;color:#888780;margin-top:4px;">Vendor: ${asset?.vendor||"—"} &bull; Enode ID: ${d._enodeId.slice(0,8)}…</div>
+    </div>`);
+
+    marker.addTo(map);
+    mapMarkers[d.uid] = marker;
+  });
+}
+
+// ── Level 3: Program Summary Stats for Enode Devices ─────────────────────────
+function enodeGetFleetStats() {
+  const stats = { total: 0, online: 0, offline: 0, types: {} };
+  const enodeDevs = DEVICES.filter(d => d._enodeId);
+  stats.total = enodeDevs.length;
+  enodeDevs.forEach(d => {
+    const online = d.enodeAsset?.isReachable;
+    if (online) stats.online++; else stats.offline++;
+    const t = d._enodeType || "unknown";
+    if (!stats.types[t]) stats.types[t] = { total: 0, online: 0 };
+    stats.types[t].total++;
+    if (online) stats.types[t].online++;
+  });
+  return stats;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// End Enode Fleet Integration
+// ══════════════════════════════════════════════════════════════════════════════
 
 
 let drPrograms      = [];   // all configured programs
