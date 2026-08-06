@@ -22061,7 +22061,8 @@ async function initEnodeTab() {
   await loadAllEnodeDevices();
   enodeInjectDevices();
   renderEnodeOverview();
-  setStatus("ready", `Enode: ${Object.values(enodeDevices).reduce((s,a) => s+a.length, 0)} device(s) loaded.`);
+  renderEnodeStatsPanel();
+  setStatus("ready", `Enode: ${Object.values(enodeDevices).reduce((s,a) => s+(a||[]).length, 0)} device(s) loaded.`);
 }
 
 function renderEnodeOverview() {
@@ -22658,6 +22659,319 @@ function enodeGetFleetStats() {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // End Enode Fleet Integration
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Enode Statistics Pipeline — M&V Integration
+// Pulls interval data from Enode and feeds it into the AMI M&V framework
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Fetch statistics by device type ──────────────────────────────────────────
+
+// EV/Charger — charging sessions and time-bucket consumption
+async function enodeGetChargingStats(deviceType, deviceId, startDate, endDate, resolution) {
+  // deviceType: "vehicles" or "chargers"
+  // resolution: "QUARTER_HOUR", "HOUR", "DAY", "MONTH"
+  const res = resolution || "QUARTER_HOUR";
+  const params = `?resolution=${res}&from=${startDate}&to=${endDate}`;
+  return enodeGet(`/${deviceType}/${deviceId}/statistics/charging${params}`);
+}
+
+async function enodeGetChargingSessions(deviceType, deviceId, startDate, endDate) {
+  const params = `?from=${startDate}&to=${endDate}`;
+  return enodeGet(`/${deviceType}/${deviceId}/statistics/charging/sessions${params}`);
+}
+
+// Solar Inverter — production statistics
+async function enodeGetInverterStats(inverterId, startDate, endDate, resolution) {
+  const res = resolution || "QUARTER_HOUR";
+  const params = `?resolution=${res}&from=${startDate}&to=${endDate}`;
+  return enodeGet(`/inverters/${inverterId}/statistics${params}`);
+}
+
+// HEM System — combined solar + battery + meter data
+async function enodeGetHEMStats(hemSystemId, interval) {
+  // interval: "YYYY-MM-DD" for daily (5/15-min buckets), "YYYY-MM" for monthly (daily), "YYYY" for yearly (monthly)
+  return enodeGet(`/hem-systems/${hemSystemId}/statistics?interval=${interval}`);
+}
+
+// ── Sync Enode statistics to ami_readings ─────────────────────────────────────
+async function enodeSyncStatistics(options) {
+  const { deviceType, deviceId, meterUid, startDate, endDate, resolution } = options || {};
+  if (!deviceId || !meterUid) { console.warn("[Enode Stats] Missing deviceId or meterUid"); return { synced: 0 }; }
+
+  setStatus("sending", "Syncing Enode statistics…");
+  let stats = null;
+  let synced = 0;
+
+  try {
+    if (deviceType === "vehicles" || deviceType === "chargers") {
+      stats = await enodeGetChargingStats(deviceType, deviceId, startDate, endDate, resolution || "QUARTER_HOUR");
+    } else if (deviceType === "inverters") {
+      stats = await enodeGetInverterStats(deviceId, startDate, endDate, resolution || "QUARTER_HOUR");
+    }
+
+    if (!stats?.data?.length) {
+      setStatus("ready", "No Enode statistics in range.");
+      return { synced: 0 };
+    }
+
+    // Transform Enode buckets into ami_readings format
+    const readings = stats.data.map(bucket => {
+      // Enode returns: { from, to, consumption (kWh or kW depending on resolution), production, etc. }
+      const intervalStart = bucket.from || bucket.startTime;
+      const kw = bucket.consumption != null ? bucket.consumption : (bucket.power || bucket.production || 0);
+      const kwh = bucket.energy != null ? bucket.energy : (bucket.consumptionKwh || null);
+      return {
+        meter_uid:      meterUid,
+        interval_start: intervalStart,
+        kw:             kw,
+        kwh:            kwh,
+        source:         "enode",
+        enode_device_id: deviceId,
+        recorded_at:    new Date().toISOString()
+      };
+    });
+
+    // Batch insert, skipping duplicates
+    for (const reading of readings) {
+      try {
+        await supabasePost("ami_readings", reading);
+        synced++;
+      } catch(e) {
+        // Skip duplicate key errors
+        if (!e.message?.includes("duplicate") && !e.message?.includes("unique")) {
+          console.warn("[Enode Stats] Insert error:", e.message);
+        }
+      }
+    }
+
+    setStatus("ready", `✅ Synced ${synced} Enode interval reading(s) to AMI.`);
+    return { synced };
+  } catch(e) {
+    setStatus("error", `Enode stats sync error: ${e.message}`);
+    return { synced: 0, error: e.message };
+  }
+}
+
+// ── Sync all Enode devices for a date range ──────────────────────────────────
+async function enodeSyncAllStatistics(startDate, endDate) {
+  if (!startDate || !endDate) {
+    const now = new Date();
+    endDate   = now.toISOString().slice(0,10);
+    startDate = new Date(now - 7 * 86400000).toISOString().slice(0,10);
+  }
+
+  setStatus("sending", `Syncing Enode statistics ${startDate} → ${endDate}…`);
+  let totalSynced = 0;
+  const enodeDevs = DEVICES.filter(d => d._enodeId);
+
+  for (const d of enodeDevs) {
+    // Use device uid as meter_uid for Enode readings
+    const meterUid = `enode_${d._enodeType}_${d._enodeId}`;
+    let dtype = d._enodeType;
+
+    // Only sync device types that have statistics endpoints
+    if (!["vehicles", "chargers", "inverters"].includes(dtype)) continue;
+
+    try {
+      const result = await enodeSyncStatistics({
+        deviceType: dtype,
+        deviceId:   d._enodeId,
+        meterUid:   meterUid,
+        startDate:  startDate,
+        endDate:    endDate,
+        resolution: "QUARTER_HOUR"
+      });
+      totalSynced += result.synced || 0;
+    } catch(e) {
+      console.warn(`[Enode Stats] Sync failed for ${d.name}:`, e.message);
+    }
+  }
+
+  setStatus("ready", `✅ Enode statistics sync complete — ${totalSynced} total readings.`);
+  console.log(`[Enode Stats] Synced ${totalSynced} readings across ${enodeDevs.length} device(s).`);
+  return { totalSynced };
+}
+
+// ── Run M&V using Enode data ─────────────────────────────────────────────────
+async function enodeRunMV(deviceId, deviceType, eventFireAt, eventEndAt) {
+  // This fetches statistics for the event window + 30-day baseline period,
+  // then calculates baseline vs actual using the same methodology as amiRunMV
+
+  const fireAt  = new Date(eventFireAt);
+  const endAt   = new Date(eventEndAt);
+  const duration = (endAt - fireAt) / 60000;
+
+  // 1. Fetch event-window statistics (15-min buckets)
+  let eventStats;
+  if (deviceType === "vehicles" || deviceType === "chargers") {
+    eventStats = await enodeGetChargingStats(deviceType, deviceId,
+      fireAt.toISOString().slice(0,10), endAt.toISOString().slice(0,10), "QUARTER_HOUR");
+  } else if (deviceType === "inverters") {
+    eventStats = await enodeGetInverterStats(deviceId,
+      fireAt.toISOString().slice(0,10), endAt.toISOString().slice(0,10), "QUARTER_HOUR");
+  }
+
+  // 2. Fetch baseline period (30 days prior)
+  const baselineStart = new Date(fireAt.getTime() - 30 * 86400000);
+  let baselineStats;
+  if (deviceType === "vehicles" || deviceType === "chargers") {
+    baselineStats = await enodeGetChargingStats(deviceType, deviceId,
+      baselineStart.toISOString().slice(0,10), fireAt.toISOString().slice(0,10), "QUARTER_HOUR");
+  } else if (deviceType === "inverters") {
+    baselineStats = await enodeGetInverterStats(deviceId,
+      baselineStart.toISOString().slice(0,10), fireAt.toISOString().slice(0,10), "QUARTER_HOUR");
+  }
+
+  const eventBuckets    = eventStats?.data || [];
+  const baselineBuckets = baselineStats?.data || [];
+
+  // 3. Calculate baseline per hour-of-day (same methodology as amiRunMV)
+  const baselineByHour = {};
+  baselineBuckets.forEach(b => {
+    const h = new Date(b.from || b.startTime).getHours();
+    if (!baselineByHour[h]) baselineByHour[h] = [];
+    const kw = b.consumption ?? b.power ?? b.production ?? 0;
+    if (kw > 0) baselineByHour[h].push(kw);
+  });
+
+  const baselineMap = {};
+  Object.entries(baselineByHour).forEach(([h, vals]) => {
+    const sorted = [...vals].sort((a,b) => a-b);
+    const top10 = sorted.slice(-10);
+    baselineMap[parseInt(h)] = top10.length ? top10.reduce((s,v) => s+v, 0) / top10.length : null;
+  });
+
+  // 4. Build per-interval comparison
+  const intervals = eventBuckets.filter(b => {
+    const t = new Date(b.from || b.startTime);
+    return t >= fireAt && t <= endAt;
+  }).map(b => {
+    const t = new Date(b.from || b.startTime);
+    const h = t.getHours();
+    const actualKw   = b.consumption ?? b.power ?? b.production ?? 0;
+    const baselineKw = baselineMap[h] ?? null;
+    const reductionKw  = baselineKw != null ? Math.max(0, baselineKw - actualKw) : null;
+    const reductionPct = baselineKw > 0 && reductionKw != null ? (reductionKw / baselineKw * 100) : null;
+    return { time: t, actualKw, baselineKw, reductionKw, reductionPct };
+  });
+
+  // 5. Aggregate
+  const validBaselines  = intervals.filter(i => i.baselineKw != null);
+  const validReductions = intervals.filter(i => i.reductionKw != null);
+  const avgBaseline  = validBaselines.length  ? validBaselines.reduce((s,i)=>s+i.baselineKw,0)/validBaselines.length : 0;
+  const avgActual    = intervals.length        ? intervals.reduce((s,i)=>s+i.actualKw,0)/intervals.length : 0;
+  const avgReduction = validReductions.length  ? validReductions.reduce((s,i)=>s+i.reductionKw,0)/validReductions.length : 0;
+  const reductionPct = avgBaseline > 0 ? (avgReduction / avgBaseline * 100) : 0;
+  const durHrs       = duration / 60;
+  const energySaved  = avgReduction * durHrs;
+
+  return {
+    deviceId, deviceType, intervals,
+    avgBaseline, avgActual, avgReduction,
+    reductionPct, energySaved,
+    method: "10of10", source: "enode"
+  };
+}
+
+// ── UI: Enode Statistics Panel (added to Enode tab) ──────────────────────────
+function renderEnodeStatsPanel() {
+  const container = document.getElementById("enode-stats-panel");
+  if (!container) return;
+
+  const enodeDevs = DEVICES.filter(d => d._enodeId && ["vehicles","chargers","inverters"].includes(d._enodeType));
+  const today  = new Date().toISOString().slice(0,10);
+  const week   = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
+
+  container.innerHTML = `
+    <div class="sched-card" style="margin-top:14px;">
+      <div class="sched-card-header">
+        <div class="sched-card-title">📊 Enode Statistics — M&V Data Pipeline</div>
+      </div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">
+        Pull 15-minute interval kW/kWh data from Enode devices into your AMI M&V framework.
+        Data syncs into <code>ami_readings</code> for baseline calculations and curtailment verification.
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-bottom:12px;">
+        <div>
+          <div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;margin-bottom:3px;">From</div>
+          <input type="date" id="enode-stats-from" value="${week}" class="sched-input" style="width:100%;" />
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;margin-bottom:3px;">To</div>
+          <input type="date" id="enode-stats-to" value="${today}" class="sched-input" style="width:100%;" />
+        </div>
+        <button class="data-refresh-btn" style="background:rgba(22,163,74,0.1);color:#166534;border-color:#16a34a;padding:8px 16px;" onclick="enodeRunStatsSync()">
+          ↻ Sync All Statistics
+        </button>
+      </div>
+      <div style="font-size:11px;color:var(--text-hint);margin-bottom:8px;">
+        Devices with statistics: ${enodeDevs.map(d => `<span style="font-weight:600;">${d.name}</span> (${d._enodeType})`).join(", ") || "None linked"}
+      </div>
+      <div id="enode-stats-results" style="font-size:12px;color:var(--text-secondary);"></div>
+      <!-- Per-device M&V quick run -->
+      <div style="margin-top:14px;border-top:0.5px solid var(--border);padding-top:12px;">
+        <div style="font-size:12px;font-weight:600;margin-bottom:8px;">Quick M&V — Run Enode Baseline vs Actual</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end;">
+          <div>
+            <div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;margin-bottom:3px;">Device</div>
+            <select id="enode-mv-device" class="sched-input" style="width:100%;">
+              <option value="">— Select —</option>
+              ${enodeDevs.map(d => `<option value="${d._enodeId}|${d._enodeType}">${d.name}</option>`).join("")}
+            </select>
+          </div>
+          <div>
+            <div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;margin-bottom:3px;">Event Start</div>
+            <input type="datetime-local" id="enode-mv-start" class="sched-input" style="width:100%;" />
+          </div>
+          <div>
+            <div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;margin-bottom:3px;">Event End</div>
+            <input type="datetime-local" id="enode-mv-end" class="sched-input" style="width:100%;" />
+          </div>
+          <button class="data-refresh-btn" style="padding:8px 16px;" onclick="enodeRunQuickMV()">Run M&V</button>
+        </div>
+      </div>
+      <div id="enode-mv-results" style="margin-top:12px;"></div>
+    </div>`;
+}
+
+async function enodeRunStatsSync() {
+  const from = document.getElementById("enode-stats-from")?.value;
+  const to   = document.getElementById("enode-stats-to")?.value;
+  const el   = document.getElementById("enode-stats-results");
+  if (el) el.innerHTML = `<span style="color:var(--text-hint);">Syncing…</span>`;
+  const result = await enodeSyncAllStatistics(from, to);
+  if (el) el.innerHTML = `<span style="color:#166534;font-weight:600;">✅ Synced ${result.totalSynced} interval readings to AMI framework.</span>`;
+}
+
+async function enodeRunQuickMV() {
+  const devVal = document.getElementById("enode-mv-device")?.value;
+  const start  = document.getElementById("enode-mv-start")?.value;
+  const end    = document.getElementById("enode-mv-end")?.value;
+  const el     = document.getElementById("enode-mv-results");
+  if (!devVal || !start || !end) { alert("Select device, start and end time."); return; }
+
+  const [deviceId, deviceType] = devVal.split("|");
+  if (el) el.innerHTML = `<span style="color:var(--text-hint);">Running M&V analysis…</span>`;
+
+  const result = await enodeRunMV(deviceId, deviceType, new Date(start).toISOString(), new Date(end).toISOString());
+
+  if (el) {
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:8px;">
+        <div class="vp-stat"><div style="font-size:10px;color:var(--text-hint);text-transform:uppercase;">Baseline</div><div class="vp-stat-val" style="font-size:18px;color:var(--blue-dark);">${result.avgBaseline.toFixed(2)} kW</div></div>
+        <div class="vp-stat"><div style="font-size:10px;color:var(--text-hint);text-transform:uppercase;">Actual</div><div class="vp-stat-val" style="font-size:18px;color:#166534;">${result.avgActual.toFixed(2)} kW</div></div>
+        <div class="vp-stat"><div style="font-size:10px;color:var(--text-hint);text-transform:uppercase;">Reduction</div><div class="vp-stat-val" style="font-size:18px;color:var(--red);">${result.avgReduction.toFixed(2)} kW</div></div>
+        <div class="vp-stat"><div style="font-size:10px;color:var(--text-hint);text-transform:uppercase;">% of Base</div><div class="vp-stat-val" style="font-size:18px;">${result.reductionPct.toFixed(1)}%</div></div>
+        <div class="vp-stat"><div style="font-size:10px;color:var(--text-hint);text-transform:uppercase;">Energy Saved</div><div class="vp-stat-val" style="font-size:18px;color:#166534;">${result.energySaved.toFixed(3)} kWh</div></div>
+      </div>
+      <div style="font-size:10px;color:var(--text-hint);margin-top:6px;">Method: Top 10 of 10 baseline &bull; Source: Enode API &bull; ${result.intervals.length} intervals analyzed</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// End Enode Statistics Pipeline
 // ══════════════════════════════════════════════════════════════════════════════
 
 
