@@ -259,6 +259,8 @@ function switchMain(main, btn) {
   document.getElementById("sub-tabs-admin").style.display   = main === "admin"   ? "flex" : "none";
   document.getElementById("sub-tabs-monitor").style.display = main === "monitor" ? "flex" : "none";
   document.getElementById("sub-tabs-ami").style.display     = main === "ami"     ? "flex" : "none";
+  const enodeBar = document.getElementById("sub-tabs-enode");
+  if (enodeBar) enodeBar.style.display = main === "enode" ? "flex" : "none";
   if (main === "summary")  { activatePane("summary");          initSummaryTab();    }
   if (main === "programs") { activatePane("summary-programs"); loadSummaryPrograms(); }
   else if (main === "weather") { activatePane("weather"); initWeatherTab(); }
@@ -267,7 +269,7 @@ function switchMain(main, btn) {
   else if (main === "devices") { const s = currentSub.devices||"data"; activatePane(s); activateSubBtn("devices",s); }
   else if (main === "monitor") { const s = currentSub.monitor||"monitor-triggers"; activatePane(s); activateSubBtn("monitor",s); }
   else if (main === "vp")   { activatePane("vp"); initVPTab(); }
-  else if (main === "enode") { activatePane("enode"); initEnodeTab(); }
+  else if (main === "enode") { const s = currentSub.enode||"enode-overview"; activatePane(s); activateSubBtn("enode",s); }
   else if (main === "lora") { activatePane("lora"); loraInit(); }
   else if (main === "ami")  { const s = currentSub.ami||"ami-ingest"; activatePane(s); activateSubBtn("ami",s); initAMITab(s); }
 }
@@ -339,6 +341,14 @@ function runTabInit(name) {
   if (name === "thermostats")      { initThermostatsTab(); }
   if (name === "vp")               { initVPTab(); }
   if (name === "enode")            { initEnodeTab(); }
+  if (name === "enode-overview")   { initEnodeTab(); }
+  if (name === "enode-evs")        { renderEnodeEVs(); }
+  if (name === "enode-chargers")   { renderEnodeChargers(); }
+  if (name === "enode-thermostats"){ renderEnodeThermostats(); }
+  if (name === "enode-solar")      { renderEnodeSolar(); }
+  if (name === "enode-batteries")  { renderEnodeBatteries(); }
+  if (name === "enode-meters")     { renderEnodeMeters(); }
+  if (name === "enode-statistics") { renderEnodeStatsPanel(); }
 }
 
 function switchTab(name, btn) { switchMain(name, btn); }
@@ -22061,7 +22071,6 @@ async function initEnodeTab() {
   await loadAllEnodeDevices();
   enodeInjectDevices();
   renderEnodeOverview();
-  renderEnodeStatsPanel();
   setStatus("ready", `Enode: ${Object.values(enodeDevices).reduce((s,a) => s+(a||[]).length, 0)} device(s) loaded.`);
 }
 
@@ -22292,6 +22301,258 @@ function renderEnodeOverview() {
   </div>`;
 
   container.innerHTML = html;
+}
+
+// ── Enode Per-Device-Type Renderers ──────────────────────────────────────────
+
+function enodeDeviceStatsWidget(containerId, deviceType, devices) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const today = new Date().toISOString().slice(0,10);
+  const week  = new Date(Date.now()-7*86400000).toISOString().slice(0,10);
+  const devOpts = devices.map(d => `<option value="${d._enodeId}|${d._enodeType}">${d.name}</option>`).join("");
+  el.innerHTML = `
+    <div class="sched-card" style="margin-top:14px;">
+      <div class="sched-card-header"><div class="sched-card-title">📊 Statistics & M&V</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end;margin-bottom:10px;">
+        <div><div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;margin-bottom:3px;">Device</div>
+          <select class="sched-input" style="width:100%;" id="${containerId}-dev"><option value="">All</option>${devOpts}</select></div>
+        <div><div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;margin-bottom:3px;">From</div>
+          <input type="date" value="${week}" class="sched-input" style="width:100%;" id="${containerId}-from" /></div>
+        <div><div style="font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;margin-bottom:3px;">To</div>
+          <input type="date" value="${today}" class="sched-input" style="width:100%;" id="${containerId}-to" /></div>
+        <button class="data-refresh-btn" style="padding:8px 14px;background:rgba(22,163,74,0.1);color:#166534;border-color:#16a34a;" onclick="enodeRunSubTabStats('${containerId}')">Run Stats</button>
+      </div>
+      <div id="${containerId}-results"></div>
+    </div>`;
+}
+
+async function enodeRunSubTabStats(containerId) {
+  const devVal = document.getElementById(`${containerId}-dev`)?.value;
+  const from   = document.getElementById(`${containerId}-from`)?.value;
+  const to     = document.getElementById(`${containerId}-to`)?.value;
+  const el     = document.getElementById(`${containerId}-results`);
+  if (!from || !to) { alert("Select date range."); return; }
+  if (el) el.innerHTML = `<span style="color:var(--text-hint);font-size:12px;">Loading statistics…</span>`;
+
+  if (devVal) {
+    const [deviceId, deviceType] = devVal.split("|");
+    const result = await enodeRunMV(deviceId, deviceType, new Date(from).toISOString(), new Date(to+"T23:59:59").toISOString());
+    if (el) el.innerHTML = enodeMVResultsHTML(result);
+  } else {
+    // Sync all devices of this type
+    const result = await enodeSyncAllStatistics(from, to);
+    if (el) el.innerHTML = `<span style="color:#166534;font-weight:600;font-size:12px;">✅ Synced ${result.totalSynced} interval readings.</span>`;
+  }
+}
+
+function enodeMVResultsHTML(r) {
+  return `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:8px;">
+    <div class="vp-stat"><div style="font-size:10px;color:var(--text-hint);text-transform:uppercase;">Baseline</div><div class="vp-stat-val" style="font-size:18px;color:var(--blue-dark);">${r.avgBaseline.toFixed(2)} kW</div></div>
+    <div class="vp-stat"><div style="font-size:10px;color:var(--text-hint);text-transform:uppercase;">Actual</div><div class="vp-stat-val" style="font-size:18px;color:#166534;">${r.avgActual.toFixed(2)} kW</div></div>
+    <div class="vp-stat"><div style="font-size:10px;color:var(--text-hint);text-transform:uppercase;">Reduction</div><div class="vp-stat-val" style="font-size:18px;color:var(--red);">${r.avgReduction.toFixed(2)} kW</div></div>
+    <div class="vp-stat"><div style="font-size:10px;color:var(--text-hint);text-transform:uppercase;">% of Base</div><div class="vp-stat-val" style="font-size:18px;">${r.reductionPct.toFixed(1)}%</div></div>
+    <div class="vp-stat"><div style="font-size:10px;color:var(--text-hint);text-transform:uppercase;">Energy Saved</div><div class="vp-stat-val" style="font-size:18px;color:#166534;">${r.energySaved.toFixed(3)} kWh</div></div>
+  </div><div style="font-size:10px;color:var(--text-hint);margin-top:6px;">Method: Top 10 of 10 &bull; Source: Enode &bull; ${r.intervals.length} intervals</div>`;
+}
+
+function renderEnodeEVs() {
+  const container = document.getElementById("enode-evs-container");
+  if (!container) return;
+  const evs = enodeDevices.vehicles || [];
+  if (!evs.length) { container.innerHTML = `<div class="sched-empty"><div style="font-size:28px;margin-bottom:8px;">🚗</div>No EVs connected.<br><button class="data-refresh-btn" style="margin-top:12px;background:rgba(22,163,74,0.1);color:#166534;border-color:#16a34a;" onclick="enodeLinkDevice('vehicle','TESLA')">+ Link Tesla EV</button></div>`; return; }
+  let html = `<div class="sched-card"><div class="sched-card-header"><div class="sched-card-title">🚗 Electric Vehicles (${evs.length})</div>
+    <div style="display:flex;gap:8px;"><button class="data-refresh-btn" onclick="loadAllEnodeDevices().then(()=>renderEnodeEVs())">↻ Refresh</button>
+    <button class="data-refresh-btn" style="background:rgba(22,163,74,0.1);color:#166534;border-color:#16a34a;" onclick="enodeLinkDevice('vehicle','TESLA')">+ Link EV</button></div></div>`;
+  evs.forEach(v => { html += enodeVehicleRow(v); });
+  html += `</div>`;
+  container.innerHTML = html;
+  const devs = DEVICES.filter(d => d._enodeType === "vehicles");
+  enodeDeviceStatsWidget("enode-evs-stats-panel", "vehicles", devs);
+}
+
+function renderEnodeChargers() {
+  const container = document.getElementById("enode-chargers-container");
+  if (!container) return;
+  const chargers = enodeDevices.chargers || [];
+  if (!chargers.length) { container.innerHTML = `<div class="sched-empty"><div style="font-size:28px;margin-bottom:8px;">⚡</div>No EV Chargers connected.<br><button class="data-refresh-btn" style="margin-top:12px;background:rgba(37,99,235,0.1);color:#1e40af;border-color:#3b82f6;" onclick="enodeLinkDevice('charger','CHARGEPOINT')">+ Link ChargePoint</button></div>`; return; }
+  let html = `<div class="sched-card"><div class="sched-card-header"><div class="sched-card-title">⚡ EV Chargers (${chargers.length})</div>
+    <div style="display:flex;gap:8px;"><button class="data-refresh-btn" onclick="loadAllEnodeDevices().then(()=>renderEnodeChargers())">↻ Refresh</button>
+    <button class="data-refresh-btn" style="background:rgba(37,99,235,0.1);color:#1e40af;border-color:#3b82f6;" onclick="enodeLinkDevice('charger','CHARGEPOINT')">+ Link Charger</button></div></div>`;
+  chargers.forEach(c => { html += enodeChargerRow(c); });
+  html += `</div>`;
+  container.innerHTML = html;
+  const devs = DEVICES.filter(d => d._enodeType === "chargers");
+  enodeDeviceStatsWidget("enode-chargers-stats-panel", "chargers", devs);
+}
+
+function renderEnodeThermostats() {
+  const container = document.getElementById("enode-thermostats-container");
+  if (!container) return;
+  const hvacs = enodeDevices.hvacs || [];
+  if (!hvacs.length) { container.innerHTML = `<div class="sched-empty"><div style="font-size:28px;margin-bottom:8px;">🌡️</div>No Thermostats connected.<br><button class="data-refresh-btn" style="margin-top:12px;background:rgba(180,83,9,0.1);color:#92400e;border-color:#d97706;" onclick="enodeLinkDevice('hvac','HONEYWELL')">+ Link Honeywell</button></div>`; return; }
+  let html = `<div class="sched-card"><div class="sched-card-header"><div class="sched-card-title">🌡️ Thermostats (${hvacs.length})</div>
+    <div style="display:flex;gap:8px;"><button class="data-refresh-btn" onclick="loadAllEnodeDevices().then(()=>renderEnodeThermostats())">↻ Refresh</button>
+    <button class="data-refresh-btn" style="background:rgba(180,83,9,0.1);color:#92400e;border-color:#d97706;" onclick="enodeLinkDevice('hvac','HONEYWELL')">+ Link Thermostat</button></div></div>`;
+  hvacs.forEach(h => { html += enodeHVACRow(h); });
+  html += `</div>`;
+  container.innerHTML = html;
+  enodeDeviceStatsWidget("enode-thermostats-stats-panel", "hvacs", DEVICES.filter(d => d._enodeType === "hvacs"));
+}
+
+function renderEnodeSolar() {
+  const container = document.getElementById("enode-solar-container");
+  if (!container) return;
+  const invs = enodeDevices.inverters || [];
+  if (!invs.length) { container.innerHTML = `<div class="sched-empty"><div style="font-size:28px;margin-bottom:8px;">☀️</div>No Solar Inverters connected.<br><button class="data-refresh-btn" style="margin-top:12px;background:rgba(217,119,6,0.1);color:#92400e;border-color:#d97706;" onclick="enodeLinkDevice('inverter','SOLAREDGE')">+ Link SolarEdge</button></div>`; return; }
+  let html = `<div class="sched-card"><div class="sched-card-header"><div class="sched-card-title">☀️ Solar Inverters (${invs.length})</div>
+    <div style="display:flex;gap:8px;"><button class="data-refresh-btn" onclick="loadAllEnodeDevices().then(()=>renderEnodeSolar())">↻ Refresh</button>
+    <button class="data-refresh-btn" style="background:rgba(217,119,6,0.1);color:#92400e;border-color:#d97706;" onclick="enodeLinkDevice('inverter','SOLAREDGE')">+ Link Inverter</button></div></div>`;
+  invs.forEach(inv => { html += enodeInverterRow(inv); });
+  html += `</div>`;
+  container.innerHTML = html;
+  enodeDeviceStatsWidget("enode-solar-stats-panel", "inverters", DEVICES.filter(d => d._enodeType === "inverters"));
+}
+
+function renderEnodeBatteries() {
+  const container = document.getElementById("enode-batteries-container");
+  if (!container) return;
+  const batts = enodeDevices.batteries || [];
+  if (!batts.length) { container.innerHTML = `<div class="sched-empty"><div style="font-size:28px;margin-bottom:8px;">🔋</div>No Batteries connected.<br><button class="data-refresh-btn" style="margin-top:12px;background:rgba(22,163,74,0.1);color:#166534;border-color:#16a34a;" onclick="enodeLinkDevice('battery','TESLA')">+ Link Powerwall</button></div>`; return; }
+  let html = `<div class="sched-card"><div class="sched-card-header"><div class="sched-card-title">🔋 Battery Storage (${batts.length})</div>
+    <div style="display:flex;gap:8px;"><button class="data-refresh-btn" onclick="loadAllEnodeDevices().then(()=>renderEnodeBatteries())">↻ Refresh</button>
+    <button class="data-refresh-btn" style="background:rgba(22,163,74,0.1);color:#166534;border-color:#16a34a;" onclick="enodeLinkDevice('battery','TESLA')">+ Link Battery</button></div></div>`;
+  batts.forEach(b => { html += enodeBatteryRow(b); });
+  html += `</div>`;
+  container.innerHTML = html;
+  enodeDeviceStatsWidget("enode-batteries-stats-panel", "batteries", DEVICES.filter(d => d._enodeType === "batteries"));
+}
+
+function renderEnodeMeters() {
+  const container = document.getElementById("enode-meters-container");
+  if (!container) return;
+  const meters = enodeDevices.meters || [];
+  if (!meters.length) { container.innerHTML = `<div class="sched-empty"><div style="font-size:28px;margin-bottom:8px;">📊</div>No Meters connected.<br><button class="data-refresh-btn" style="margin-top:12px;" onclick="enodeLinkDevice()">+ Link Device with Meter</button></div>`; return; }
+  let html = `<div class="sched-card"><div class="sched-card-header"><div class="sched-card-title">📊 Energy Meters (${meters.length})</div>
+    <button class="data-refresh-btn" onclick="loadAllEnodeDevices().then(()=>renderEnodeMeters())">↻ Refresh</button></div>`;
+  meters.forEach(m => {
+    const info = m.information || {};
+    const es = m.energyState || {};
+    const powerKw = es.power != null ? (es.power/1000).toFixed(2) + " kW" : "—";
+    const cumKwh = es.cumulativeConsumption != null ? es.cumulativeConsumption.toFixed(1) + " kWh" : "—";
+    html += `<div style="display:flex;align-items:center;gap:14px;padding:12px;border-bottom:0.5px solid var(--border);flex-wrap:wrap;">
+      <div style="width:50px;height:50px;background:rgba(99,102,241,0.1);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;">📊</div>
+      <div style="flex:1;min-width:150px;">
+        <div style="font-size:13px;font-weight:600;">${info.brand||""} ${info.model||"Meter"}</div>
+        <div style="font-size:11px;color:var(--text-hint);">${info.displayName||"—"} &bull; ${m.vendor||""}</div>
+        <div style="font-size:11px;color:${m.isReachable?"var(--green-dark)":"var(--red)"};">${m.isReachable?"● Online":"○ Offline"}</div>
+      </div>
+      <div style="min-width:100px;text-align:center;"><div style="font-size:18px;font-weight:700;color:#6366f1;">${powerKw}</div><div style="font-size:10px;color:var(--text-hint);">Current Draw</div></div>
+      <div style="min-width:100px;text-align:center;"><div style="font-size:14px;font-weight:600;color:var(--text-primary);">${cumKwh}</div><div style="font-size:10px;color:var(--text-hint);">Cumulative</div></div>
+      <button class="data-refresh-btn" onclick="enodeRefresh('meters','${m.id}')">↻</button>
+    </div>`;
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+  enodeDeviceStatsWidget("enode-meters-stats-panel", "meters", DEVICES.filter(d => d._enodeType === "meters"));
+}
+
+// ── Row renderers (extracted for reuse) ──────────────────────────────────────
+function enodeVehicleRow(v) {
+  const cs = v.chargeState || {}; const info = v.information || {};
+  const battPct = cs.batteryLevel != null ? cs.batteryLevel : "—";
+  const charging = cs.isCharging ? "Charging" : cs.isPluggedIn ? "Plugged In" : "Unplugged";
+  const chargeRate = cs.chargeRate != null ? `${cs.chargeRate} kW` : "";
+  const range = cs.range != null ? `${Math.round(cs.range * 0.621371)} mi` : "";
+  return `<div style="display:flex;align-items:center;gap:14px;padding:12px;border-bottom:0.5px solid var(--border);flex-wrap:wrap;">
+    <div style="width:80px;height:60px;background:var(--surface2);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:28px;">🚗</div>
+    <div style="flex:1;min-width:150px;"><div style="font-size:13px;font-weight:600;">${info.brand||""} ${info.model||"Vehicle"}</div>
+      <div style="font-size:11px;color:var(--text-hint);">VIN: ${info.vin||"—"} &bull; ${v.vendor}</div>
+      <div style="font-size:11px;color:${v.isReachable?"var(--green-dark)":"var(--red)"};">${v.isReachable?"● Online":"○ Offline"}</div></div>
+    <div style="min-width:120px;text-align:center;"><div style="font-size:22px;font-weight:700;color:var(--green-dark);">${battPct}%</div>
+      <div style="height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin:4px 0;"><div style="height:100%;width:${battPct}%;background:${battPct>20?"var(--green)":battPct>10?"var(--amber)":"var(--red)"};border-radius:3px;"></div></div>
+      <div style="font-size:10px;color:var(--text-hint);">${range}</div></div>
+    <div style="min-width:100px;text-align:center;"><div style="font-size:12px;font-weight:500;color:${cs.isCharging?"var(--green-dark)":"var(--text-secondary)"};">${charging}</div>
+      <div style="font-size:10px;color:var(--text-hint);">${chargeRate}</div></div>
+    <div style="display:flex;gap:6px;">${cs.isCharging
+      ? `<button class="data-refresh-btn" style="color:var(--red);border-color:var(--red);" onclick="enodeControlCharging('vehicles','${v.id}','stop')">Stop Charging</button>`
+      : `<button class="data-refresh-btn" style="color:var(--green-dark);border-color:var(--green);" onclick="enodeControlCharging('vehicles','${v.id}','start')">Start Charging</button>`}
+    </div></div>`;
+}
+
+function enodeChargerRow(c) {
+  const cs = c.chargeState || {}; const info = c.information || {};
+  const stateLabel = (cs.powerDeliveryState||"UNKNOWN").replace("PLUGGED_IN:","").replace(/_/g," ");
+  const stateColor = cs.isCharging ? "var(--green-dark)" : cs.isPluggedIn ? "var(--blue-dark)" : "var(--text-hint)";
+  return `<div style="display:flex;align-items:center;gap:14px;padding:12px;border-bottom:0.5px solid var(--border);flex-wrap:wrap;">
+    <div style="width:50px;height:50px;background:rgba(37,99,235,0.1);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;">⚡</div>
+    <div style="flex:1;min-width:150px;"><div style="font-size:13px;font-weight:600;">${info.brand||""} ${info.model||"Charger"}</div>
+      <div style="font-size:11px;color:var(--text-hint);">${info.displayName||info.serialNumber||"—"} &bull; ${c.vendor}</div>
+      <div style="font-size:11px;color:${c.isReachable?"var(--green-dark)":"var(--red)"};">${c.isReachable?"● Online":"○ Offline"}</div></div>
+    <div style="min-width:120px;text-align:center;"><div style="font-size:14px;font-weight:600;color:${stateColor};">${stateLabel}</div>
+      <div style="font-size:10px;color:var(--text-hint);">${cs.chargeRate!=null?cs.chargeRate+" kW":""}</div></div>
+    <div style="display:flex;gap:6px;">${cs.isCharging
+      ? `<button class="data-refresh-btn" style="color:var(--red);border-color:var(--red);" onclick="enodeControlCharging('chargers','${c.id}','stop')">Stop</button>`
+      : `<button class="data-refresh-btn" style="color:var(--green-dark);border-color:var(--green);" onclick="enodeControlCharging('chargers','${c.id}','start')">Start</button>`}
+    </div></div>`;
+}
+
+function enodeHVACRow(h) {
+  const info = h.information || {}; const ts = h.thermostatState || {}; const temp = h.temperatureState || {};
+  const currentTemp = temp.currentTemperature != null ? `${Math.round(temp.currentTemperature*9/5+32)}°F` : "—";
+  const setpoint = ts.heatSetpoint != null ? `Heat: ${Math.round(ts.heatSetpoint*9/5+32)}°F` : "";
+  const coolpoint = ts.coolSetpoint != null ? `Cool: ${Math.round(ts.coolSetpoint*9/5+32)}°F` : "";
+  return `<div style="display:flex;align-items:center;gap:14px;padding:12px;border-bottom:0.5px solid var(--border);flex-wrap:wrap;">
+    <div style="width:50px;height:50px;background:rgba(180,83,9,0.1);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;">🌡️</div>
+    <div style="flex:1;min-width:150px;"><div style="font-size:13px;font-weight:600;">${info.brand||""} ${info.model||"Thermostat"}</div>
+      <div style="font-size:11px;color:var(--text-hint);">${info.displayName||"—"} &bull; ${h.vendor}</div>
+      <div style="font-size:11px;color:${h.isReachable?"var(--green-dark)":"var(--red)"};">${h.isReachable?"● Online":"○ Offline"}</div></div>
+    <div style="min-width:100px;text-align:center;"><div style="font-size:22px;font-weight:700;color:var(--text-primary);">${currentTemp}</div><div style="font-size:10px;color:var(--text-hint);">Current</div></div>
+    <div style="min-width:120px;text-align:center;"><div style="font-size:11px;color:var(--text-secondary);">${setpoint}</div><div style="font-size:11px;color:var(--blue-dark);">${coolpoint}</div>
+      <div style="font-size:10px;color:var(--text-hint);margin-top:2px;">Mode: ${ts.mode||"—"}</div></div>
+    <div style="display:flex;gap:6px;"><button class="data-refresh-btn" onclick="enodeSetHVACHold('${h.id}')">Set Hold</button>
+      <button class="data-refresh-btn" onclick="enodeSetHVACSchedule('${h.id}')">Follow Schedule</button></div></div>`;
+}
+
+function enodeInverterRow(inv) {
+  const info = inv.information || {}; const ps = inv.productionState || {};
+  const production = ps.productionRate != null ? `${ps.productionRate.toFixed(1)} kW` : "—";
+  return `<div style="display:flex;align-items:center;gap:14px;padding:12px;border-bottom:0.5px solid var(--border);flex-wrap:wrap;">
+    <div style="width:50px;height:50px;background:#FEF3C7;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;">☀️</div>
+    <div style="flex:1;min-width:150px;"><div style="font-size:13px;font-weight:600;">${info.brand||""} ${info.model||"Inverter"}</div>
+      <div style="font-size:11px;color:var(--text-hint);">${info.siteName||"—"} &bull; ${inv.vendor}</div>
+      <div style="font-size:11px;color:${inv.isReachable?"var(--green-dark)":"var(--red)"};">${inv.isReachable?"● Online":"○ Offline"}</div></div>
+    <div style="min-width:120px;text-align:center;"><div style="font-size:22px;font-weight:700;color:${ps.isProducing?"#D97706":"var(--text-hint)"};">${production}</div>
+      <div style="font-size:10px;color:var(--text-hint);">${ps.isProducing?"Producing":"Idle"}</div></div>
+    <button class="data-refresh-btn" onclick="enodeRefresh('inverters','${inv.id}')">↻ Refresh</button></div>`;
+}
+
+function enodeBatteryRow(b) {
+  const info = b.information || {}; const cs = b.chargeState || {}; const cfg = b.config || {};
+  const level = cs.batteryLevel != null ? cs.batteryLevel : "—";
+  const capacity = cs.batteryCapacity != null ? `${cs.batteryCapacity} kWh` : "";
+  const status = cs.status || "UNKNOWN"; const opMode = cfg.operationMode || "UNKNOWN";
+  const statusColor = status==="CHARGING"?"var(--green-dark)":status==="DISCHARGING"?"var(--blue-dark)":"var(--text-hint)";
+  return `<div style="display:flex;align-items:center;gap:14px;padding:12px;border-bottom:0.5px solid var(--border);flex-wrap:wrap;">
+    <div style="width:50px;height:50px;background:var(--green-bg);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;">🔋</div>
+    <div style="flex:1;min-width:150px;"><div style="font-size:13px;font-weight:600;">${info.brand||""} ${info.model||"Battery"}</div>
+      <div style="font-size:11px;color:var(--text-hint);">${info.siteName||"—"} &bull; ${capacity}</div>
+      <div style="font-size:11px;color:${b.isReachable?"var(--green-dark)":"var(--red)"};">${b.isReachable?"● Online":"○ Offline"}</div></div>
+    <div style="min-width:100px;text-align:center;"><div style="font-size:22px;font-weight:700;color:var(--green-dark);">${level}%</div>
+      <div style="height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin:4px 0;"><div style="height:100%;width:${level}%;background:${level>20?"var(--green)":level>10?"var(--amber)":"var(--red)"};border-radius:3px;"></div></div>
+      <div style="font-size:10px;color:var(--text-hint);">${cs.chargeRate!=null?cs.chargeRate+" kW":""}</div></div>
+    <div style="min-width:120px;text-align:center;"><div style="font-size:12px;font-weight:600;color:${statusColor};">${status}</div>
+      <div style="font-size:10px;color:var(--text-hint);text-transform:capitalize;">${opMode.replace(/_/g," ").toLowerCase()}</div></div>
+    <div style="display:flex;gap:4px;flex-direction:column;">
+      <select class="history-select" id="enode-batt-mode-${b.id}" style="font-size:10px;">
+        <option value="SELF_RELIANCE" ${opMode==="SELF_RELIANCE"?"selected":""}>Self Reliance</option>
+        <option value="TIME_OF_USE" ${opMode==="TIME_OF_USE"?"selected":""}>Time of Use</option>
+        <option value="IMPORT_FOCUS" ${opMode==="IMPORT_FOCUS"?"selected":""}>Charge (Import)</option>
+        <option value="EXPORT_FOCUS" ${opMode==="EXPORT_FOCUS"?"selected":""}>Discharge (Export)</option>
+        <option value="IDLE" ${opMode==="IDLE"?"selected":""}>Idle</option>
+      </select>
+      <button class="data-refresh-btn" style="font-size:10px;" onclick="enodeSetBatteryMode('${b.id}')">Set Mode</button>
+    </div></div>`;
 }
 
 // ── Enode Control Commands ───────────────────────────────────────────────────
