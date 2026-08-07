@@ -793,6 +793,16 @@
     <button class="sub-tab-btn" id="sub-event-history" onclick="switchSub('events','event-history',this)">Event Activity</button>
     <button class="sub-tab-btn" id="sub-eventstats" onclick="switchSub('events','eventstats',this)">Event Statistics</button>
   </div>
+  <div class="sub-tabs" id="sub-tabs-enode" style="display:none;">
+    <button class="sub-tab-btn active" id="sub-enode-overview"   onclick="switchSub('enode','enode-overview',this)">🔌 Overview</button>
+    <button class="sub-tab-btn"        id="sub-enode-evs"        onclick="switchSub('enode','enode-evs',this)">🚗 EVs</button>
+    <button class="sub-tab-btn"        id="sub-enode-chargers"   onclick="switchSub('enode','enode-chargers',this)">⚡ EV Chargers</button>
+    <button class="sub-tab-btn"        id="sub-enode-thermostats" onclick="switchSub('enode','enode-thermostats',this)">🌡️ Thermostats</button>
+    <button class="sub-tab-btn"        id="sub-enode-solar"      onclick="switchSub('enode','enode-solar',this)">☀️ Solar Inverter</button>
+    <button class="sub-tab-btn"        id="sub-enode-batteries"  onclick="switchSub('enode','enode-batteries',this)">🔋 Battery Storage</button>
+    <button class="sub-tab-btn"        id="sub-enode-meters"     onclick="switchSub('enode','enode-meters',this)">📊 Meters</button>
+    <button class="sub-tab-btn"        id="sub-enode-statistics" onclick="switchSub('enode','enode-statistics',this)">📈 Enode Statistics</button>
+  </div>
   <div class="sub-tabs" id="sub-tabs-devices" style="display:none;">
     <button class="sub-tab-btn active" id="sub-data" onclick="switchSub('devices','data',this)">Current Device Status</button>
     <button class="sub-tab-btn" id="sub-controls" onclick="switchSub('devices','controls',this)">Device Controls</button>
@@ -5136,7 +5146,8 @@
 
 
 <!-- ══════════════════════════════════════════════════════ Enode Integration ══ -->
-<div class="tab-pane" id="tab-enode">
+<!-- Enode Overview -->
+<div class="tab-pane" id="tab-enode-overview">
   <div class="scroll-content">
     <div style="max-width:960px;margin:0 auto;padding-bottom:40px;">
       <div class="sched-card" style="margin-bottom:14px;">
@@ -5158,10 +5169,57 @@
         <div id="enode-devices-container">
           <div class="sched-empty">Click Refresh to load Enode devices, or Link Device to get started.</div>
         </div>
-        <div id="enode-stats-panel"></div>
       </div>
     </div>
   </div>
+</div>
+<!-- Enode EVs -->
+<div class="tab-pane" id="tab-enode-evs">
+  <div class="scroll-content"><div style="max-width:960px;margin:0 auto;padding-bottom:40px;">
+    <div id="enode-evs-container"><div class="sched-empty">Loading EVs…</div></div>
+    <div id="enode-evs-stats-panel"></div>
+  </div></div>
+</div>
+<!-- Enode Chargers -->
+<div class="tab-pane" id="tab-enode-chargers">
+  <div class="scroll-content"><div style="max-width:960px;margin:0 auto;padding-bottom:40px;">
+    <div id="enode-chargers-container"><div class="sched-empty">Loading EV Chargers…</div></div>
+    <div id="enode-chargers-stats-panel"></div>
+  </div></div>
+</div>
+<!-- Enode Thermostats -->
+<div class="tab-pane" id="tab-enode-thermostats">
+  <div class="scroll-content"><div style="max-width:960px;margin:0 auto;padding-bottom:40px;">
+    <div id="enode-thermostats-container"><div class="sched-empty">Loading Thermostats…</div></div>
+    <div id="enode-thermostats-stats-panel"></div>
+  </div></div>
+</div>
+<!-- Enode Solar -->
+<div class="tab-pane" id="tab-enode-solar">
+  <div class="scroll-content"><div style="max-width:960px;margin:0 auto;padding-bottom:40px;">
+    <div id="enode-solar-container"><div class="sched-empty">Loading Solar Inverters…</div></div>
+    <div id="enode-solar-stats-panel"></div>
+  </div></div>
+</div>
+<!-- Enode Batteries -->
+<div class="tab-pane" id="tab-enode-batteries">
+  <div class="scroll-content"><div style="max-width:960px;margin:0 auto;padding-bottom:40px;">
+    <div id="enode-batteries-container"><div class="sched-empty">Loading Battery Storage…</div></div>
+    <div id="enode-batteries-stats-panel"></div>
+  </div></div>
+</div>
+<!-- Enode Meters -->
+<div class="tab-pane" id="tab-enode-meters">
+  <div class="scroll-content"><div style="max-width:960px;margin:0 auto;padding-bottom:40px;">
+    <div id="enode-meters-container"><div class="sched-empty">Loading Meters…</div></div>
+    <div id="enode-meters-stats-panel"></div>
+  </div></div>
+</div>
+<!-- Enode Statistics -->
+<div class="tab-pane" id="tab-enode-statistics">
+  <div class="scroll-content"><div style="max-width:960px;margin:0 auto;padding-bottom:40px;">
+    <div id="enode-stats-panel"></div>
+  </div></div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ LoRa Command Generator ══ -->
