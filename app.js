@@ -21992,22 +21992,21 @@ async function enodePost(path, body) {
 // ── Device Link (onboarding) ─────────────────────────────────────────────────
 async function enodeLinkDevice(vendorType, vendor) {
   try {
+    const body = { userId: enodeUserId, scopes: getEnodeScopes(vendorType) };
+    if (vendorType) body.vendorType = vendorType;
+    if (vendor) body.vendor = vendor;
+    body.redirectUri = window.location.origin + window.location.pathname;
     const res = await fetch(`${ENODE_PROXY_URL}/link`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId: enodeUserId,
-        vendorType: vendorType || undefined,
-        vendor: vendor || undefined,
-        scopes: getEnodeScopes(vendorType),
-        redirectUri: window.location.origin + "/enode-link-complete"
-      })
+      body: JSON.stringify(body)
     });
     const data = await res.json();
     if (data.linkUrl) {
       window.open(data.linkUrl, "enode_link", "width=500,height=700,menubar=no,toolbar=no");
     } else {
-      alert("Failed to create link session: " + JSON.stringify(data));
+      console.error("Enode link error:", data);
+      alert("Link session error: " + (data.detail || data.title || JSON.stringify(data)));
     }
   } catch(e) { alert("Enode link error: " + e.message); }
 }
@@ -22363,7 +22362,8 @@ function renderEnodeEVs() {
   if (!evs.length) { container.innerHTML = `<div class="sched-empty"><div style="font-size:28px;margin-bottom:8px;">🚗</div>No EVs connected.<br><button class="data-refresh-btn" style="margin-top:12px;background:rgba(22,163,74,0.1);color:#166534;border-color:#16a34a;" onclick="enodeLinkDevice('vehicle','TESLA')">+ Link Tesla EV</button></div>`; return; }
   let html = `<div class="sched-card"><div class="sched-card-header"><div class="sched-card-title">🚗 Electric Vehicles (${evs.length})</div>
     <div style="display:flex;gap:8px;"><button class="data-refresh-btn" onclick="loadAllEnodeDevices().then(()=>renderEnodeEVs())">↻ Refresh</button>
-    <button class="data-refresh-btn" style="background:rgba(22,163,74,0.1);color:#166534;border-color:#16a34a;" onclick="enodeLinkDevice('vehicle','TESLA')">+ Link EV</button></div></div>`;
+    <button class="data-refresh-btn" style="background:rgba(22,163,74,0.1);color:#166534;border-color:#16a34a;" onclick="enodeLinkDevice('vehicle','TESLA')">+ Link EV</button>
+    <button class="data-refresh-btn" onclick="enodeLinkDevice()">+ Add Device</button></div></div>`;
   evs.forEach(v => { html += enodeVehicleRow(v); });
   html += `</div>`;
   container.innerHTML = html;
@@ -22378,7 +22378,8 @@ function renderEnodeChargers() {
   if (!chargers.length) { container.innerHTML = `<div class="sched-empty"><div style="font-size:28px;margin-bottom:8px;">⚡</div>No EV Chargers connected.<br><button class="data-refresh-btn" style="margin-top:12px;background:rgba(37,99,235,0.1);color:#1e40af;border-color:#3b82f6;" onclick="enodeLinkDevice('charger','CHARGEPOINT')">+ Link ChargePoint</button></div>`; return; }
   let html = `<div class="sched-card"><div class="sched-card-header"><div class="sched-card-title">⚡ EV Chargers (${chargers.length})</div>
     <div style="display:flex;gap:8px;"><button class="data-refresh-btn" onclick="loadAllEnodeDevices().then(()=>renderEnodeChargers())">↻ Refresh</button>
-    <button class="data-refresh-btn" style="background:rgba(37,99,235,0.1);color:#1e40af;border-color:#3b82f6;" onclick="enodeLinkDevice('charger','CHARGEPOINT')">+ Link Charger</button></div></div>`;
+    <button class="data-refresh-btn" style="background:rgba(37,99,235,0.1);color:#1e40af;border-color:#3b82f6;" onclick="enodeLinkDevice('charger','CHARGEPOINT')">+ Link Charger</button>
+    <button class="data-refresh-btn" onclick="enodeLinkDevice()">+ Add Device</button></div></div>`;
   chargers.forEach(c => { html += enodeChargerRow(c); });
   html += `</div>`;
   container.innerHTML = html;
@@ -22393,7 +22394,8 @@ function renderEnodeThermostats() {
   if (!hvacs.length) { container.innerHTML = `<div class="sched-empty"><div style="font-size:28px;margin-bottom:8px;">🌡️</div>No Thermostats connected.<br><button class="data-refresh-btn" style="margin-top:12px;background:rgba(180,83,9,0.1);color:#92400e;border-color:#d97706;" onclick="enodeLinkDevice('hvac','HONEYWELL')">+ Link Honeywell</button></div>`; return; }
   let html = `<div class="sched-card"><div class="sched-card-header"><div class="sched-card-title">🌡️ Thermostats (${hvacs.length})</div>
     <div style="display:flex;gap:8px;"><button class="data-refresh-btn" onclick="loadAllEnodeDevices().then(()=>renderEnodeThermostats())">↻ Refresh</button>
-    <button class="data-refresh-btn" style="background:rgba(180,83,9,0.1);color:#92400e;border-color:#d97706;" onclick="enodeLinkDevice('hvac','HONEYWELL')">+ Link Thermostat</button></div></div>`;
+    <button class="data-refresh-btn" style="background:rgba(180,83,9,0.1);color:#92400e;border-color:#d97706;" onclick="enodeLinkDevice('hvac','HONEYWELL')">+ Link Thermostat</button>
+    <button class="data-refresh-btn" onclick="enodeLinkDevice()">+ Add Device</button></div></div>`;
   hvacs.forEach(h => { html += enodeHVACRow(h); });
   html += `</div>`;
   container.innerHTML = html;
@@ -22407,7 +22409,8 @@ function renderEnodeSolar() {
   if (!invs.length) { container.innerHTML = `<div class="sched-empty"><div style="font-size:28px;margin-bottom:8px;">☀️</div>No Solar Inverters connected.<br><button class="data-refresh-btn" style="margin-top:12px;background:rgba(217,119,6,0.1);color:#92400e;border-color:#d97706;" onclick="enodeLinkDevice('inverter','SOLAREDGE')">+ Link SolarEdge</button></div>`; return; }
   let html = `<div class="sched-card"><div class="sched-card-header"><div class="sched-card-title">☀️ Solar Inverters (${invs.length})</div>
     <div style="display:flex;gap:8px;"><button class="data-refresh-btn" onclick="loadAllEnodeDevices().then(()=>renderEnodeSolar())">↻ Refresh</button>
-    <button class="data-refresh-btn" style="background:rgba(217,119,6,0.1);color:#92400e;border-color:#d97706;" onclick="enodeLinkDevice('inverter','SOLAREDGE')">+ Link Inverter</button></div></div>`;
+    <button class="data-refresh-btn" style="background:rgba(217,119,6,0.1);color:#92400e;border-color:#d97706;" onclick="enodeLinkDevice('inverter','SOLAREDGE')">+ Link Inverter</button>
+    <button class="data-refresh-btn" onclick="enodeLinkDevice()">+ Add Device</button></div></div>`;
   invs.forEach(inv => { html += enodeInverterRow(inv); });
   html += `</div>`;
   container.innerHTML = html;
@@ -22421,7 +22424,8 @@ function renderEnodeBatteries() {
   if (!batts.length) { container.innerHTML = `<div class="sched-empty"><div style="font-size:28px;margin-bottom:8px;">🔋</div>No Batteries connected.<br><button class="data-refresh-btn" style="margin-top:12px;background:rgba(22,163,74,0.1);color:#166534;border-color:#16a34a;" onclick="enodeLinkDevice('battery','TESLA')">+ Link Powerwall</button></div>`; return; }
   let html = `<div class="sched-card"><div class="sched-card-header"><div class="sched-card-title">🔋 Battery Storage (${batts.length})</div>
     <div style="display:flex;gap:8px;"><button class="data-refresh-btn" onclick="loadAllEnodeDevices().then(()=>renderEnodeBatteries())">↻ Refresh</button>
-    <button class="data-refresh-btn" style="background:rgba(22,163,74,0.1);color:#166534;border-color:#16a34a;" onclick="enodeLinkDevice('battery','TESLA')">+ Link Battery</button></div></div>`;
+    <button class="data-refresh-btn" style="background:rgba(22,163,74,0.1);color:#166534;border-color:#16a34a;" onclick="enodeLinkDevice('battery','TESLA')">+ Link Battery</button>
+    <button class="data-refresh-btn" onclick="enodeLinkDevice()">+ Add Device</button></div></div>`;
   batts.forEach(b => { html += enodeBatteryRow(b); });
   html += `</div>`;
   container.innerHTML = html;
@@ -22434,7 +22438,8 @@ function renderEnodeMeters() {
   const meters = enodeDevices.meters || [];
   if (!meters.length) { container.innerHTML = `<div class="sched-empty"><div style="font-size:28px;margin-bottom:8px;">📊</div>No Meters connected.<br><button class="data-refresh-btn" style="margin-top:12px;" onclick="enodeLinkDevice()">+ Link Device with Meter</button></div>`; return; }
   let html = `<div class="sched-card"><div class="sched-card-header"><div class="sched-card-title">📊 Energy Meters (${meters.length})</div>
-    <button class="data-refresh-btn" onclick="loadAllEnodeDevices().then(()=>renderEnodeMeters())">↻ Refresh</button></div>`;
+    <div style="display:flex;gap:8px;"><button class="data-refresh-btn" onclick="loadAllEnodeDevices().then(()=>renderEnodeMeters())">↻ Refresh</button>
+    <button class="data-refresh-btn" onclick="enodeLinkDevice()">+ Add Device</button></div></div>`;
   meters.forEach(m => {
     const info = m.information || {};
     const es = m.energyState || {};
