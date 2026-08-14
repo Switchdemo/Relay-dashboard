@@ -2738,9 +2738,11 @@ async function loadDeviceStatusTable() {
     const r3 = reading?.relay_status_r3 > 0;
     const r4 = reading?.relay_status_r4 > 0;
     const anyOn   = r1 || r2 || r3 || r4;
+    const loadDetected = reading && (reading.current > 0 || reading.watts_consumed > 0);
     const relayStr = reading
       ? [r1?"R1":"", r2?"R2":"", r3?"R3":"", r4?"R4":""].filter(Boolean).join(", ") || "All Off"
       : "—";
+    const loadLabel = loadDetected ? ` <span style="color:#b45309;font-size:10px;font-weight:600;">● Load</span>` : "";
 
     if (isOnline) online++; else offline++;
     if (!hasEvent) noEvent++;
@@ -2755,7 +2757,7 @@ async function loadDeviceStatusTable() {
       <td style="padding:8px;border-bottom:0.5px solid var(--border);white-space:nowrap;">${lastReport ? lastReport.toLocaleString() : "Never"}</td>
       <td style="padding:8px;border-bottom:0.5px solid var(--border);">${location}</td>
       <td style="padding:8px;border-bottom:0.5px solid var(--border);">${eventStatus}</td>
-      <td style="padding:8px;border-bottom:0.5px solid var(--border);font-weight:${anyOn?"600":"400"};color:${anyOn?"var(--green-dark)":"var(--text-secondary)"};">${relayStr}</td>
+      <td style="padding:8px;border-bottom:0.5px solid var(--border);font-weight:${anyOn?"600":"400"};color:${anyOn?"var(--green-dark)":"var(--text-secondary)"};">${relayStr}${loadLabel}</td>
     </tr>`;
   }).join("");
 
@@ -2872,9 +2874,11 @@ async function loadProgramSummary() {
     const r3 = reading?.relay_status_r3 > 0;
     const r4 = reading?.relay_status_r4 > 0;
     const anyOn = r1 || r2 || r3 || r4;
+    const loadDetected = reading && (reading.current > 0 || reading.watts_consumed > 0);
     const relayStr = reading
       ? [r1?"R1":"", r2?"R2":"", r3?"R3":"", r4?"R4":""].filter(Boolean).join(", ") || "All Off"
       : "—";
+    const loadLabel = loadDetected ? ` <span style="color:#b45309;font-size:10px;font-weight:600;">● Load</span>` : "";
 
     // Count stats
     if (isOnline) online++; else offline++;
@@ -2890,7 +2894,7 @@ async function loadProgramSummary() {
       <td style="padding:8px;border-bottom:0.5px solid var(--border);white-space:nowrap;">${lastReport ? lastReport.toLocaleString() : "Never"}</td>
       <td style="padding:8px;border-bottom:0.5px solid var(--border);">${location}</td>
       <td style="padding:8px;border-bottom:0.5px solid var(--border);">${eventStatus}</td>
-      <td style="padding:8px;border-bottom:0.5px solid var(--border);font-weight:${anyOn?"600":"400"};color:${anyOn?"var(--green-dark)":"var(--text-secondary)"};">${relayStr}</td>
+      <td style="padding:8px;border-bottom:0.5px solid var(--border);font-weight:${anyOn?"600":"400"};color:${anyOn?"var(--green-dark)":"var(--text-secondary)"};">${relayStr}${loadLabel}</td>
     </tr>`;
   }).join("");
 
@@ -10128,9 +10132,12 @@ async function loadLatestDevice(deviceId) {
       }
     }
 
+    // R1 & R2 share the same load — detect load present from current/watts readings
+    const loadDetected = (r.current > 0 || r.watts_consumed > 0);
+
     container.innerHTML = activeEventPill + `<div class="data-fields">
-      <div class="data-field"><span class="data-field-name">Relay 1</span><span class="data-field-value">${relayDot(r.relay_status_r1, r.load_present_r1)}</span></div>
-      <div class="data-field"><span class="data-field-name">Relay 2</span><span class="data-field-value">${relayDot(r.relay_status_r2, r.load_present_r2)}</span></div>
+      <div class="data-field"><span class="data-field-name">Relay 1</span><span class="data-field-value">${relayDot(r.relay_status_r1, loadDetected)}</span></div>
+      <div class="data-field"><span class="data-field-name">Relay 2</span><span class="data-field-value">${relayDot(r.relay_status_r2, loadDetected)}</span></div>
       <div class="data-field"><span class="data-field-name">Relay 3</span><span class="data-field-value">${relayDot(r.relay_status_r3, r.load_present_r3)}</span></div>
       <div class="data-field"><span class="data-field-name">Relay 4</span><span class="data-field-value">${relayDot(r.relay_status_r4, r.load_present_r4)}</span></div>
       <div class="data-field"><span class="data-field-name">Voltage</span><span class="data-field-value">${r.voltage ? (r.voltage/10).toFixed(1) + " V" : "—"}</span></div>
@@ -10290,10 +10297,11 @@ async function loadHistory() {
          </td></tr>`;
     tbody.innerHTML = capWarning + rows.map(r => {
       const devName = DEVICES.find(d => d.uid === r.device_uid)?.name ?? unitName(r.device_uid);
+      const loadDetected = (r.current > 0 || r.watts_consumed > 0);
       return `<tr>
         <td>${new Date(r.recorded_at).toLocaleString()}</td><td>${devName}</td>
-        <td>${relayDot(r.relay_status_r1, r.load_present_r1)}</td>
-        <td>${relayDot(r.relay_status_r2, r.load_present_r2)}</td>
+        <td>${relayDot(r.relay_status_r1, loadDetected)}</td>
+        <td>${relayDot(r.relay_status_r2, loadDetected)}</td>
         <td>${relayDot(r.relay_status_r3, r.load_present_r3)}</td>
         <td>${relayDot(r.relay_status_r4, r.load_present_r4)}</td>
         <td>${r.voltage       != null ? (r.voltage/10).toFixed(1)+"V"        : "—"}</td>
