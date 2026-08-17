@@ -771,18 +771,19 @@ function toggleImmediateMode(checked) {
 
 function showSchedConfirm() {
   const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ""; };
+  const isImmediate    = document.getElementById("sf-immediate")?.checked;
   const name           = getVal("sf-name").trim();
-  const hour           = getVal("sf-hour");
-  const minute         = getVal("sf-minute");
+  const hour           = isImmediate ? String(new Date().getHours()).padStart(2,"0") : getVal("sf-hour");
+  const minute         = isImmediate ? String(new Date().getMinutes()).padStart(2,"0") : getVal("sf-minute");
   const tz             = getVal("sf-timezone");
-  const event_date     = getVal("sf-date") || null;
+  const event_date     = isImmediate ? new Date().toISOString().slice(0,10) : (getVal("sf-date") || null);
   const duration_minutes = parseFloat(getVal("sf-duration")) || null;
   const eventType      = sfEventType;
 
   if (!name)             { setStatus("error", "Please enter an event name."); return; }
   if (!eventType)        { setStatus("error", "Please select an event type."); return; }
-  if (!event_date)       { setStatus("error", "Please select a date."); return; }
-  if (!hour || !minute)  { setStatus("error", "Please select a time."); return; }
+  if (!isImmediate && !event_date)       { setStatus("error", "Please select a date."); return; }
+  if (!isImmediate && (!hour || !minute))  { setStatus("error", "Please select a time."); return; }
   if (!duration_minutes) { setStatus("error", "Please select an event duration."); return; }
 
   // Type-specific validation & summary info
@@ -882,9 +883,11 @@ function showSchedConfirm() {
   const h = parseInt(hour), m = parseInt(minute);
   const ampm = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 || 12;
-  const dateLabel = event_date
-    ? `${mo}/${dy}/${yr} at ${h12}:${String(minute).padStart(2,"0")} ${ampm}`
-    : "—";
+  const dateLabel = isImmediate
+    ? `⚡ IMMEDIATELY (${new Date().toLocaleString()})`
+    : event_date
+      ? `${mo}/${dy}/${yr} at ${h12}:${String(minute).padStart(2,"0")} ${ampm}`
+      : "—";
 
   // Duration label
   const durH = Math.floor(duration_minutes / 60);
@@ -897,11 +900,11 @@ function showSchedConfirm() {
   if (isLCEvent && stratVal && !["ev_shed","batt_action","gen_action","oadr_event","hybrid"].includes(stratVal)) {
     const [stratNum,, stratCycle] = stratVal.split("|").map(Number);
     const reps = duration_minutes && stratCycle ? Math.max(1, Math.round(duration_minutes / stratCycle)) : 1;
-    schedUnix = getScheduleUnixTime(event_date, time, tz);
+    schedUnix = isImmediate ? Math.floor(Date.now()/1000) : getScheduleUnixTime(event_date, time, tz);
     lcHex    = buildLCHex(action, mode, stratNum, reps, schedUnix) || "—";
     repsLabel = `${reps} rep${reps!==1?"s":""} (${duration_minutes}m ÷ ${stratCycle}m cycle)`;
   } else {
-    schedUnix = getScheduleUnixTime(event_date, time, tz);
+    schedUnix = isImmediate ? Math.floor(Date.now()/1000) : getScheduleUnixTime(event_date, time, tz);
   }
 
   // Populate modal fields
@@ -918,9 +921,9 @@ function showSchedConfirm() {
   setText("sc-reps",        repsLabel);
   setText("sc-hex",         lcHex);
 
-  // Warning if event is in the past
+  // Warning if event is in the past (skip for immediate mode — it's intentionally now)
   const warnEl = document.getElementById("sc-warning");
-  if (schedUnix && schedUnix < Math.floor(Date.now() / 1000)) {
+  if (!isImmediate && schedUnix && schedUnix < Math.floor(Date.now() / 1000)) {
     warnEl.textContent = "⚠️ The scheduled time appears to be in the past. The device may execute this event immediately upon receipt.";
     warnEl.style.display = "block";
   } else {
