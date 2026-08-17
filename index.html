@@ -1622,15 +1622,30 @@
               <select class="sched-select" id="sf-minute" style="flex:1;">
                 <option value="" disabled selected>MM</option>
                 <option value="00">00</option>
+                <option value="05">05</option>
+                <option value="10">10</option>
                 <option value="15">15</option>
+                <option value="20">20</option>
+                <option value="25">25</option>
                 <option value="30">30</option>
+                <option value="35">35</option>
+                <option value="40">40</option>
                 <option value="45">45</option>
+                <option value="50">50</option>
+                <option value="55">55</option>
               </select>
             </div>
           </div>
           <div class="sched-field" id="sf-date-field">
             <label class="sched-label">Date (One Time)</label>
             <input class="sched-input" id="sf-date" type="date" />
+          </div>
+          <div class="sched-field full" style="margin-top:-4px;">
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+              <input type="checkbox" id="sf-immediate" style="accent-color:var(--green);width:16px;height:16px;" onchange="toggleImmediateMode(this.checked)" />
+              <span style="font-weight:600;color:var(--green-dark);">⚡ Start Immediately</span>
+              <span style="font-size:11px;color:var(--text-hint);">— fires event now, skips date/time</span>
+            </label>
           </div>
           <div class="sched-field">
             <label class="sched-label">Event Duration</label>
@@ -1678,7 +1693,7 @@
 
 
           <div class="sched-field full">
-            <button class="sched-submit-btn" onclick="showSchedConfirm()">Save Schedule</button>
+            <button class="sched-submit-btn" id="sf-submit-btn" onclick="showSchedConfirm()">Save Schedule</button>
           </div>
         </div>
       </div>
