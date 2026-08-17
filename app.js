@@ -756,6 +756,19 @@ function updateRepsDisplay() {
 
 // ── Schedule Confirmation Modal ──────────────────────────────────────────────
 
+function toggleImmediateMode(checked) {
+  const dateField = document.getElementById("sf-date-field");
+  const hourEl    = document.getElementById("sf-hour");
+  const minuteEl  = document.getElementById("sf-minute");
+  const submitBtn = document.getElementById("sf-submit-btn");
+  if (dateField) dateField.style.opacity = checked ? "0.3" : "1";
+  if (dateField) dateField.style.pointerEvents = checked ? "none" : "auto";
+  if (hourEl)    { hourEl.style.opacity = checked ? "0.3" : "1"; hourEl.disabled = checked; }
+  if (minuteEl)  { minuteEl.style.opacity = checked ? "0.3" : "1"; minuteEl.disabled = checked; }
+  if (submitBtn) submitBtn.textContent = checked ? "⚡ Fire Event Now" : "Save Schedule";
+  if (submitBtn) submitBtn.style.background = checked ? "var(--green-dark)" : "";
+}
+
 function showSchedConfirm() {
   const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ""; };
   const name           = getVal("sf-name").trim();
@@ -939,22 +952,23 @@ async function createSchedule() {
 
 async function _executeCreateSchedule() {
   const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ""; };
+  const isImmediate = document.getElementById("sf-immediate")?.checked;
   const name     = getVal("sf-name").trim();
-  const hour     = getVal("sf-hour");
-  const minute   = getVal("sf-minute");
-  const time     = (hour !== "" && minute !== "") ? `${hour}:${minute}` : "";
+  const hour     = isImmediate ? String(new Date().getHours()).padStart(2,"0") : getVal("sf-hour");
+  const minute   = isImmediate ? String(new Date().getMinutes()).padStart(2,"0") : getVal("sf-minute");
+  const time     = `${hour}:${minute}`;
   const tz       = getVal("sf-timezone");
-  const event_date = getVal("sf-date") || null;
+  const event_date = isImmediate ? new Date().toISOString().slice(0,10) : (getVal("sf-date") || null);
   const duration_minutes = parseFloat(getVal("sf-duration")) || null;
   const evType   = sfEventType || "switch";
 
   if (!name)             { setStatus("error", "Please enter an event name."); return; }
-  if (!event_date)       { setStatus("error", "Please select a date."); return; }
-  if (!hour || !minute)  { setStatus("error", "Please select a time."); return; }
+  if (!isImmediate && !event_date)       { setStatus("error", "Please select a date."); return; }
+  if (!isImmediate && (!getVal("sf-hour") || !getVal("sf-minute")))  { setStatus("error", "Please select a time."); return; }
   if (!duration_minutes) { setStatus("error", "Please select an event duration."); return; }
 
-  const schedUnix = getScheduleUnixTime(event_date, time, tz);
-  setStatus("sending", "Dispatching event…");
+  const schedUnix = isImmediate ? Math.floor(Date.now()/1000) : getScheduleUnixTime(event_date, time, tz);
+  setStatus("sending", isImmediate ? "Firing event immediately…" : "Dispatching event…");
 
   // ── EV Charger ─────────────────────────────────────────────────────────────
   if (evType === "ev") {
