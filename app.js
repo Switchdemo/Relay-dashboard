@@ -27384,7 +27384,7 @@ async function loraDispatch() {
     const res = await fetch(PROXY_URL, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', 'X-Device-UID': deviceUID },
-      body:    JSON.stringify({ LC: result.hex })
+      body:    JSON.stringify({ body: { LC: result.hex }, req: "note.add", sync: true })
     });
     const data = await res.json();
 
