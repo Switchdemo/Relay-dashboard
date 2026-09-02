@@ -26797,92 +26797,127 @@ function vpReset() {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ENTEK ATC1000 LORA COMMAND GENERATOR
-// Reverse-engineered from vendor tool analysis — 9 verified examples
-// Protocol: EnTek "Format 305" LoRa Load Control command
+// ENTEK TC250 LORA COMMAND GENERATOR
+// Format verified against hardcoded COMMANDS map (lines 136-147) which uses
+// the same format as buildLCHex() — confirmed by byte-for-byte checksum match.
+//
+// IMPORTANT: The actual over-the-wire format differs from the UART spec PDF:
+//   1. Strategy byte does NOT set bit 6 for DLC (bit 6 = 0 for DLC, 1 for DI)
+//   2. An Event ID byte exists between Data and Time to Start (not in UART spec)
+//
+// Proven broadcast format (13 bytes):
+//   A1 0B 00 00 [strategy] [0x80|func] [data] [eventId] [time×4] [XOR checksum]
+//
+// Example: "1_on" = A1 0B 00 00 01 81 00 01 00 00 00 00 2B
+//   A1=header, 0B=len(11), 00=all-call, 00=DLC, 01=strategy1,
+//   81=F1, 00=0reps, 01=eventId, 0000=immediate, 2B=XOR
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// Auto-incrementing event ID for LoRa tab (separate from scheduler's lcEventId)
+let loraEventId = 1;
 
 // ── Command Builder ───────────────────────────────────────────────────────────
 function buildLoRaCommand(opts) {
   const {
     mode,           // 'shed' | 'gracefulRestore' | 'abruptRestore'
+    msgType,        // 'dlc' (0x00) | 'di' (0x01)
     addressing,     // 'broadcast' | 'individual'
-    address,        // 1-255 (individual only)
-    strategyIndex,  // 1-49 (shed only)
+    address,        // 1-255 (individual only — Address 1)
+    strategyIndex,  // Protocol strategy number from Table 2 (1-53)
     channels,       // { f1, f2, f3, f4 } booleans
-    repetitions,    // 0-255
-    eventId,        // 0-255 (individual only — must change per event)
+    repetitions,    // 0-255 (shed only)
     startNow,       // true | false
     scheduledTime   // Date (only used if !startNow)
   } = opts;
 
-  // Checksum helpers
-  const xorAll       = bytes => bytes.reduce((a, b) => a ^ b, 0);
-  const swapNibbles  = b => ((b & 0x0F) << 4) | ((b & 0xF0) >> 4);
+  const xorAll = bytes => bytes.reduce((a, b) => a ^ b, 0);
 
-  let bytes = [];
+  // ── Message type byte: 0x00 = DLC, 0x01 = DI ──
+  const msgTypeByte = (msgType === 'di') ? 0x01 : 0x00;
+
+  // ── Strategy byte ──
+  // DLC: bit 6 = 0, strategy in bits 5-0  (matches hardcoded COMMANDS)
+  // DI:  bit 6 = 1, strategy in bits 5-0  (matches buildLCHex modeBits)
+  const modeBits = (msgType === 'di') ? 0x40 : 0x00;
+  let strategyNum;
+  if (mode === 'shed') {
+    strategyNum = strategyIndex & 0x3F;
+  } else {
+    strategyNum = 61;  // 0x3D = Restore
+  }
+  const strategyByte = modeBits | (strategyNum & 0x3F);
+
+  // ── Function byte: 1000 xxxx ──
+  const funcByte = 0x80
+    | (channels.f1 ? 0x01 : 0)
+    | (channels.f2 ? 0x02 : 0)
+    | (channels.f3 ? 0x04 : 0)
+    | (channels.f4 ? 0x08 : 0);
+
+  // ── Data byte ──
+  let dataByte;
+  if (mode === 'shed') {
+    dataByte = (repetitions || 0) & 0xFF;
+  } else if (mode === 'gracefulRestore') {
+    dataByte = 1;   // graceful
+  } else {
+    dataByte = 0;   // abrupt
+  }
+
+  // ── Event ID (auto-increment, 1-254) ──
+  const evId = loraEventId;
+  loraEventId = (loraEventId >= 254) ? 1 : loraEventId + 1;
+
+  // ── Time to Start: 4 bytes MSB first (0 = immediate) ──
+  let ts = 0;
+  if (!startNow && scheduledTime instanceof Date) {
+    ts = Math.floor(scheduledTime.getTime() / 1000);
+  }
+  const timeBytes = [
+    (ts >>> 24) & 0xFF, (ts >>> 16) & 0xFF,
+    (ts >>> 8)  & 0xFF,  ts         & 0xFF
+  ];
+
+  // ── Assemble message body ──
+  // Matches buildLCHex: [addrSpec, msgType, strategy, function, data, eventId, time×4]
+  const body = [msgTypeByte, strategyByte, funcByte, dataByte, evId, ...timeBytes];
+
+  let bytes = [0xA1];
 
   if (addressing === 'broadcast') {
-    // BROADCAST FORMAT (13 bytes):
-    // A1 0B 00 00 [S1] 10 [Reps×0x10] 00 00 00 00 00 [CS]
-    // S1 = 0x08 | (strategyIndex << 4)  — confirmed on 2 examples
-    // CS = nibble-swap of XOR of bytes 0–11
-    const s1   = (0x08 | (strategyIndex << 4)) & 0xFF;
-    const reps = ((repetitions || 0) * 0x10) & 0xFF;
-    bytes = [0xA1, 0x0B, 0x00, 0x00, s1, 0x10, reps, 0x00, 0x00, 0x00, 0x00, 0x00];
-    bytes.push(swapNibbles(xorAll(bytes)));
-
+    const payload = [0x00, ...body]; // addr spec = 0x00 (all-call)
+    bytes.push(payload.length + 1);  // length includes checksum
+    bytes.push(...payload);
   } else {
-    // INDIVIDUAL/UNICAST FORMAT (14 bytes):
-    // A1 0C 01 [Addr] 00 [Byte5] [FChan] [Reps] [EventID] [TS×4 BE] [CS]
-    // Byte5: shed=strategyIndex, gracefulRestore=0x3D, abruptRestore=0x3E
-    // FChan: bit7=shed(always), bit3=F4, bit2=F3, bit1=F2, bit0=F1
-    // CS   = XOR of all 13 preceding bytes
-    const fChan = 0x80
-      | (channels.f1 ? 0x01 : 0)
-      | (channels.f2 ? 0x02 : 0)
-      | (channels.f3 ? 0x04 : 0)
-      | (channels.f4 ? 0x08 : 0);
-
-    const byte5 = mode === 'shed'
-      ? (strategyIndex & 0xFF)
-      : mode === 'gracefulRestore' ? 0x3D
-      : 0x3E; // abruptRestore (0x3E tentative — confirm with vendor)
-
-    let ts = 0;
-    if (!startNow && scheduledTime instanceof Date) {
-      ts = Math.floor(scheduledTime.getTime() / 1000);
-    }
-
-    bytes = [
-      0xA1, 0x0C, 0x01, (address || 1) & 0xFF,
-      0x00, byte5, fChan,
-      (repetitions || 0) & 0xFF,
-      (eventId || 0) & 0xFF,
-      (ts >> 24) & 0xFF, (ts >> 16) & 0xFF, (ts >> 8) & 0xFF, ts & 0xFF
-    ];
-    bytes.push(xorAll(bytes));
+    // Individual: addr spec bit 0 = Address 1
+    const payload = [0x01, (address || 1) & 0xFF, ...body];
+    bytes.push(payload.length + 1);
+    bytes.push(...payload);
   }
+
+  // ── Checksum: plain XOR of all preceding bytes ──
+  bytes.push(xorAll(bytes));
 
   const hex  = bytes.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join('');
   const json = JSON.stringify({ req: "note.add", body: { LC: hex }, sync: true });
-  return { hex, json, bytes };
+  return { hex, json, bytes, evId };
 }
 
 // ── UI helpers ────────────────────────────────────────────────────────────────
 function loraGetOpts() {
   const mode        = document.querySelector('input[name="lora-mode"]:checked')?.value || 'shed';
+  const msgType     = document.querySelector('input[name="lora-msgtype"]:checked')?.value || 'dlc';
   const addrType    = document.querySelector('input[name="lora-addr"]:checked')?.value || 'broadcast';
   const address     = parseInt(document.getElementById('lora-addr-num')?.value || '1', 10);
-  const stratIdx    = parseInt(document.getElementById('lora-strategy')?.value || '1', 10);
+  const stratIdx    = parseInt(document.getElementById('lora-strategy')?.value || '9', 10);
   const reps        = parseInt(document.getElementById('lora-reps')?.value || '0', 10);
-  const eventId     = parseInt(document.getElementById('lora-event-id')?.value || '0', 10);
   const startType   = document.querySelector('input[name="lora-start"]:checked')?.value || 'now';
   const schedVal    = document.getElementById('lora-scheduled-time')?.value;
   const scheduledTime = (startType === 'later' && schedVal) ? new Date(schedVal) : null;
 
   return {
     mode,
+    msgType,
     addressing:    addrType,
     address,
     strategyIndex: stratIdx,
@@ -26893,7 +26928,6 @@ function loraGetOpts() {
       f4: document.getElementById('lora-f4')?.checked || false,
     },
     repetitions: isNaN(reps) ? 0 : reps,
-    eventId:     isNaN(eventId) ? 0 : eventId,
     startNow:    startType === 'now',
     scheduledTime
   };
@@ -26930,10 +26964,57 @@ function loraGenerate() {
     const hexEl   = document.getElementById('lora-hex-preview');
     const jsonEl  = document.getElementById('lora-json-preview');
     const outArea = document.getElementById('lora-output-area');
+    const bdEl    = document.getElementById('lora-byte-breakdown');
     if (hexEl)   hexEl.value  = result.hex;
     if (jsonEl)  jsonEl.value = result.json;
     if (outArea) outArea.style.display = '';
-    loraGenStatus('✅ Command generated', false);
+
+    // Build human-readable byte breakdown
+    if (bdEl) {
+      const b = result.bytes;
+      const h = i => '0x' + b[i].toString(16).toUpperCase().padStart(2,'0');
+      const isBroadcast = opts.addressing === 'broadcast';
+      const msgTypeIdx  = isBroadcast ? 3 : 4;
+      const stratIdx    = msgTypeIdx + 1;
+      const funcIdx     = stratIdx + 1;
+      const dataIdx     = funcIdx + 1;
+      const evIdIdx     = dataIdx + 1;
+      const timeIdx     = evIdIdx + 1;
+      const csIdx       = b.length - 1;
+
+      const isDI        = b[msgTypeIdx] === 0x01;
+      const msgTypeName = isDI ? 'DI (Distributed Intelligence)' : 'DLC (Direct Load Control)';
+      const stratNum    = b[stratIdx] & 0x3F;
+      const fBits       = b[funcIdx] & 0x0F;
+      const fList       = ['F1','F2','F3','F4'].filter((_,i) => fBits & (1<<i)).join('+') || 'none';
+      const bit6        = (b[stratIdx] & 0x40) ? '1 (DI)' : '0 (DLC)';
+
+      let lines = [];
+      lines.push(`${h(0)}        Header (0xA1)`);
+      lines.push(`${h(1)}        Length (${b[1]} bytes after this)`);
+      lines.push(`${h(2)}        Address Spec (${b[2] === 0 ? '0x00 = All-Call / Broadcast' : 'Bit 0 set = Addr 1'})`);
+      if (!isBroadcast) {
+        lines.push(`${h(3)}        Address 1 = ${b[3]}`);
+      }
+      lines.push(`${h(msgTypeIdx)}        Message Type: ${msgTypeName}`);
+      lines.push(`${h(stratIdx)}        Strategy: ${stratNum} (bit6=${bit6})`);
+      lines.push(`${h(funcIdx)}        Function: ${fList} (0x80 | 0x${fBits.toString(16).toUpperCase()})`);
+      lines.push(`${h(dataIdx)}        Data: ${b[dataIdx]}${opts.mode === 'shed' ? ' (repetitions)' : opts.mode === 'gracefulRestore' ? ' (graceful)' : ' (abrupt)'}`);
+      lines.push(`${h(evIdIdx)}        Event ID: ${b[evIdIdx]}`);
+      const ts = (b[timeIdx]<<24 | b[timeIdx+1]<<16 | b[timeIdx+2]<<8 | b[timeIdx+3]) >>> 0;
+      lines.push(`${h(timeIdx)} ${h(timeIdx+1)} ${h(timeIdx+2)} ${h(timeIdx+3)}  Time to Start: ${ts === 0 ? '0 (immediate)' : ts + ' (' + new Date(ts*1000).toLocaleString() + ')'}`);
+      lines.push(`${h(csIdx)}        Checksum (XOR of all above)`);
+
+      // Show comparison to hardcoded reference
+      if (isBroadcast && opts.mode === 'shed' && stratNum === 1 && fBits === 0x01) {
+        lines.push('');
+        lines.push('📎 Reference: COMMANDS["1_on"] = A10B000001810001000000002B');
+      }
+
+      bdEl.textContent = lines.join('\n');
+    }
+
+    loraGenStatus('✅ Command generated — ' + result.bytes.length + ' bytes', false);
   } catch(e) {
     loraGenStatus('Error: ' + e.message, true);
     console.error('loraGenerate error:', e);
@@ -27002,6 +27083,9 @@ function loraInit() {
   // Initialize time preview
   tc250UpdateTimePreview();
   setInterval(tc250UpdateTimePreview, 1000);
+
+  // Initialize diagnostics device selector
+  loraDiagInit();
 }
 
 // ── LoRa Device Configuration Commands ──────────────────────────────────────────────
@@ -27391,12 +27475,13 @@ async function loraDispatch() {
     const success = res.ok;
     const ts      = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const modeLabel = opts.mode === 'shed' ? 'SHED' : opts.mode === 'gracefulRestore' ? 'GRACEFUL RESTORE' : 'ABRUPT RESTORE';
+    const typeLabel = (opts.msgType === 'di') ? 'DI' : 'DLC';
     const addrLabel = opts.addressing === 'broadcast' ? 'BROADCAST' : `ADDR ${opts.address}`;
 
     const logLine = document.createElement('div');
     logLine.style.cssText = 'padding:3px 0;border-bottom:0.5px solid var(--border);color:' + (success ? 'var(--green-dark)' : 'var(--red)');
     logLine.innerHTML = `<span style="color:var(--text-hint)">${ts}</span> ${success ? '✅' : '❌'} `
-      + `<strong>${modeLabel}</strong> ${addrLabel} — ${result.hex}`;
+      + `<strong>${typeLabel} ${modeLabel}</strong> ${addrLabel} — <code style="font-size:10px;">${result.hex}</code>`;
     if (logEl) {
       if (logEl.querySelector('.sched-empty') || logEl.textContent.includes('No commands')) logEl.innerHTML = '';
       logEl.prepend(logLine);
@@ -27469,6 +27554,16 @@ function loraToggleChannel(ch, cb) {
 }
 
 // ── LoRa UI state helpers (new radio-button layout) ───────────────────────────
+function loraOnMsgTypeChange() {
+  const type = document.querySelector('input[name="lora-msgtype"]:checked')?.value || 'dlc';
+  const dlcEl = document.getElementById('lora-radio-dlc');
+  const diEl  = document.getElementById('lora-radio-di');
+  if (dlcEl) { dlcEl.style.border = type === 'dlc' ? '1.5px solid var(--blue)' : '1.5px solid var(--border-md)'; dlcEl.style.background = type === 'dlc' ? 'var(--blue-bg)' : 'var(--surface)'; }
+  if (diEl)  { diEl.style.border  = type === 'di'  ? '1.5px solid var(--blue)' : '1.5px solid var(--border-md)'; diEl.style.background  = type === 'di'  ? 'var(--blue-bg)' : 'var(--surface)'; }
+  const out = document.getElementById('lora-output-area');
+  if (out) out.style.display = 'none';
+}
+
 function loraOnModeChange() {
   const mode = document.querySelector('input[name="lora-mode"]:checked')?.value || 'shed';
   const map  = { shed:'lora-radio-shed', gracefulRestore:'lora-radio-graceful', abruptRestore:'lora-radio-abrupt' };
@@ -27552,6 +27647,98 @@ function loraSelectAllChannels() {
 
   const out = document.getElementById('lora-output-area');
   if (out) out.style.display = 'none';
+}
+
+// ── LoRa Transport Diagnostics ──────────────────────────────────────────────
+
+function loraDiagLog(msg) {
+  const el = document.getElementById('lora-diag-log');
+  if (!el) return;
+  const ts = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit',fractionalSecondDigits:3});
+  if (el.textContent.includes('Run a test')) el.textContent = '';
+  el.textContent += `[${ts}] ${msg}\n`;
+  el.scrollTop = el.scrollHeight;
+}
+
+async function loraDiagProxy() {
+  const statusEl = document.getElementById('lora-diag-proxy');
+  if (statusEl) statusEl.textContent = 'Testing…';
+  loraDiagLog(`→ GET ${PROXY_URL}`);
+  try {
+    const t0 = performance.now();
+    const res = await fetch(PROXY_URL, { method: 'GET' });
+    const ms = Math.round(performance.now() - t0);
+    const body = await res.text();
+    loraDiagLog(`← HTTP ${res.status} (${ms}ms)`);
+    loraDiagLog(`← Headers: content-type=${res.headers.get('content-type') || 'none'}`);
+    loraDiagLog(`← Body: ${body.substring(0, 300)}`);
+    if (statusEl) {
+      statusEl.textContent = res.ok ? `✅ Reachable — ${res.status} in ${ms}ms` : `⚠ ${res.status} — worker may have issues`;
+      statusEl.style.color = res.ok ? 'var(--green-dark)' : 'var(--amber)';
+    }
+  } catch(e) {
+    loraDiagLog(`❌ Network error: ${e.message}`);
+    if (statusEl) { statusEl.textContent = `❌ ${e.message}`; statusEl.style.color = 'var(--red)'; }
+  }
+}
+
+async function loraDiagKnownGood() {
+  const uid = document.getElementById('lora-diag-device')?.value;
+  const statusEl = document.getElementById('lora-diag-send');
+  if (!uid) { if (statusEl) { statusEl.textContent = '⚠ Select a device'; statusEl.style.color = 'var(--amber)'; } return; }
+  if (statusEl) { statusEl.textContent = 'Sending…'; statusEl.style.color = 'var(--amber)'; }
+
+  const knownGoodHex = 'A10B000001810001000000002B'; // COMMANDS["1_on"] — proven format
+  const payload = { body: { LC: knownGoodHex }, req: 'note.add', sync: true };
+
+  loraDiagLog(`─── KNOWN-GOOD TEST ───`);
+  loraDiagLog(`→ POST ${PROXY_URL}`);
+  loraDiagLog(`→ X-Device-UID: ${uid}`);
+  loraDiagLog(`→ Body: ${JSON.stringify(payload)}`);
+
+  try {
+    const t0 = performance.now();
+    const res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Device-UID': uid },
+      body: JSON.stringify(payload)
+    });
+    const ms = Math.round(performance.now() - t0);
+    const body = await res.text();
+    loraDiagLog(`← HTTP ${res.status} (${ms}ms)`);
+    loraDiagLog(`← Body: ${body.substring(0, 500)}`);
+
+    if (statusEl) {
+      statusEl.textContent = res.ok
+        ? `✅ Worker accepted — ${res.status} in ${ms}ms`
+        : `⚠ Worker returned ${res.status}`;
+      statusEl.style.color = res.ok ? 'var(--green-dark)' : 'var(--red)';
+    }
+
+    // Try to parse response for Notehub details
+    try {
+      const json = JSON.parse(body);
+      if (json.err) loraDiagLog(`⚠ Notehub error: ${json.err}`);
+      if (json.result) loraDiagLog(`✓ Notehub result: ${JSON.stringify(json.result).substring(0, 300)}`);
+    } catch(pe) { /* not JSON */ }
+
+  } catch(e) {
+    loraDiagLog(`❌ Network error: ${e.message}`);
+    if (statusEl) { statusEl.textContent = `❌ ${e.message}`; statusEl.style.color = 'var(--red)'; }
+  }
+}
+
+function loraDiagInit() {
+  // Populate diagnostic device selector
+  const sel = document.getElementById('lora-diag-device');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Select device —</option>';
+  (DEVICES || []).filter(d => d.uid && !d.uid.startsWith('therm_') && !d.uid.startsWith('ev_') && !d.uid.startsWith('batt_') && !d.uid.startsWith('gen_')).forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d.uid;
+    opt.textContent = d.name || d.uid;
+    sel.appendChild(opt);
+  });
 }
 
 // ── AMI Meter Data ────────────────────────────────────────────────────────────
