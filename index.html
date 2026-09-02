@@ -5431,6 +5431,48 @@
         </div>
 
       </div>
+
+      <!-- ── LoRa Transport Diagnostics ──────────────────────────────────── -->
+      <div class="sched-card" style="border:1.5px dashed var(--amber);background:linear-gradient(to bottom,var(--amber-bg),var(--surface));">
+        <div class="sched-card-header">
+          <div class="sched-card-title">🔧 LoRa Transport Diagnostics</div>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:14px;">
+          Tests each step of the command delivery chain: Dashboard → Cloudflare Worker → Blues Notehub → Notecard → LoRa Master → LoRa Slave.
+          Use these to isolate where commands are failing.
+        </div>
+
+        <!-- Step 1: Proxy connectivity -->
+        <div style="margin-bottom:14px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-hint);margin-bottom:6px;">Step 1 — Test Proxy Worker Connectivity</div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <button class="queue-refresh" onclick="loraDiagProxy()" style="padding:7px 16px;">🌐 Ping Proxy</button>
+            <span id="lora-diag-proxy" style="font-size:11px;font-family:monospace;color:var(--text-hint);"></span>
+          </div>
+        </div>
+
+        <!-- Step 2: Send known-good hardcoded command -->
+        <div style="margin-bottom:14px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-hint);margin-bottom:6px;">Step 2 — Send Known-Good Command (Relay 1 ON, hardcoded hex)</div>
+          <div style="font-size:10px;color:var(--text-hint);margin-bottom:6px;font-family:monospace;">
+            Sends exactly: <strong>A10B000001810001000000002B</strong> — same hex the relay toggle buttons use.
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <select id="lora-diag-device" style="min-width:200px;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:12px;"></select>
+            <button class="queue-refresh" onclick="loraDiagKnownGood()" style="padding:7px 16px;">📡 Send Hardcoded</button>
+            <span id="lora-diag-send" style="font-size:11px;font-family:monospace;color:var(--text-hint);"></span>
+          </div>
+        </div>
+
+        <!-- Step 3: Full response viewer -->
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-hint);margin-bottom:6px;">HTTP Response Log</div>
+          <div id="lora-diag-log" style="font-size:10px;font-family:monospace;color:var(--text-secondary);max-height:200px;overflow-y:auto;background:var(--surface);border-radius:var(--radius-sm);padding:10px 12px;border:0.5px solid var(--border-md);white-space:pre-wrap;line-height:1.6;">
+            <span style="color:var(--text-hint);">Run a test to see results here.</span>
+          </div>
+        </div>
+      </div>
+
       <!-- ── LoRa Device Configuration ──────────────────────────────────── -->
       <div style="padding:18px 0 14px;margin-top:8px;">
         <div style="font-size:17px;font-weight:700;color:var(--text-primary);">⚙️ LoRa Device Configuration</div>
