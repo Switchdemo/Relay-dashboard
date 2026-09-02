@@ -27649,6 +27649,106 @@ function loraSelectAllChannels() {
   if (out) out.style.display = 'none';
 }
 
+// ── Instant Restore All ──────────────────────────────────────────────────────
+
+function buildRestoreAllCommand(evId, msgTypeByte) {
+  // Strategy 61 = Restore, Function 0x8F = all relays, Data 0 = abrupt
+  // Format matches proven shed format: A1 0B 00 00 [strat] [func] [data] [evId] [time×4] [cs]
+  const xorAll = bytes => bytes.reduce((a, b) => a ^ b, 0);
+  const modeBits = (msgTypeByte === 0x01) ? 0x40 : 0x00; // DI sets bit 6
+  const strategyByte = modeBits | (61 & 0x3F); // 61 = 0x3D restore
+  const bytes = [
+    0xA1,       // Header
+    0x0B,       // Length (11 bytes follow incl checksum)
+    0x00,       // Addr spec = broadcast
+    msgTypeByte,// 0x00 = DLC, 0x01 = DI
+    strategyByte,// Strategy 61 (0x3D for DLC, 0x7D for DI)
+    0x8F,       // Function = ALL (F1+F2+F3+F4)
+    0x00,       // Data = 0 (abrupt restore)
+    evId & 0xFF,// Event ID
+    0x00, 0x00, 0x00, 0x00  // Time = immediate
+  ];
+  bytes.push(xorAll(bytes));
+  return bytes.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join('');
+}
+
+async function loraInstantRestore() {
+  const deviceUID = document.getElementById('lora-device-uid')?.value;
+  if (!deviceUID) {
+    document.getElementById('lora-restore-status').textContent = '⚠ Select a LoRa master device in the dispatch section above first.';
+    document.getElementById('lora-restore-status').style.color = 'var(--amber)';
+    return;
+  }
+
+  // Get event ID selection
+  const evIdChoice = document.querySelector('input[name="lora-restore-evid"]:checked')?.value || '0xFF';
+  let evId;
+  if (evIdChoice === '0xFF') evId = 0xFF;
+  else if (evIdChoice === '0x00') evId = 0x00;
+  else evId = parseInt(document.getElementById('lora-restore-evid-custom')?.value || '1') & 0xFF;
+
+  const restoreType = document.querySelector('input[name="lora-restore-type"]:checked')?.value || 'dlc';
+  const statusEl = document.getElementById('lora-restore-status');
+  const hexEl = document.getElementById('lora-restore-hex');
+  const hexArea = document.getElementById('lora-restore-hex-preview');
+
+  // Build DLC restore
+  const dlcHex = buildRestoreAllCommand(evId, 0x00);
+  let sentCmds = [`DLC: ${dlcHex}`];
+
+  statusEl.textContent = '⏳ Sending restore…';
+  statusEl.style.color = 'var(--amber)';
+
+  try {
+    // Send DLC restore
+    const res1 = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Device-UID': deviceUID },
+      body: JSON.stringify({ body: { LC: dlcHex }, req: 'note.add', sync: true })
+    });
+
+    let success = res1.ok;
+
+    // If "both" mode, also send DI restore after a short delay
+    if (restoreType === 'both') {
+      await new Promise(r => setTimeout(r, 300));
+      const diHex = buildRestoreAllCommand(evId, 0x01);
+      sentCmds.push(`DI: ${diHex}`);
+      const res2 = await fetch(PROXY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Device-UID': deviceUID },
+        body: JSON.stringify({ body: { LC: diHex }, req: 'note.add', sync: true })
+      });
+      success = success && res2.ok;
+    }
+
+    // Show hex preview
+    if (hexArea) hexArea.style.display = '';
+    if (hexEl) hexEl.textContent = sentCmds.join('  |  ');
+
+    // Update dispatch log
+    const logEl = document.getElementById('lora-dispatch-log');
+    if (logEl) {
+      const ts = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+      const logLine = document.createElement('div');
+      logLine.style.cssText = 'padding:3px 0;border-bottom:0.5px solid var(--border);color:' + (success ? 'var(--red)' : 'var(--text-hint)');
+      logLine.innerHTML = `<span style="color:var(--text-hint)">${ts}</span> ${success ? '✅' : '❌'} `
+        + `<strong>RESTORE ALL</strong> BROADCAST evId=0x${evId.toString(16).toUpperCase().padStart(2,'0')} — <code style="font-size:10px;">${dlcHex}</code>`;
+      if (logEl.textContent.includes('No commands')) logEl.innerHTML = '';
+      logEl.prepend(logLine);
+    }
+
+    statusEl.textContent = success
+      ? `✅ Restore sent — evId=0x${evId.toString(16).toUpperCase().padStart(2,'0')} at ${new Date().toLocaleTimeString()}`
+      : '⚠ Worker returned error';
+    statusEl.style.color = success ? 'var(--green-dark)' : 'var(--red)';
+
+  } catch(e) {
+    statusEl.textContent = `❌ ${e.message}`;
+    statusEl.style.color = 'var(--red)';
+  }
+}
+
 // ── LoRa Transport Diagnostics ──────────────────────────────────────────────
 
 function loraDiagLog(msg) {
