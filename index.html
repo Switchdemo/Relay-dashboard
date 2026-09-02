@@ -5432,7 +5432,56 @@
 
       </div>
 
-      <!-- ── LoRa Transport Diagnostics ──────────────────────────────────── -->
+      <!-- ── Instant Restore All ──────────────────────────────────────────── -->
+      <div class="sched-card" style="border:1.5px solid var(--red);background:linear-gradient(to bottom,#FEF2F2,var(--surface));">
+        <div class="sched-card-header">
+          <div class="sched-card-title">🔴 Instant Restore — All Slaves, All Relays</div>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:14px;">
+          Sends a Strategy 61 Abrupt Restore to all functions (F1-F4) on all LoRa slaves. Use this to immediately release all loads back to normal.
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:14px;align-items:end;margin-bottom:14px;">
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-hint);margin-bottom:4px;">Event ID</div>
+            <div style="display:flex;flex-direction:column;gap:5px;">
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                <input type="radio" name="lora-restore-evid" value="0xFF" checked> <code>0xFF</code> — Cancel all events
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                <input type="radio" name="lora-restore-evid" value="0x00"> <code>0x00</code> — Wildcard zero
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                <input type="radio" name="lora-restore-evid" value="custom"> Custom:
+                <input type="number" id="lora-restore-evid-custom" value="1" min="0" max="255"
+                  style="width:55px;padding:3px 6px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;text-align:center;">
+              </label>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-hint);margin-bottom:4px;">Restore Type</div>
+            <div style="display:flex;flex-direction:column;gap:5px;">
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                <input type="radio" name="lora-restore-type" value="dlc" checked> DLC Restore (msg type 0x00)
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                <input type="radio" name="lora-restore-type" value="both"> DLC + DI (send both)
+              </label>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <button onclick="loraInstantRestore()" style="padding:10px 24px;border-radius:var(--radius-sm);border:none;background:var(--red);color:#fff;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">
+              🔴 RESTORE ALL NOW
+            </button>
+          </div>
+        </div>
+
+        <div id="lora-restore-hex-preview" style="display:none;margin-bottom:10px;">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-hint);margin-bottom:4px;">Command Sent</div>
+          <div id="lora-restore-hex" style="font-family:monospace;font-size:12px;color:var(--green-dark);background:var(--green-bg);border:1px solid var(--green);border-radius:var(--radius-sm);padding:8px 12px;letter-spacing:.05em;"></div>
+        </div>
+        <div id="lora-restore-status" style="font-size:12px;font-family:monospace;color:var(--text-hint);min-height:16px;"></div>
+      </div>
       <div class="sched-card" style="border:1.5px dashed var(--amber);background:linear-gradient(to bottom,var(--amber-bg),var(--surface));">
         <div class="sched-card-header">
           <div class="sched-card-title">🔧 LoRa Transport Diagnostics</div>
