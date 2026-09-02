@@ -5262,12 +5262,25 @@
               </label>
               <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;padding:9px 11px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);background:var(--surface);" id="lora-radio-graceful">
                 <input type="radio" name="lora-mode" value="gracefulRestore" onchange="loraOnModeChange()" style="margin-top:2px;">
-                <div><div style="font-size:12px;font-weight:600;">Graceful Restore</div><div style="font-size:10px;color:var(--text-hint);margin-top:1px;">Return loads to normal at end of current cycle</div></div>
+                <div><div style="font-size:12px;font-weight:600;">Graceful Restore</div><div style="font-size:10px;color:var(--text-hint);margin-top:1px;">Return loads to normal at end of current cycle (data=1)</div></div>
               </label>
               <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;padding:9px 11px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);background:var(--surface);" id="lora-radio-abrupt">
                 <input type="radio" name="lora-mode" value="abruptRestore" onchange="loraOnModeChange()" style="margin-top:2px;">
-                <div><div style="font-size:12px;font-weight:600;">Abrupt Restore</div><div style="font-size:10px;color:var(--text-hint);margin-top:1px;">Immediately return all loads to normal</div></div>
+                <div><div style="font-size:12px;font-weight:600;">Abrupt Restore</div><div style="font-size:10px;color:var(--text-hint);margin-top:1px;">Immediately return all loads to normal (data=0)</div></div>
               </label>
+            </div>
+            <div style="margin-top:12px;">
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-hint);margin-bottom:6px;">Message Type (0x00 / 0x01)</div>
+              <div style="display:flex;gap:8px;">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:7px 11px;border-radius:var(--radius-sm);border:1.5px solid var(--blue);background:var(--blue-bg);" id="lora-radio-dlc">
+                  <input type="radio" name="lora-msgtype" value="dlc" checked onchange="loraOnMsgTypeChange()">
+                  <div><span style="font-weight:600;">DLC</span><span style="font-size:10px;color:var(--text-hint);margin-left:4px;">All devices act immediately</span></div>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:7px 11px;border-radius:var(--radius-sm);border:1.5px solid var(--border-md);background:var(--surface);" id="lora-radio-di">
+                  <input type="radio" name="lora-msgtype" value="di" onchange="loraOnMsgTypeChange()">
+                  <div><span style="font-weight:600;">DI</span><span style="font-size:10px;color:var(--text-hint);margin-left:4px;">Random staggered start</span></div>
+                </label>
+              </div>
             </div>
           </div>
 
@@ -5303,13 +5316,13 @@
               <optgroup label="── 7.5 min period ──"><option value="1">7.5 / 7.5 min — 100% shed</option></optgroup>
               <optgroup label="── 15 min period ──"><option value="2">7.5 / 15 min — 50% shed</option></optgroup>
               <optgroup label="── 20 min period ──">
-                <option value="3">5 / 20 min — 25%</option><option value="4">10 / 20 min — 50%</option><option value="5">6.6 / 20 min — 33%</option><option value="6">8 / 20 min — 40%</option><option value="7">11 / 20 min — 55%</option><option value="8">12 / 20 min — 60%</option><option value="9">13 / 20 min — 65%</option><option value="10">14 / 20 min — 70%</option><option value="11">15 / 20 min — 75%</option><option value="12">16 / 20 min — 80%</option><option value="13">17 / 20 min — 85%</option><option value="14">18 / 20 min — 90%</option><option value="15">19 / 20 min — 95%</option><option value="16">20 / 20 min — 100%</option>
+                <option value="21">5 / 20 min — 25%</option><option value="22">6.6 / 20 min — 33%</option><option value="23">8 / 20 min — 40%</option><option value="24">9 / 20 min — 45%</option><option value="25">10 / 20 min — 50%</option><option value="26">11 / 20 min — 55%</option><option value="27">12 / 20 min — 60%</option><option value="28">13 / 20 min — 65%</option><option value="29">14 / 20 min — 70%</option><option value="30">15 / 20 min — 75%</option><option value="31">16 / 20 min — 80%</option><option value="32">17 / 20 min — 85%</option><option value="33">18 / 20 min — 90%</option><option value="34">19 / 20 min — 95%</option><option value="35">20 / 20 min — 100%</option>
               </optgroup>
               <optgroup label="── 30 min period ──">
-                <option value="17">5 / 30 min — 17%</option><option value="18">7.5 / 30 min — 25%</option><option value="19">10 / 30 min — 33%</option><option value="20">12 / 30 min — 40%</option><option value="21">13.5 / 30 min — 45%</option><option value="22">15 / 30 min — 50%</option><option value="23">16.5 / 30 min — 55%</option><option value="24">18 / 30 min — 60%</option><option value="25">19.5 / 30 min — 65%</option><option value="26">21 / 30 min — 70%</option><option value="27">22.5 / 30 min — 75%</option><option value="28">24 / 30 min — 80%</option><option value="29">25.5 / 30 min — 85%</option><option value="30">27 / 30 min — 90%</option><option value="31">28.5 / 30 min — 95%</option><option value="32">30 / 30 min — 100%</option>
+                <option value="4">5 / 30 min — 17%</option><option value="5">7.5 / 30 min — 25%</option><option value="6">10 / 30 min — 33%</option><option value="7">12 / 30 min — 40%</option><option value="8">13.5 / 30 min — 45%</option><option value="9" selected>15 / 30 min — 50%</option><option value="10">16.5 / 30 min — 55%</option><option value="11">18 / 30 min — 60%</option><option value="12">19.5 / 30 min — 65%</option><option value="13">21 / 30 min — 70%</option><option value="14">22.5 / 30 min — 75%</option><option value="15">24 / 30 min — 80%</option><option value="16">25.5 / 30 min — 85%</option><option value="17">27 / 30 min — 90%</option><option value="18">28.5 / 30 min — 95%</option><option value="19">30 / 30 min — 100%</option>
               </optgroup>
               <optgroup label="── 60 min period ──">
-                <option value="33">5 / 60 min — 8%</option><option value="34">10 / 60 min — 17%</option><option value="35">15 / 60 min — 25%</option><option value="36">20 / 60 min — 33%</option><option value="37">24 / 60 min — 40%</option><option value="38">27 / 60 min — 45%</option><option value="39">30 / 60 min — 50%</option><option value="40">33 / 60 min — 55%</option><option value="41">36 / 60 min — 60%</option><option value="42">39 / 60 min — 65%</option><option value="43">42 / 60 min — 70%</option><option value="44">45 / 60 min — 75%</option><option value="45">48 / 60 min — 80%</option><option value="46">51 / 60 min — 85%</option><option value="47">54 / 60 min — 90%</option><option value="48">57 / 60 min — 95%</option><option value="49">60 / 60 min — 100%</option>
+                <option value="37">5 / 60 min — 8%</option><option value="38">10 / 60 min — 17%</option><option value="39">15 / 60 min — 25%</option><option value="40">20 / 60 min — 33%</option><option value="41">24 / 60 min — 40%</option><option value="42">27 / 60 min — 45%</option><option value="43">30 / 60 min — 50%</option><option value="44">33 / 60 min — 55%</option><option value="45">36 / 60 min — 60%</option><option value="46">39 / 60 min — 65%</option><option value="47">42 / 60 min — 70%</option><option value="48">45 / 60 min — 75%</option><option value="49">48 / 60 min — 80%</option><option value="50">51 / 60 min — 85%</option><option value="51">54 / 60 min — 90%</option><option value="52">57 / 60 min — 95%</option><option value="53">60 / 60 min — 100%</option>
               </optgroup>
             </select>
           </div>
@@ -5381,6 +5394,10 @@
                     style="flex:1;padding:8px 12px;border-radius:var(--radius-sm);border:1.5px solid var(--green);background:var(--green-bg);font-size:14px;font-family:monospace;font-weight:700;color:var(--green-dark);letter-spacing:.06em;">
                   <button class="queue-refresh" onclick="loraCopyHex()">📋 Copy</button>
                 </div>
+              </div>
+              <div>
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-hint);margin-bottom:4px;">Byte Breakdown (per EnTek UART Spec)</div>
+                <div id="lora-byte-breakdown" style="font-family:monospace;font-size:11px;color:var(--text-secondary);background:var(--surface2);border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;line-height:1.7;white-space:pre-wrap;"></div>
               </div>
               <div>
                 <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-hint);margin-bottom:4px;">Full JSON Payload</div>
