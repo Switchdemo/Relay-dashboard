@@ -1203,6 +1203,13 @@
                 <div class="sf-tile-sub">Building Automation System — BAS mode control</div>
               </label>
 
+              <label class="sf-event-type-tile" data-type="lora_broadcast" onclick="selectEventType('lora_broadcast')">
+                <input type="radio" name="sf-event-type" value="lora_broadcast" style="display:none;"/>
+                <div class="sf-tile-icon">📡</div>
+                <div class="sf-tile-label">LoRa Broadcast</div>
+                <div class="sf-tile-sub">Relay event through gateway to LoRa slave devices</div>
+              </label>
+
               <label class="sf-event-type-tile" data-type="ev" onclick="selectEventType('ev')">
                 <input type="radio" name="sf-event-type" value="ev" style="display:none;"/>
                 <div class="sf-tile-icon">&#9889;</div>
@@ -1385,6 +1392,110 @@
                 <div style="font-family:monospace;font-size:11px;background:var(--ink);color:#a8e6cf;padding:7px 10px;border-radius:var(--radius-sm);letter-spacing:.08em;" id="sf-lc-preview">—</div>
               </div>
             </details>
+          </div>
+
+          <!-- LORA BROADCAST controls -->
+          <div id="sf-panel-lora_broadcast" class="sched-field full sf-event-panel" style="display:none;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+              <div>
+                <label class="sched-label">Gateway Device</label>
+                <select class="sched-select" id="sf-lora-gateway" onchange="onLoraGatewayChange()">
+                  <option value="" disabled selected>— Select Gateway —</option>
+                </select>
+                <div style="font-size:10px;color:var(--text-hint);margin-top:3px;">Only devices flagged as LoRa gateways appear here.</div>
+              </div>
+              <div>
+                <label class="sched-label">Message Type</label>
+                <select class="sched-select" id="sf-lora-msgtype">
+                  <option value="dlc" selected>DLC — Direct Load Control</option>
+                  <option value="di">DI — Distributed Intelligence</option>
+                </select>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+              <div>
+                <label class="sched-label">LoRa Addressing</label>
+                <select class="sched-select" id="sf-lora-addressing" onchange="onLoraAddressingChange()">
+                  <option value="broadcast" selected>Broadcast — All Slaves</option>
+                  <option value="individual">Individual — Address 1</option>
+                </select>
+              </div>
+              <div id="sf-lora-addr-row" style="display:none;">
+                <label class="sched-label">Slave Address (1-255)</label>
+                <input class="sched-input" type="number" id="sf-lora-address" min="1" max="255" value="1">
+              </div>
+            </div>
+            <div style="margin-bottom:12px;">
+              <label class="sched-label">Relay Action</label>
+              <select class="sched-select" id="sf-lora-action" style="margin-bottom:6px;">
+                <option value="all_on">All Relays — Shed</option>
+                <option value="relay1_on">Relay F1 — Shed</option>
+                <option value="relay2_on">Relay F2 — Shed</option>
+                <option value="relay3_on">Relay F3 — Shed</option>
+                <option value="relay4_on">Relay F4 — Shed</option>
+              </select>
+            </div>
+            <div style="margin-bottom:12px;">
+              <label class="sched-label">Shed Strategy</label>
+              <select class="sched-select" id="sf-lora-strategy">
+                <optgroup label="── 7.5 min cycle ──">
+                  <option value="1|7.5|7.5">100% — 7.5/7.5 min</option>
+                </optgroup>
+                <optgroup label="── 15 min cycle ──">
+                  <option value="2|7.5|15">50% — 7.5/15 min</option>
+                </optgroup>
+                <optgroup label="── 30 min cycle ──">
+                  <option value="4|5|30">17% — 5/30 min</option>
+                  <option value="5|7.5|30">25% — 7.5/30 min</option>
+                  <option value="6|10|30">33% — 10/30 min</option>
+                  <option value="7|12|30">40% — 12/30 min</option>
+                  <option value="8|13.5|30">45% — 13.5/30 min</option>
+                  <option value="9|15|30" selected>50% — 15/30 min</option>
+                  <option value="10|16.5|30">55% — 16.5/30 min</option>
+                  <option value="11|18|30">60% — 18/30 min</option>
+                  <option value="12|19.5|30">65% — 19.5/30 min</option>
+                  <option value="13|21|30">70% — 21/30 min</option>
+                  <option value="14|22.5|30">75% — 22.5/30 min</option>
+                  <option value="15|24|30">80% — 24/30 min</option>
+                  <option value="16|25.5|30">85% — 25.5/30 min</option>
+                  <option value="17|27|30">90% — 27/30 min</option>
+                  <option value="18|28.5|30">95% — 28.5/30 min</option>
+                  <option value="19|30|30">100% — 30/30 min</option>
+                </optgroup>
+                <optgroup label="── 20 min cycle ──">
+                  <option value="21|5|20">25% — 5/20 min</option>
+                  <option value="22|6.6|20">33% — 6.6/20 min</option>
+                  <option value="23|8|20">40% — 8/20 min</option>
+                  <option value="25|10|20">50% — 10/20 min</option>
+                  <option value="27|12|20">60% — 12/20 min</option>
+                  <option value="30|15|20">75% — 15/20 min</option>
+                  <option value="35|20|20">100% — 20/20 min</option>
+                </optgroup>
+                <optgroup label="── 60 min cycle ──">
+                  <option value="37|5|60">8% — 5/60 min</option>
+                  <option value="39|15|60">25% — 15/60 min</option>
+                  <option value="43|30|60">50% — 30/60 min</option>
+                  <option value="48|45|60">75% — 45/60 min</option>
+                  <option value="53|60|60">100% — 60/60 min</option>
+                </optgroup>
+              </select>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div>
+                <label class="sched-label">Function Channels</label>
+                <div style="display:flex;gap:12px;margin-top:4px;">
+                  <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="sf-lora-f1" checked> F1</label>
+                  <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="sf-lora-f2"> F2</label>
+                  <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="sf-lora-f3"> F3</label>
+                  <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="sf-lora-f4"> F4</label>
+                </div>
+              </div>
+              <div>
+                <label class="sched-label">Event ID</label>
+                <div style="font-size:11px;color:var(--text-hint);margin-bottom:3px;">Auto-incremented (shared counter with other events)</div>
+                <div id="sf-lora-evid-preview" style="font-family:monospace;font-size:12px;color:var(--text-secondary);">Next: —</div>
+              </div>
+            </div>
           </div>
 
           <!-- BAS / DI controls -->
