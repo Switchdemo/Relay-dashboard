@@ -960,7 +960,12 @@ async function confirmAndSave() {
   btn.disabled = true;
   btn.textContent = "Sending…";
   document.getElementById("sched-confirm-modal").classList.remove("active");
-  await _executeCreateSchedule();
+  try {
+    await _executeCreateSchedule();
+  } catch(e) {
+    console.error("confirmAndSave error:", e);
+    setStatus("error", "Event dispatch failed: " + e.message);
+  }
   btn.disabled = false;
   btn.textContent = "✓ Confirm & Send to Device";
 }
@@ -1146,34 +1151,39 @@ async function _executeCreateSchedule() {
 
     setStatus("sending", "Sending LoRa broadcast event…");
 
-    const loraResult = buildLoRaCommand({
-      mode: "shed",
-      msgType: loraMsgType,
-      addressing: loraAddr,
-      address: loraAddress,
-      strategyIndex: stratNum,
-      channels,
-      repetitions: reps,
-      startNow: isImmediate || !scheduledTime,
-      scheduledTime: isImmediate ? null : new Date(schedUnix * 1000)
-    });
+    try {
+      const loraResult = buildLoRaCommand({
+        mode: "shed",
+        msgType: loraMsgType,
+        addressing: loraAddr,
+        address: loraAddress,
+        strategyIndex: stratNum,
+        channels,
+        repetitions: reps,
+        startNow: isImmediate,
+        scheduledTime: isImmediate ? null : new Date(schedUnix * 1000)
+      });
 
-    await sendLCToDevice(gatewayUID, loraResult.hex);
-    const lastEventId = loraEventId > 1 ? loraEventId - 1 : 254;
+      await sendLCToDevice(gatewayUID, loraResult.hex);
+      const lastEventId = loraEventId > 1 ? loraEventId - 1 : 254;
 
-    await supabasePost("schedule_queue", {
-      name, fire_at: new Date(schedUnix*1000).toISOString(),
-      target_type: "lora_gateway", target_id: gatewayUID,
-      target_name: unitName(gatewayUID) + " → LoRa " + (loraAddr === "broadcast" ? "ALL" : "Addr " + loraAddress),
-      relay_action: loraAction,
-      duration_minutes, timezone: tz, action_time: time,
-      lc_mode: loraMsgType, lc_strategy: stratNum, lc_timeout: stratTimeout || null,
-      lc_cycle: stratCycle || null, lc_reps: reps, lc_event_id: lastEventId,
-      one_time: true, status: "sent", fired_at: new Date().toISOString(),
-      event_type: "lora_broadcast"
-    });
+      await supabasePost("schedule_queue", {
+        name, fire_at: new Date(schedUnix*1000).toISOString(),
+        target_type: "lora_gateway", target_id: gatewayUID,
+        target_name: unitName(gatewayUID) + " → LoRa " + (loraAddr === "broadcast" ? "ALL" : "Addr " + loraAddress),
+        relay_action: loraAction,
+        duration_minutes, timezone: tz, action_time: time,
+        lc_mode: loraMsgType, lc_strategy: stratNum, lc_timeout: stratTimeout || null,
+        lc_cycle: stratCycle || null, lc_reps: reps, lc_event_id: lastEventId,
+        one_time: true, status: "sent", fired_at: new Date().toISOString(),
+        event_type: "lora_broadcast"
+      });
 
-    setStatus("ready", `"${name}" LoRa broadcast sent via ${unitName(gatewayUID)} — ${loraResult.hex.substring(0,16)}…`);
+      setStatus("ready", `"${name}" LoRa broadcast sent via ${unitName(gatewayUID)} — ${loraResult.hex.substring(0,16)}…`);
+    } catch(e) {
+      console.error("LoRa broadcast dispatch error:", e);
+      setStatus("error", `LoRa dispatch failed: ${e.message}`);
+    }
     await loadSchedules();
     await loadDeviceEvents();
     return;
