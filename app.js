@@ -525,6 +525,7 @@ async function initScheduler() {
     populateTzSelector();
     populateTargetSelector();
     updateSchedulerTimezone();
+    await loadLoraGateways();
     await loadSchedules();
     await loadDeviceEvents();
     renderHexParser("hex-parser-panel");
@@ -822,6 +823,22 @@ function showSchedConfirm() {
     targetName    = targetVal;
     actionSummary = `BAS Mode — Strategy ${stratVal.split("|")[0]}`;
 
+  } else if (eventType === "lora_broadcast") {
+    const gwUID   = getVal("sf-lora-gateway");
+    const loraAct = getVal("sf-lora-action") || "all_on";
+    const loraMT  = getVal("sf-lora-msgtype") || "dlc";
+    const loraAddrMode = getVal("sf-lora-addressing") || "broadcast";
+    stratVal      = getVal("sf-lora-strategy");
+    type          = "lora_gateway";
+    targetVal     = gwUID;
+    if (!gwUID)    { setStatus("error", "Please select a gateway device."); return; }
+    if (!stratVal) { setStatus("error", "Please select a shed strategy."); return; }
+    const gwName  = unitName(gwUID) || gwUID;
+    const addrStr = loraAddrMode === "broadcast" ? "all slaves" : "Addr " + getVal("sf-lora-address");
+    targetName    = `📡 ${gwName} → ${addrStr}`;
+    const [sn] = stratVal.split("|");
+    actionSummary = `LoRa ${loraMT.toUpperCase()} — Strategy ${sn} — ${loraAct.replace("_"," ")}`;
+
   } else if (eventType === "ev") {
     type          = getVal("sf-ev-target-type");
     targetVal     = getVal("sf-ev-target");
@@ -896,7 +913,7 @@ function showSchedConfirm() {
 
   // LC hex (only for switch/relay events)
   let lcHex = "—", repsLabel = "—", schedUnix = null;
-  const isLCEvent = eventType === "switch" || eventType === "bas_di";
+  const isLCEvent = eventType === "switch" || eventType === "bas_di" || eventType === "lora_broadcast";
   if (isLCEvent && stratVal && !["ev_shed","batt_action","gen_action","oadr_event","hybrid"].includes(stratVal)) {
     const [stratNum,, stratCycle] = stratVal.split("|").map(Number);
     const reps = duration_minutes && stratCycle ? Math.max(1, Math.round(duration_minutes / stratCycle)) : 1;
@@ -1090,6 +1107,76 @@ async function _executeCreateSchedule() {
       setStatus(data.ok ? "ready" : "error", data.ok ? `"${name}" OpenADR event sent.` : "OpenADR dispatch failed.");
     } catch(e) { setStatus("error", "OpenADR error: " + e.message); }
     await loadSchedules(); return;
+  }
+
+  // ── LoRa Broadcast ──────────────────────────────────────────────────────────
+  if (evType === "lora_broadcast") {
+    const gatewayUID   = getVal("sf-lora-gateway");
+    const loraAction   = getVal("sf-lora-action") || "all_on";
+    const loraMsgType  = getVal("sf-lora-msgtype") || "dlc";
+    const loraStratVal = getVal("sf-lora-strategy");
+    const loraAddr     = getVal("sf-lora-addressing") || "broadcast";
+    const loraAddress  = parseInt(getVal("sf-lora-address") || "1", 10);
+
+    if (!gatewayUID)   { setStatus("error", "Please select a gateway device."); return; }
+    if (!loraStratVal) { setStatus("error", "Please select a shed strategy."); return; }
+
+    const [stratNum, stratTimeout, stratCycle] = loraStratVal.split("|").map(Number);
+    const reps = duration_minutes && stratCycle ? Math.max(1, Math.round(duration_minutes / stratCycle)) : 1;
+    const schedUnix = getScheduleUnixTime(event_date, time, tz);
+
+    // Map relay action to channels
+    const actionToChannels = {
+      all_on: {f1:true, f2:true, f3:true, f4:true},
+      relay1_on: {f1:true, f2:false, f3:false, f4:false},
+      relay2_on: {f1:false, f2:true, f3:false, f4:false},
+      relay3_on: {f1:false, f2:false, f3:true, f4:false},
+      relay4_on: {f1:false, f2:false, f3:false, f4:true},
+    };
+    // Also check sf-lora-f1..f4 checkboxes for custom channels
+    let channels = actionToChannels[loraAction] || {f1:true, f2:true, f3:true, f4:true};
+    if (loraAction === "all_on") {
+      channels = {
+        f1: document.getElementById("sf-lora-f1")?.checked ?? true,
+        f2: document.getElementById("sf-lora-f2")?.checked ?? false,
+        f3: document.getElementById("sf-lora-f3")?.checked ?? false,
+        f4: document.getElementById("sf-lora-f4")?.checked ?? false,
+      };
+    }
+
+    setStatus("sending", "Sending LoRa broadcast event…");
+
+    const loraResult = buildLoRaCommand({
+      mode: "shed",
+      msgType: loraMsgType,
+      addressing: loraAddr,
+      address: loraAddress,
+      strategyIndex: stratNum,
+      channels,
+      repetitions: reps,
+      startNow: isImmediate || !scheduledTime,
+      scheduledTime: isImmediate ? null : new Date(schedUnix * 1000)
+    });
+
+    await sendLCToDevice(gatewayUID, loraResult.hex);
+    const lastEventId = loraEventId > 1 ? loraEventId - 1 : 254;
+
+    await supabasePost("schedule_queue", {
+      name, fire_at: new Date(schedUnix*1000).toISOString(),
+      target_type: "lora_gateway", target_id: gatewayUID,
+      target_name: unitName(gatewayUID) + " → LoRa " + (loraAddr === "broadcast" ? "ALL" : "Addr " + loraAddress),
+      relay_action: loraAction,
+      duration_minutes, timezone: tz, action_time: time,
+      lc_mode: loraMsgType, lc_strategy: stratNum, lc_timeout: stratTimeout || null,
+      lc_cycle: stratCycle || null, lc_reps: reps, lc_event_id: lastEventId,
+      one_time: true, status: "sent", fired_at: new Date().toISOString(),
+      event_type: "lora_broadcast"
+    });
+
+    setStatus("ready", `"${name}" LoRa broadcast sent via ${unitName(gatewayUID)} — ${loraResult.hex.substring(0,16)}…`);
+    await loadSchedules();
+    await loadDeviceEvents();
+    return;
   }
 
   // ── Hybrid Switch ─────────────────────────────────────────────────────────
@@ -23935,6 +24022,10 @@ function populateEventTypeTargets(type) {
     if (sel)    sel.innerHTML = `<option value="" disabled selected>— Choose One —</option>`;
   }
 
+  if (type === "lora_broadcast") {
+    populateLoraGatewaySelector();
+  }
+
   if (type === "bas_di") {
     // Populate BAS target selectors same as switch
     const typeEl = document.getElementById("sf-bas-target-type");
@@ -27647,6 +27738,69 @@ function loraSelectAllChannels() {
 
   const out = document.getElementById('lora-output-area');
   if (out) out.style.display = 'none';
+}
+
+// ── LoRa Gateway Management ─────────────────────────────────────────────────
+
+// Gateway UIDs are loaded from Supabase devices table (is_lora_gateway = true)
+let loraGatewayUIDs = new Set();
+
+async function loadLoraGateways() {
+  try {
+    const rows = await supabaseGet("devices?is_lora_gateway=eq.true&select=uid");
+    loraGatewayUIDs = new Set((rows || []).map(r => r.uid));
+    console.log(`LoRa gateways loaded: ${loraGatewayUIDs.size}`, [...loraGatewayUIDs]);
+  } catch(e) {
+    console.warn("Could not load LoRa gateway flags — column may not exist yet:", e.message);
+    loraGatewayUIDs = new Set();
+  }
+}
+
+function populateLoraGatewaySelector() {
+  const sel = document.getElementById("sf-lora-gateway");
+  if (!sel) return;
+  sel.innerHTML = '<option value="" disabled selected>— Select Gateway —</option>';
+
+  // If we have tagged gateways, show only those; otherwise show all relay devices
+  const gateways = loraGatewayUIDs.size > 0
+    ? DEVICES.filter(d => loraGatewayUIDs.has(d.uid))
+    : DEVICES.filter(d => (d.type === "relay" || !d.type) && !d.uid.includes("PLACEHOLDER"));
+
+  gateways.forEach(d => {
+    const opt = document.createElement("option");
+    opt.value = d.uid;
+    opt.textContent = (loraGatewayUIDs.has(d.uid) ? "📡 " : "") + (d.name || d.uid);
+    sel.appendChild(opt);
+  });
+
+  if (loraGatewayUIDs.size === 0 && gateways.length > 0) {
+    const hint = document.createElement("option");
+    hint.disabled = true;
+    hint.textContent = "⚠ No devices tagged as gateways — showing all. Add is_lora_gateway column to devices table.";
+    sel.insertBefore(hint, sel.firstChild.nextSibling);
+  }
+
+  // Show next event ID
+  const evIdEl = document.getElementById("sf-lora-evid-preview");
+  if (evIdEl) evIdEl.textContent = `Next: ${loraEventId}`;
+}
+
+function onLoraGatewayChange() {
+  // Could auto-detect timezone from gateway device
+  const uid = document.getElementById("sf-lora-gateway")?.value;
+  if (uid) {
+    const device = DEVICES.find(d => d.uid === uid);
+    if (device && deviceTimezones[device.id]) {
+      const tzSel = document.getElementById("sf-timezone");
+      if (tzSel) tzSel.value = deviceTimezones[device.id];
+    }
+  }
+}
+
+function onLoraAddressingChange() {
+  const val = document.getElementById("sf-lora-addressing")?.value;
+  const row = document.getElementById("sf-lora-addr-row");
+  if (row) row.style.display = val === "individual" ? "" : "none";
 }
 
 // ── Instant Restore All ──────────────────────────────────────────────────────
