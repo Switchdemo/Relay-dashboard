@@ -1128,7 +1128,13 @@ async function _executeCreateSchedule() {
 
     const [stratNum, stratTimeout, stratCycle] = loraStratVal.split("|").map(Number);
     const reps = duration_minutes && stratCycle ? Math.max(1, Math.round(duration_minutes / stratCycle)) : 1;
-    const schedUnix = getScheduleUnixTime(event_date, time, tz);
+
+    // For immediate events, Time to Start = 0 (the TC250 acts now).
+    // For scheduled events, the command is STILL sent immediately to the gateway
+    // but with the Unix timestamp in Time to Start. The TC250 queues up to 3 events
+    // but its clock MUST be set first (Set Time command 0x05) for this to work.
+    const schedUnix = isImmediate ? Math.floor(Date.now()/1000) : getScheduleUnixTime(event_date, time, tz);
+    const commandStartTime = isImmediate ? 0 : schedUnix;
 
     // Map relay action to channels
     const actionToChannels = {
@@ -1138,7 +1144,6 @@ async function _executeCreateSchedule() {
       relay3_on: {f1:false, f2:false, f3:true, f4:false},
       relay4_on: {f1:false, f2:false, f3:false, f4:true},
     };
-    // Also check sf-lora-f1..f4 checkboxes for custom channels
     let channels = actionToChannels[loraAction] || {f1:true, f2:true, f3:true, f4:true};
     if (loraAction === "all_on") {
       channels = {
@@ -1161,11 +1166,15 @@ async function _executeCreateSchedule() {
         channels,
         repetitions: reps,
         startNow: isImmediate,
-        scheduledTime: isImmediate ? null : new Date(schedUnix * 1000)
+        scheduledTime: isImmediate ? null : new Date(commandStartTime * 1000)
       });
 
       await sendLCToDevice(gatewayUID, loraResult.hex);
       const lastEventId = loraEventId > 1 ? loraEventId - 1 : 254;
+
+      // Update the LoRa event ID display
+      const evIdEl = document.getElementById("sf-lora-evid-preview");
+      if (evIdEl) evIdEl.textContent = `Last sent: ${lastEventId} — Next: ${loraEventId}`;
 
       await supabasePost("schedule_queue", {
         name, fire_at: new Date(schedUnix*1000).toISOString(),
@@ -1175,11 +1184,14 @@ async function _executeCreateSchedule() {
         duration_minutes, timezone: tz, action_time: time,
         lc_mode: loraMsgType, lc_strategy: stratNum, lc_timeout: stratTimeout || null,
         lc_cycle: stratCycle || null, lc_reps: reps, lc_event_id: lastEventId,
+        lc_hex: loraResult.hex,
         one_time: true, status: "sent", fired_at: new Date().toISOString(),
         event_type: "lora_broadcast"
       });
 
-      setStatus("ready", `"${name}" LoRa broadcast sent via ${unitName(gatewayUID)} — ${loraResult.hex.substring(0,16)}…`);
+      let statusMsg = `"${name}" LoRa broadcast sent via ${unitName(gatewayUID)} — evId=${lastEventId}`;
+      if (!isImmediate) statusMsg += ` ⚠️ Scheduled for ${new Date(schedUnix*1000).toLocaleString()} — TC250 clock must be set for deferred execution`;
+      setStatus("ready", statusMsg);
     } catch(e) {
       console.error("LoRa broadcast dispatch error:", e);
       setStatus("error", `LoRa dispatch failed: ${e.message}`);
@@ -26917,6 +26929,30 @@ function vpReset() {
 // Auto-incrementing event ID for LoRa tab (separate from scheduler's lcEventId)
 let loraEventId = 1;
 
+async function loadLoraEventId() {
+  try {
+    const rows = await supabaseGet("program_settings?setting_key=eq.lora_event_id_counter&select=setting_value");
+    const val = parseInt(rows?.[0]?.setting_value);
+    if (!isNaN(val) && val >= 1 && val <= 254) loraEventId = val;
+    console.log("LoRa event ID loaded:", loraEventId);
+  } catch(e) { console.warn("loadLoraEventId:", e.message); }
+}
+
+async function saveLoraEventId(id) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/program_settings?on_conflict=setting_key`, {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates,return=minimal"
+      },
+      body: JSON.stringify({ setting_key: "lora_event_id_counter", setting_value: String(id) })
+    });
+  } catch(e) { console.warn("saveLoraEventId:", e.message); }
+}
+
 // ── Command Builder ───────────────────────────────────────────────────────────
 function buildLoRaCommand(opts) {
   const {
@@ -26958,16 +26994,18 @@ function buildLoRaCommand(opts) {
   // ── Data byte ──
   let dataByte;
   if (mode === 'shed') {
-    dataByte = (repetitions || 0) & 0xFF;
+    // Match buildLCHex encoding: reps-1 (0 = execute once, 1 = repeat once, etc.)
+    dataByte = Math.min(255, Math.max(0, (repetitions || 1) - 1));
   } else if (mode === 'gracefulRestore') {
     dataByte = 1;   // graceful
   } else {
     dataByte = 0;   // abrupt
   }
 
-  // ── Event ID (auto-increment, 1-254) ──
+  // ── Event ID (auto-increment, 1-254, persisted to Supabase) ──
   const evId = loraEventId;
   loraEventId = (loraEventId >= 254) ? 1 : loraEventId + 1;
+  saveLoraEventId(loraEventId); // async, non-blocking
 
   // ── Time to Start: 4 bytes MSB first (0 = immediate) ──
   let ts = 0;
@@ -27187,6 +27225,9 @@ function loraInit() {
 
   // Initialize diagnostics device selector
   loraDiagInit();
+
+  // Load persisted LoRa event ID
+  loadLoraEventId();
 }
 
 // ── LoRa Device Configuration Commands ──────────────────────────────────────────────
@@ -27253,6 +27294,39 @@ async function tc250SendSetTime() {
   const bytes = [0xA1, 0x07, 0x00, 0x05, b3, b2, b1, b0];
   bytes.push(tc250Checksum(bytes));
   await tc250SendCommand(uid, tc250HexStr(bytes), 'tc250-time-status');
+}
+
+// ── 1b. Data Request (0x0C) ───────────────────────────────────────────────────
+async function tc250SendDataRequest() {
+  const uid = tc250TargetUID(); if (!uid) return;
+  const typeVal = document.getElementById('tc250-data-request-type')?.value || '0x05';
+  const dataReqByte = parseInt(typeVal, 16);
+  const addrMode = document.getElementById('tc250-data-req-addr')?.value || 'broadcast';
+  const addrVal = parseInt(document.getElementById('tc250-data-req-address')?.value || '1', 10);
+
+  let bytes;
+  if (addrMode === 'broadcast') {
+    // Broadcast: A1 [len=04] [addr_spec=00] [msg_type=0C] [data_req_byte] [cs]
+    bytes = [0xA1, 0x04, 0x00, 0x0C, dataReqByte];
+  } else {
+    // Individual: A1 [len=05] [addr_spec=01] [addr_body] [msg_type=0C] [data_req_byte] [cs]
+    bytes = [0xA1, 0x05, 0x01, addrVal & 0xFF, 0x0C, dataReqByte];
+  }
+  bytes.push(tc250Checksum(bytes));
+
+  const hexStr = tc250HexStr(bytes);
+  const hexEl = document.getElementById('tc250-data-req-hex');
+  if (hexEl) hexEl.textContent = hexStr;
+
+  const statusEl = document.getElementById('tc250-data-req-status');
+  if (statusEl) statusEl.textContent = '⏳ Sending query…';
+
+  try {
+    await tc250SendCommand(uid, hexStr, 'tc250-data-req-status');
+    if (statusEl) statusEl.textContent += ' — Check Notehub events on the gateway device for the response.';
+  } catch(e) {
+    if (statusEl) statusEl.textContent = `❌ ${e.message}`;
+  }
 }
 
 // ── 2. Min/Max Voltage Alert (0x0D) ──────────────────────────────────────────
