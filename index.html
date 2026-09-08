@@ -5666,6 +5666,53 @@
         <div id="tc250-time-status" style="margin-top:8px;font-size:11px;font-family:monospace;color:var(--text-hint);min-height:16px;"></div>
       </div>
 
+      <!-- 1b. Data Request — Query Slave Status -->
+      <div class="sched-card" style="border:1.5px solid var(--blue);background:linear-gradient(to bottom,var(--blue-bg),var(--surface));">
+        <div class="sched-card-header">
+          <div class="sched-card-title">📊 Query Device Status <span style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;">Cmd 0x0C</span></div>
+          <button class="queue-refresh" onclick="tc250SendDataRequest()">Send Query</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">
+          Sends a Data Request to the gateway, which relays it over LoRa. Slave responses appear in Notehub events on the gateway device. Use this to verify event participation by checking relay status.
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Data Request Type</label>
+            <select id="tc250-data-request-type" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="0x05" selected>0x05 — Relay Status ✓</option>
+              <option value="0x00">0x00 — Address</option>
+              <option value="0x01">0x01 — Serial Number</option>
+              <option value="0x02">0x02 — CLP Timeout</option>
+              <option value="0x03">0x03 — Current Time of Day</option>
+              <option value="0x04">0x04 — Relay Map</option>
+              <option value="0x06">0x06 — Time Since Last Current</option>
+              <option value="0x07">0x07 — Total Time in Service</option>
+              <option value="0x08">0x08 — Load Control Queue</option>
+              <option value="0x09">0x09 — Report Provisioning</option>
+              <option value="0x0A">0x0A — Override Timer</option>
+              <option value="0x0B">0x0B — Power Measurement</option>
+              <option value="0x0C">0x0C — Last Touch Pad Command</option>
+              <option value="0x0D">0x0D — Time to Record Data</option>
+              <option value="0x0E">0x0E — Reporting Offset</option>
+              <option value="0x0F">0x0F — Trigger Max/Min Alert</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Addressing</label>
+            <select id="tc250-data-req-addr" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" onchange="document.getElementById('tc250-data-req-addr-row').style.display = this.value === 'individual' ? '' : 'none';">
+              <option value="broadcast" selected>Broadcast — All Devices</option>
+              <option value="individual">Individual — Address 1</option>
+            </select>
+            <div id="tc250-data-req-addr-row" style="display:none;margin-top:6px;">
+              <input type="number" id="tc250-data-req-address" value="1" min="1" max="255"
+                style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" placeholder="Address 1 value">
+            </div>
+          </div>
+        </div>
+        <div id="tc250-data-req-hex" style="font-family:monospace;font-size:11px;color:var(--text-hint);padding:6px 8px;background:var(--surface2);border-radius:var(--radius-sm);margin-bottom:6px;">—</div>
+        <div id="tc250-data-req-status" style="font-size:11px;font-family:monospace;color:var(--text-hint);min-height:16px;"></div>
+      </div>
+
       <!-- 2. Min/Max Voltage Alert -->
       <div class="sched-card">
         <div class="sched-card-header">
