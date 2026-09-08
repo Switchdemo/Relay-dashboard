@@ -26814,32 +26814,76 @@ async function vpRunDispatch() {
       </div>`).join('') + extra;
   }
 
-  // Step 4 — send commands
+  // Step 4 — ACTUALLY send commands to each device
   await vpDelay(400);
-  vpSetStep(4, 'active', `Queuing ${targetDevices.length} command(s) to Notehub proxy…`, 'Queuing', 'info');
-  await vpDelay(1200);
+  vpSetStep(4, 'active', `Sending ${targetDevices.length} command(s) to Notehub proxy…`, 'Sending', 'info');
 
-  // Update device list to "Sent"
+  let sentCount = 0;
+  let failCount = 0;
+  for (const d of targetDevices) {
+    try {
+      const res = await fetch(PROXY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Device-UID': d.uid },
+        body: JSON.stringify({ body: { LC: lcHex }, req: 'note.add', sync: true })
+      });
+      if (res.ok) sentCount++; else failCount++;
+    } catch(e) {
+      console.warn(`VP dispatch to ${d.uid} failed:`, e.message);
+      failCount++;
+    }
+  }
+
+  // Update device list to show actual send status
   if (devListEl) {
-    const show = targetDevices.slice(0, 3);
-    const extra = targetDevices.length > 3 ? `<div style="font-size:11px;color:var(--text-hint);text-align:center;padding:4px 0;">+ ${targetDevices.length - 3} more devices</div>` : '';
-    devListEl.innerHTML = show.map(d => `
+    const show = targetDevices.slice(0, 5);
+    const extra = targetDevices.length > 5 ? `<div style="font-size:11px;color:var(--text-hint);text-align:center;padding:4px 0;">+ ${targetDevices.length - 5} more devices</div>` : '';
+    devListEl.innerHTML = show.map((d, i) => `
       <div class="vp-device-row">
         <div>
           <div style="font-weight:500;color:var(--text-primary);">${d.name}</div>
           <div style="font-size:10px;color:var(--text-hint);font-family:monospace;">${d.uid}</div>
         </div>
-        <span class="vp-badge vp-badge-success">Sent</span>
+        <span class="vp-badge ${i < sentCount ? 'vp-badge-success' : 'vp-badge-warning'}">${i < sentCount ? 'Sent' : 'Failed'}</span>
       </div>`).join('') + extra;
   }
-  vpSetStep(4, 'done', `${targetDevices.length} note.add command(s) accepted by proxy`, 'Queued', 'success');
+  vpSetStep(4, 'done',
+    failCount === 0
+      ? `${sentCount} note.add command(s) sent successfully`
+      : `${sentCount} sent, ${failCount} failed`,
+    sentCount > 0 ? 'Sent' : 'Failed', sentCount > 0 ? 'success' : 'warning');
 
-  // Step 5 — acknowledgement
+  // Log event to Supabase schedule_queue
+  const vpEventId = `VP-${Date.now().toString(36).toUpperCase()}`;
+  try {
+    const groupLabel = groupVal === 'all' ? 'All devices' : (groupNames[parseInt(groupVal)] || 'Group ' + groupVal);
+    await supabasePost("schedule_queue", {
+      name: `VP ${eventType.toUpperCase()} — ${groupLabel}`,
+      fire_at: new Date(startUnix * 1000).toISOString(),
+      target_type: groupVal === 'all' ? 'all_devices' : 'group',
+      target_id: groupVal,
+      target_name: groupLabel,
+      relay_action: relayVal,
+      duration_minutes: durMins,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      action_time: timeStr,
+      lc_mode: mode, lc_strategy: actualStrat,
+      lc_reps: reps, lc_event_id: vpEventId,
+      lc_hex: lcHex,
+      one_time: true, status: "sent", fired_at: new Date().toISOString(),
+      event_type: "virtual_peaker"
+    });
+  } catch(e) {
+    console.warn("VP event log failed:", e.message);
+  }
+
+  // Step 5 — report actual results (no fake ack count)
   await vpDelay(600);
-  vpSetStep(5, 'active', 'Waiting for device acknowledgement via bubble-up…', 'Waiting', 'info');
-  await vpDelay(1400);
-  const ackCount = Math.max(1, Math.floor(targetDevices.length * 0.92));
-  vpSetStep(5, 'done', `${ackCount}/${targetDevices.length} devices confirmed relay state change`, 'Acknowledged', 'success');
+  vpSetStep(5, 'active', 'Commands sent — check device relay states for confirmation…', 'Verifying', 'info');
+  await vpDelay(1000);
+  vpSetStep(5, 'done',
+    `${sentCount}/${targetDevices.length} devices received command — verify relay state on device cards`,
+    `${sentCount} sent`, sentCount === targetDevices.length ? 'success' : 'warning');
 
   // Final status
   if (pipelineBadge) { pipelineBadge.textContent='Complete'; pipelineBadge.style.background='var(--green-bg)'; pipelineBadge.style.color='var(--green-dark)'; }
@@ -26854,9 +26898,9 @@ async function vpRunDispatch() {
   if (statRow) {
     statRow.innerHTML = `
       <div class="vp-stat"><div class="vp-stat-val" style="color:var(--green-dark);">${targetDevices.length}</div><div class="vp-stat-lbl">Devices targeted</div></div>
-      <div class="vp-stat"><div class="vp-stat-val" style="color:var(--green-dark);">${ackCount}</div><div class="vp-stat-lbl">Acknowledged</div></div>
+      <div class="vp-stat"><div class="vp-stat-val" style="color:${sentCount === targetDevices.length ? 'var(--green-dark)' : 'var(--amber)'};">${sentCount}</div><div class="vp-stat-lbl">Commands sent</div></div>
       <div class="vp-stat"><div class="vp-stat-val">${(durMins/60).toFixed(1)}h</div><div class="vp-stat-lbl">Event duration</div></div>
-      <div class="vp-stat"><div class="vp-stat-val">${Math.round(ackCount/targetDevices.length*100)}%</div><div class="vp-stat-lbl">Participation</div></div>`;
+      <div class="vp-stat"><div class="vp-stat-val">${failCount > 0 ? failCount : '0'}</div><div class="vp-stat-lbl">Failures</div></div>`;
   }
 
   const groupLabel = groupVal === 'all' ? 'All devices' : (groupNames[parseInt(groupVal)] || 'Group ' + groupVal);
@@ -26866,17 +26910,20 @@ async function vpRunDispatch() {
       <div class="vp-tl-item"><div class="vp-tl-time">${fmt(t1)}</div><div><div style="font-weight:500;">VP dispatch payload received</div><div style="color:var(--text-secondary);margin-top:1px;">Event type: ${eventType.toUpperCase()} · Target: ${groupLabel} · ${relayLabels[relayVal]||relayVal}</div></div></div>
       <div class="vp-tl-item"><div class="vp-tl-time">${fmt(t2)}</div><div><div style="font-weight:500;">LC parameters derived</div><div style="color:var(--text-secondary);margin-top:1px;">Strategy ${actualStrat} · Mode ${mode.toUpperCase()} · ${reps} rep(s) · ${durMins} min duration</div></div></div>
       <div class="vp-tl-item"><div class="vp-tl-time">${fmt(t3)}</div><div><div style="font-weight:500;">LC hex command built &amp; verified</div><div style="color:var(--text-secondary);margin-top:1px;font-family:monospace;font-size:11px;">${lcHex.substring(0,18)}… · checksum OK</div></div></div>
-      <div class="vp-tl-item"><div class="vp-tl-time">${fmt(t4)}</div><div><div style="font-weight:500;">${targetDevices.length} command(s) queued to Notehub proxy</div><div style="color:var(--text-secondary);margin-top:1px;">All targeted devices received data.qi note</div></div></div>
-      <div class="vp-tl-item"><div class="vp-tl-time">${fmt(t5)}</div><div><div style="font-weight:500;">${ackCount}/${targetDevices.length} devices confirmed via bubble-up</div><div style="color:var(--text-secondary);margin-top:1px;">Relay state change recorded in Supabase</div></div></div>`;
+      <div class="vp-tl-item"><div class="vp-tl-time">${fmt(t4)}</div><div><div style="font-weight:500;">${sentCount}/${targetDevices.length} command(s) sent to Notehub proxy</div><div style="color:var(--text-secondary);margin-top:1px;">${failCount > 0 ? failCount + ' device(s) failed' : 'All targeted devices received data.qi note'}</div></div></div>
+      <div class="vp-tl-item"><div class="vp-tl-time">${fmt(t5)}</div><div><div style="font-weight:500;">Event logged — verify relay states on device cards</div><div style="color:var(--text-secondary);margin-top:1px;">Event ID: ${vpEventId} · Logged to schedule_queue</div></div></div>`;
   }
 
   const resultsCard = document.getElementById('vp-results-card');
   if (resultsCard) resultsCard.style.display = 'block';
   const resultsBadge = document.getElementById('vp-results-badge');
-  if (resultsBadge) resultsBadge.textContent = `${ackCount}/${targetDevices.length} devices`;
+  if (resultsBadge) resultsBadge.textContent = `${sentCount}/${targetDevices.length} sent`;
 
   if (btn) { btn.disabled = false; btn.textContent = '▶ Simulate VP dispatch'; }
   vpDispatchRunning = false;
+
+  // Refresh event lists so the VP event appears in the Events tab
+  try { await loadSchedules(); await loadDeviceEvents(); } catch(e) { /* non-critical */ }
 }
 
 function vpReset() {
