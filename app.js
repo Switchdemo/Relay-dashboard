@@ -1171,6 +1171,25 @@ async function _executeCreateSchedule() {
 
       // Auto-sync TC250 clock, wait for LoRa propagation, then send LC command
       const sync = await sendLoRaWithTimeSync(gatewayUID, loraResult.hex);
+
+      // If this is a scheduled (non-immediate) event, also set up a client-side
+      // fallback timer that re-sends the command at the scheduled time with
+      // Time to Start = 0 (immediate). This ensures the event fires even if
+      // the TC250's internal scheduler doesn't work.
+      if (!isImmediate && schedUnix > Math.floor(Date.now()/1000) + 10) {
+        const delayMs = (schedUnix - Math.floor(Date.now()/1000)) * 1000;
+        const immResult = buildLoRaCommand({
+          mode: "shed", msgType: loraMsgType, addressing: loraAddr,
+          address: loraAddress, strategyIndex: stratNum, channels,
+          repetitions: reps, startNow: true, scheduledTime: null
+        });
+        console.log(`LoRa: scheduling client-side fallback in ${delayMs/1000}s (${new Date(schedUnix*1000).toLocaleString()})`);
+        setTimeout(async () => {
+          console.log(`LoRa: client-side timer fired — sending immediate command now`);
+          try { await sendLoRaWithTimeSync(gatewayUID, immResult.hex); }
+          catch(e) { console.error("LoRa scheduled fallback send failed:", e); }
+        }, delayMs);
+      }
       const lastEventId = loraEventId > 1 ? loraEventId - 1 : 254;
 
       // Update the LoRa event ID display
@@ -2079,6 +2098,7 @@ function toggleHexParser() {
     renderHexParser("hex-parser-inner");
     renderLCResponseParser("lcr-parser-inner");
     renderBubbleUpParser("bu-parser-inner");
+    renderLoraParser("lora-parser-inner");
   } else {
     overlay.style.display = "none";
   }
@@ -2086,9 +2106,131 @@ function toggleHexParser() {
 
 // ── Bubble Up / Data Parser (62-char) ────────────────────────────────────────
 
+// ── LoRa Universal Parser ────────────────────────────────────────────────────
+const LORA_CMD_TYPES = {
+  0x00:"DLC — Direct Load Control", 0x01:"DI — Distributed Intelligence",
+  0x02:"Address Assignment", 0x03:"Bubble Up Parameters Config",
+  0x04:"Serial Number Assignment", 0x05:"Set Current Time",
+  0x06:"Set Cold Load Pickup", 0x07:"Set Relay Map",
+  0x08:"Set Override Timer", 0x09:"Reset Time Since Last Current",
+  0x0A:"Time to Record Data", 0x0B:"Time to Report Offset",
+  0x0C:"Data Request", 0x0D:"Voltage Alert Config",
+  0x10:"Bubble Up Report", 0x11:"Touch Pad Sense", 0x12:"Min/Max Voltage Alert"
+};
+const LORA_DATA_REQ_TYPES = {
+  0x00:"Address",0x01:"Serial Number",0x02:"CLP Timeout",0x03:"Time of Day",
+  0x04:"Relay Map",0x05:"Relay Status",0x06:"Time Since Last Current",
+  0x07:"Total Time in Service",0x08:"Load Control Queue",0x09:"Report Provisioning",
+  0x0A:"Override Timer",0x0B:"Power Measurement",0x0C:"Last Touch Pad",
+  0x0D:"Time to Record",0x0E:"Reporting Offset",0x0F:"Trigger Max/Min Alert"
+};
+const LORA_RESP_TYPES = {
+  0x00:"Address",0x01:"Serial Number",0x02:"CLP Timeout",0x03:"Time of Day",
+  0x04:"Relay Map",0x05:"Relay Status",0x06:"Time Since Last Current",
+  0x07:"Total Time in Service",0x08:"LC Queue",0x09:"Report Provisioning",
+  0x0A:"Override Timer",0x0B:"Power Measurement",0x0C:"Last Touch Pad",
+  0x0D:"Time to Record",0x0E:"Report Offset",0x0F:"Trigger Max/Min"
+};
 
+function parseLoraUniversal(hex) {
+  hex = hex.trim().toUpperCase().replace(/\s/g,"");
+  if (hex.length < 8) return {error:`Need >= 8 hex chars, got ${hex.length}`};
+  if (hex.length % 2) return {error:"Odd number of hex chars"};
+  const bytes=[]; for(let i=0;i<hex.length;i+=2) bytes.push(parseInt(hex.slice(i,i+2),16));
+  const b=i=>bytes[i]||0, w=i=>((bytes[i]||0)<<8)|(bytes[i+1]||0);
+  const header=b(0),length=b(1),isCmd=header===0xA1,isResp=header===0x51;
+  if(!isCmd&&!isResp) return{error:`Header 0x${header.toString(16).toUpperCase()}: expected 0xA1 or 0x51`};
+  let xor=0; for(let i=0;i<bytes.length-1;i++) xor^=bytes[i];
+  const csOk=xor===bytes[bytes.length-1];
+  const r=[];
+  r.push({label:"Header",value:`0x${header.toString(16).toUpperCase()} — ${isCmd?'📤 Command':'📥 Response'}`});
+  r.push({label:"Length",value:`${length} bytes follow (${bytes.length} total)`});
+  const addrSpec=b(2); let bs=3;
+  if(addrSpec===0x00){r.push({label:"Addressing",value:"0x00 — Broadcast / All-Call"});}
+  else if(isCmd){
+    const bits=[];
+    if(addrSpec&0x01)bits.push("Addr1");if(addrSpec&0x02)bits.push("Addr2");
+    if(addrSpec&0x04)bits.push("Addr3");if(addrSpec&0x08)bits.push("Addr4");
+    if(addrSpec&0x10)bits.push("Addr5");if(addrSpec&0x20)bits.push("Serial#");
+    r.push({label:"Addressing",value:`0x${addrSpec.toString(16).toUpperCase()} — ${bits.join(' AND ')}`});
+    for(const bit of bits){
+      if(bit==="Serial#"){const sn=((b(bs)&0x3F)<<16)|(b(bs+1)<<8)|b(bs+2);r.push({label:"Serial#",value:`${sn}`});bs+=3;}
+      else{r.push({label:bit,value:`${b(bs)}`});bs++;}
+    }
+  } else { r.push({label:"Addr Spec",value:`0x${addrSpec.toString(16).toUpperCase()}`}); }
+  const mt=b(bs); bs++;
+  if(isCmd){
+    r.push({label:"Msg Type",value:`0x${mt.toString(16).toUpperCase().padStart(2,'0')} — ${LORA_CMD_TYPES[mt]||'Unknown'}`});
+    if(mt===0x00||mt===0x01){
+      const stB=b(bs),fnB=b(bs+1),dB=b(bs+2),ev=b(bs+3);
+      const ts=(b(bs+4)<<24)|(b(bs+5)<<16)|(b(bs+6)<<8)|b(bs+7);
+      const mb=(stB>>6)&3,sn=stB&0x3F,ml=mb===0?"DLC":mb===1?"DI":"?";
+      const st=STRATEGY_TABLE[sn];
+      const fns=['F1','F2','F3','F4'].filter((_,i)=>fnB&(1<<i));
+      let sl; if(sn===61)sl=`61 — RESTORE (${dB===0?'Abrupt':'Graceful'})`;
+      else if(sn===62)sl=`62 — OVERRIDE (${dB}h)`;
+      else if(sn===63)sl=`63 — TEST LED (${dB}h)`;
+      else sl=`${sn}`+(st?` — TO:${st.to}m CT:${st.ct}m ${st.pct}%`:'');
+      r.push({label:"Strategy",value:`0x${stB.toString(16).toUpperCase().padStart(2,'0')} — bit6=${ml}, ${sl}`});
+      r.push({label:"Function",value:`0x${fnB.toString(16).toUpperCase().padStart(2,'0')} — ${fns.join('+')||'None'}`});
+      if(sn<=53)r.push({label:"Repetitions",value:`${dB} → ${dB+1} cycle(s)`+(st?` = ${(dB+1)*st.ct}min`:'')});
+      else r.push({label:"Data",value:`${dB}`});
+      r.push({label:"Event ID",value:`${ev} (0x${ev.toString(16).toUpperCase().padStart(2,'0')})`});
+      r.push({label:"Time to Start",value:ts===0?"0 — ⚡ Immediate":`${ts} — 📅 ${new Date(ts*1000).toLocaleString()}`});
+    } else if(mt===0x05){
+      const ts=(b(bs)<<24)|(b(bs+1)<<16)|(b(bs+2)<<8)|b(bs+3);
+      r.push({label:"Unix Time",value:`${ts} — ${new Date(ts*1000).toLocaleString()}`});
+    } else if(mt===0x02){
+      for(let i=0;i<5;i++)r.push({label:`Address ${i+1}`,value:`${b(bs+i)}`});
+    } else if(mt===0x06){
+      for(let i=0;i<4;i++)r.push({label:`F${i+1} CLP`,value:`${b(bs+i)} sec`});
+    } else if(mt===0x07){
+      const map=w(bs);const active=[];
+      for(let f=1;f<=4;f++)for(let rl=1;rl<=4;rl++)if(map&(1<<((f-1)*4+(rl-1))))active.push(`F${f}→R${rl}`);
+      r.push({label:"Relay Map",value:`0x${map.toString(16).toUpperCase().padStart(4,'0')} — ${active.join(', ')||'None'}`});
+    } else if(mt===0x08){r.push({label:"Override",value:`${w(bs)} sec`});}
+    else if(mt===0x0A){r.push({label:"Record Interval",value:`${b(bs)} min`});}
+    else if(mt===0x0B){r.push({label:"Report Offset",value:`${w(bs)} sec`});}
+    else if(mt===0x0C){r.push({label:"Request",value:`0x${b(bs).toString(16).toUpperCase().padStart(2,'0')} — ${LORA_DATA_REQ_TYPES[b(bs)]||'Unknown'}`});}
+    else if(mt===0x0D){
+      r.push({label:"Enabled",value:b(bs)&1?"Yes":"No"});
+      r.push({label:"Max Voltage",value:`${(w(bs+1)/10).toFixed(1)} V`});
+      r.push({label:"Min Voltage",value:`${(w(bs+3)/10).toFixed(1)} V`});
+    } else {
+      const rem=bytes.slice(bs,bytes.length-1);
+      if(rem.length)r.push({label:"Body",value:rem.map(b=>b.toString(16).toUpperCase().padStart(2,'0')).join(' ')});
+    }
+  } else {
+    const rt=mt&0x7F;
+    r.push({label:"Response Type",value:`0x${mt.toString(16).toUpperCase().padStart(2,'0')} — ${LORA_RESP_TYPES[rt]||'Unknown'} Response`});
+    if(rt===0x05){for(let i=0;i<4;i++){const rb=b(bs+i);r.push({label:`Relay ${i+1}`,value:rb&0x08?'● ACTIVE':rb&0x01?'○ Off (load)':'○ Off'});}}
+    else if(rt===0x03){const ts=(b(bs)<<24)|(b(bs+1)<<16)|(b(bs+2)<<8)|b(bs+3);r.push({label:"Device Time",value:`${ts} — ${new Date(ts*1000).toLocaleString()}`});}
+    else if(rt===0x0B){r.push({label:"Voltage",value:`${(w(bs)/10).toFixed(1)}V`});r.push({label:"Current",value:`${(w(bs+2)/10).toFixed(1)}A`});r.push({label:"PF",value:`${(w(bs+4)/1000).toFixed(3)}`});const wt=(b(bs+6)<<24)|(b(bs+7)<<16)|(b(bs+8)<<8)|b(bs+9);r.push({label:"Watts",value:`${wt}W`});}
+    else if(rt===0x00){for(let i=0;i<5;i++)r.push({label:`Address ${i+1}`,value:`${b(bs+i)}`});}
+    else{const rem=bytes.slice(bs,bytes.length-1);if(rem.length)r.push({label:"Body",value:rem.map(b=>b.toString(16).toUpperCase().padStart(2,'0')).join(' ')});}
+  }
+  r.push({label:"Checksum",value:`0x${bytes[bytes.length-1].toString(16).toUpperCase().padStart(2,'0')} ${csOk?'✅ Valid':'❌ INVALID (exp 0x'+xor.toString(16).toUpperCase().padStart(2,'0')+')'}`});
+  return r;
+}
+
+function renderLoraParser(cid){
+  const el=document.getElementById(cid); if(!el)return;
+  el.innerHTML=`<input class="hex-input" id="hex-input-${cid}" type="text" placeholder="Paste any LoRa hex (A1... or 51...)..." style="font-size:11px;" oninput="runLoraParse('${cid}')"/>
+    <button class="hex-parse-btn" onclick="runLoraParse('${cid}')">Parse</button>
+    <div id="hex-result-${cid}" class="hex-result"></div>`;
+}
+
+function runLoraParse(cid){
+  const input=document.getElementById(`hex-input-${cid}`),re=document.getElementById(`hex-result-${cid}`);
+  if(!input||!re)return; const hex=input.value.trim();
+  if(hex.length<8){re.innerHTML=`<div class="hex-error">Enter ≥ 8 hex chars (${hex.length})</div>`;return;}
+  const parsed=parseLoraUniversal(hex);
+  if(parsed.error){re.innerHTML=`<div class="hex-error">${parsed.error}</div>`;return;}
+  re.innerHTML=parsed.map(row=>`<div class="hex-row"><span class="hex-label">${row.label}</span><span class="hex-value">${row.value}</span></div>`).join("");
+}
 
 // ── LC Response Parser ────────────────────────────────────────────────────────
+
 const LC_STATUS_LABELS = {
   0: "Event Received ✅",
   1: "Event Started 🟢",
