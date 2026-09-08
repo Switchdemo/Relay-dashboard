@@ -1169,7 +1169,8 @@ async function _executeCreateSchedule() {
         scheduledTime: isImmediate ? null : new Date(commandStartTime * 1000)
       });
 
-      await sendLCToDevice(gatewayUID, loraResult.hex);
+      // Auto-sync TC250 clock, wait for LoRa propagation, then send LC command
+      const sync = await sendLoRaWithTimeSync(gatewayUID, loraResult.hex);
       const lastEventId = loraEventId > 1 ? loraEventId - 1 : 254;
 
       // Update the LoRa event ID display
@@ -27392,6 +27393,101 @@ async function tc250SendSetTime() {
   const bytes = [0xA1, 0x07, 0x00, 0x05, b3, b2, b1, b0];
   bytes.push(tc250Checksum(bytes));
   await tc250SendCommand(uid, tc250HexStr(bytes), 'tc250-time-status');
+  return ts; // return timestamp for callers that need it
+}
+
+// ── Sync Clock & Query Back ──────────────────────────────────────────────────
+async function tc250SyncAndVerify() {
+  const uid = tc250TargetUID(); if (!uid) return;
+  const statusEl = document.getElementById('tc250-sync-status');
+
+  // Step 1: Send Set Time
+  if (statusEl) statusEl.textContent = '⏳ Step 1/3: Setting clock…';
+  const ts = await tc250SendSetTime();
+
+  // Step 2: Wait for LoRa propagation
+  if (statusEl) statusEl.textContent = '⏳ Step 2/3: Waiting 3s for LoRa propagation…';
+  await new Promise(r => setTimeout(r, 3000));
+
+  // Step 3: Query Time of Day (Data Request 0x03)
+  if (statusEl) statusEl.textContent = '⏳ Step 3/3: Querying Time of Day back…';
+  const queryBytes = [0xA1, 0x04, 0x00, 0x0C, 0x03];
+  queryBytes.push(tc250Checksum(queryBytes));
+  await tc250SendCommand(uid, tc250HexStr(queryBytes), 'tc250-sync-status');
+
+  if (statusEl) {
+    statusEl.textContent = `✅ Set Time sent (Unix ${ts}) + Time of Day query sent. `
+      + `Check Notehub events on gateway for response type 0x83 (Time of Day). `
+      + `Expected response ≈ ${ts} ± a few seconds.`;
+    statusEl.style.color = 'var(--green-dark)';
+  }
+}
+
+// ── Quick Schedule Test ──────────────────────────────────────────────────────
+async function tc250QuickScheduleTest() {
+  const uid = tc250TargetUID(); if (!uid) return;
+  const statusEl = document.getElementById('tc250-sched-test-status');
+  const countdownEl = document.getElementById('tc250-sched-test-countdown');
+
+  // Step 1: Set the clock
+  if (statusEl) { statusEl.textContent = '⏳ Setting clock…'; statusEl.style.color = 'var(--amber)'; }
+  const nowTs = await tc250SendSetTime();
+
+  // Step 2: Wait for propagation
+  if (statusEl) statusEl.textContent = '⏳ Waiting 2s for LoRa propagation…';
+  await new Promise(r => setTimeout(r, 2000));
+
+  // Step 3: Send shed command with Time to Start = now + 120 seconds
+  const futureTs = nowTs + 120;
+  if (statusEl) statusEl.textContent = `⏳ Sending scheduled shed (fires at ${new Date(futureTs * 1000).toLocaleTimeString()})…`;
+
+  // Build LC command: Strategy 1 (7.5/7.5 100%), F1 only, 0 reps, Time to Start = futureTs
+  const xorAll = bytes => bytes.reduce((a, b) => a ^ b, 0);
+  const ft3 = (futureTs >>> 24) & 0xFF, ft2 = (futureTs >>> 16) & 0xFF,
+        ft1 = (futureTs >>> 8) & 0xFF,  ft0 = futureTs & 0xFF;
+  const lcBytes = [
+    0xA1, 0x0B, 0x00,   // Header, Length=11, Addr=broadcast
+    0x00,                 // Msg Type = DLC
+    0x01,                 // Strategy 1 (7.5/7.5 100%)
+    0x81,                 // Function = F1 only
+    0x00,                 // Data = 0 (execute once)
+    loraEventId & 0xFF,   // Event ID
+  ];
+  // Increment event ID
+  loraEventId = (loraEventId >= 254) ? 1 : loraEventId + 1;
+  saveLoraEventId(loraEventId);
+  lcBytes.push(ft3, ft2, ft1, ft0);
+  lcBytes.push(xorAll(lcBytes));
+
+  const lcHex = lcBytes.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join('');
+  console.log(`Schedule test: hex=${lcHex}, fires at Unix ${futureTs} (${new Date(futureTs * 1000).toLocaleTimeString()})`);
+
+  await sendLCToDevice(uid, lcHex);
+
+  if (statusEl) {
+    statusEl.textContent = `✅ Sent! Clock set to ${nowTs}, shed scheduled for ${futureTs} (${new Date(futureTs * 1000).toLocaleTimeString()})`;
+    statusEl.style.color = 'var(--green-dark)';
+  }
+
+  // Show countdown timer
+  if (countdownEl) {
+    countdownEl.style.display = '';
+    const targetTime = futureTs * 1000;
+    const interval = setInterval(() => {
+      const remaining = Math.max(0, Math.ceil((targetTime - Date.now()) / 1000));
+      if (remaining <= 0) {
+        countdownEl.textContent = '🔔 TIME REACHED — F1 relay should activate NOW. Check the slave device!';
+        countdownEl.style.background = 'var(--green-bg)';
+        countdownEl.style.color = 'var(--green-dark)';
+        clearInterval(interval);
+        setTimeout(() => { countdownEl.style.display = 'none'; }, 30000);
+      } else {
+        const m = Math.floor(remaining / 60);
+        const s = remaining % 60;
+        countdownEl.textContent = `⏱ Relay F1 should fire in ${m}:${s.toString().padStart(2,'0')} — watching…`;
+      }
+    }, 1000);
+  }
 }
 
 // ── 1b. Data Request (0x0C) ───────────────────────────────────────────────────
@@ -27734,33 +27830,29 @@ async function loraDispatch() {
   const logEl  = document.getElementById('lora-dispatch-log');
 
   btn.disabled    = true;
-  btn.textContent = '⏳ Sending…';
-  loraStatus('Sending…');
+  btn.textContent = '⏳ Syncing clock…';
+  loraStatus('Syncing clock, then sending command…');
 
   try {
-    const res = await fetch(PROXY_URL, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Device-UID': deviceUID },
-      body:    JSON.stringify({ body: { LC: result.hex }, req: "note.add", sync: true })
-    });
-    const data = await res.json();
+    // Auto-sync TC250 clock before sending LC command
+    const sync = await sendLoRaWithTimeSync(deviceUID, result.hex);
 
-    const success = res.ok;
     const ts      = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const modeLabel = opts.mode === 'shed' ? 'SHED' : opts.mode === 'gracefulRestore' ? 'GRACEFUL RESTORE' : 'ABRUPT RESTORE';
     const typeLabel = (opts.msgType === 'di') ? 'DI' : 'DLC';
     const addrLabel = opts.addressing === 'broadcast' ? 'BROADCAST' : `ADDR ${opts.address}`;
 
     const logLine = document.createElement('div');
-    logLine.style.cssText = 'padding:3px 0;border-bottom:0.5px solid var(--border);color:' + (success ? 'var(--green-dark)' : 'var(--red)');
-    logLine.innerHTML = `<span style="color:var(--text-hint)">${ts}</span> ${success ? '✅' : '❌'} `
-      + `<strong>${typeLabel} ${modeLabel}</strong> ${addrLabel} — <code style="font-size:10px;">${result.hex}</code>`;
+    logLine.style.cssText = 'padding:3px 0;border-bottom:0.5px solid var(--border);color:var(--green-dark)';
+    logLine.innerHTML = `<span style="color:var(--text-hint)">${ts}</span> ✅ `
+      + `<strong>${typeLabel} ${modeLabel}</strong> ${addrLabel} — <code style="font-size:10px;">${result.hex}</code>`
+      + `<span style="font-size:10px;color:var(--text-hint);margin-left:6px;">(clock synced @ ${sync.ts})</span>`;
     if (logEl) {
       if (logEl.querySelector('.sched-empty') || logEl.textContent.includes('No commands')) logEl.innerHTML = '';
       logEl.prepend(logLine);
     }
 
-    loraStatus(success ? '✅ Sent' : '❌ Failed: ' + (data?.err || res.status), !success);
+    loraStatus('✅ Clock synced + command sent');
   } catch(e) {
     loraStatus('❌ Error: ' + e.message, true);
   } finally {
@@ -27924,6 +28016,35 @@ function loraSelectAllChannels() {
 
 // ── LoRa Gateway Management ─────────────────────────────────────────────────
 
+// Automatically sync the TC250 clock before sending an LC command.
+// The TC250 has no battery-backed RTC — it loses time on every power cycle
+// and drifts over time. Sending Set Time (0x05) before every LC command
+// guarantees the device has an accurate clock for scheduled events and
+// data timestamping.
+async function sendLoRaWithTimeSync(gatewayUID, lcHex) {
+  // 1. Build Set Time command with current Unix timestamp
+  const ts = Math.floor(Date.now() / 1000);
+  const b3 = (ts >>> 24) & 0xFF, b2 = (ts >>> 16) & 0xFF,
+        b1 = (ts >>> 8) & 0xFF,  b0 = ts & 0xFF;
+  const timeBytes = [0xA1, 0x07, 0x00, 0x05, b3, b2, b1, b0];
+  const xor = timeBytes.reduce((a, b) => a ^ b, 0);
+  timeBytes.push(xor);
+  const timeHex = timeBytes.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join('');
+
+  // 2. Send Set Time to gateway (relayed to slaves over LoRa)
+  console.log(`LoRa time sync: sending Set Time (${ts}) to ${gatewayUID} → ${timeHex}`);
+  await sendLCToDevice(gatewayUID, timeHex);
+
+  // 3. Wait for LoRa propagation (gateway → radio → slaves)
+  await new Promise(r => setTimeout(r, 1500));
+
+  // 4. Send the actual LC command
+  console.log(`LoRa LC command: sending ${lcHex} to ${gatewayUID}`);
+  await sendLCToDevice(gatewayUID, lcHex);
+
+  return { timeHex, ts };
+}
+
 // Gateway UIDs are loaded from Supabase devices table (is_lora_gateway = true)
 let loraGatewayUIDs = new Set();
 
@@ -28032,30 +28153,22 @@ async function loraInstantRestore() {
   const dlcHex = buildRestoreAllCommand(evId, 0x00);
   let sentCmds = [`DLC: ${dlcHex}`];
 
-  statusEl.textContent = '⏳ Sending restore…';
+  statusEl.textContent = '⏳ Syncing clock + sending restore…';
   statusEl.style.color = 'var(--amber)';
 
   try {
-    // Send DLC restore
-    const res1 = await fetch(PROXY_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Device-UID': deviceUID },
-      body: JSON.stringify({ body: { LC: dlcHex }, req: 'note.add', sync: true })
-    });
+    // Send DLC restore with time sync
+    await sendLoRaWithTimeSync(deviceUID, dlcHex);
 
-    let success = res1.ok;
+    let success = true;
 
     // If "both" mode, also send DI restore after a short delay
     if (restoreType === 'both') {
       await new Promise(r => setTimeout(r, 300));
       const diHex = buildRestoreAllCommand(evId, 0x01);
       sentCmds.push(`DI: ${diHex}`);
-      const res2 = await fetch(PROXY_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Device-UID': deviceUID },
-        body: JSON.stringify({ body: { LC: diHex }, req: 'note.add', sync: true })
-      });
-      success = success && res2.ok;
+      await sendLCToDevice(deviceUID, diHex); // no need to sync time again
+      success = true;
     }
 
     // Show hex preview
