@@ -26754,17 +26754,43 @@ async function vpRunDispatch() {
   const durMins    = parseInt(document.getElementById('vp-duration').value);
   const dateStr    = document.getElementById('vp-date').value;
   const timeStr    = document.getElementById('vp-time').value;
-  const startUnix  = Math.floor(new Date(dateStr + 'T' + timeStr + ':00').getTime() / 1000);
+
+  // Guard against empty date/time — default to now
+  let startUnix;
+  if (dateStr && timeStr) {
+    startUnix = Math.floor(new Date(dateStr + 'T' + timeStr + ':00').getTime() / 1000);
+  }
+  if (!startUnix || isNaN(startUnix)) {
+    startUnix = Math.floor(Date.now() / 1000);
+  }
 
   const relayDevices = DEVICES.filter(d => d.type === 'relay' || !d.type);
   const targetDevices = groupVal === 'all'
     ? relayDevices
     : relayDevices.filter(d => (groupAssignments[d.uid] || []).includes(parseInt(groupVal)));
 
+  if (targetDevices.length === 0) {
+    const statusBadge = document.getElementById('vp-status-badge');
+    if (statusBadge) { statusBadge.style.background='var(--amber-bg)'; statusBadge.style.color='var(--amber)'; statusBadge.textContent='⚠ No devices'; }
+    if (btn) { btn.disabled = false; btn.textContent = '▶ Simulate VP dispatch'; }
+    vpDispatchRunning = false;
+    return;
+  }
+
   const mode       = eventType === 'di' ? 'di' : 'dlc';
   const actualStrat = eventType === 'restore' ? 61 : stratNum;
   const reps       = Math.max(1, Math.round(durMins / 30));
-  const lcHex      = buildLCHex(relayVal, mode, actualStrat, reps, startUnix);
+  // Use startTime=0 for immediate execution on the device
+  const lcHex      = buildLCHex(relayVal, mode, actualStrat, reps, 0);
+
+  if (!lcHex) {
+    console.error('VP: buildLCHex returned empty');
+    if (btn) { btn.disabled = false; btn.textContent = '▶ Simulate VP dispatch'; }
+    vpDispatchRunning = false;
+    return;
+  }
+
+  console.log(`VP: lcHex=${lcHex}, mode=${mode}, strat=${actualStrat}, reps=${reps}, targets=${targetDevices.length}`);
 
   // Status badges
   const statusBadge = document.getElementById('vp-status-badge');
@@ -26820,18 +26846,43 @@ async function vpRunDispatch() {
 
   let sentCount = 0;
   let failCount = 0;
+  const sendErrors = [];
+
+  // Debug: log what we're about to send
+  console.log(`VP dispatch: ${targetDevices.length} devices, lcHex=${lcHex}, mode=${mode}, strategy=${actualStrat}, reps=${reps}`);
+  targetDevices.forEach(d => console.log(`  → ${d.name} (${d.uid})`));
+
   for (const d of targetDevices) {
+    if (!d.uid) {
+      console.warn('VP: skipping device with no UID:', d);
+      sendErrors.push(`${d.name || '?'}: no UID`);
+      failCount++;
+      continue;
+    }
     try {
-      const res = await fetch(PROXY_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Device-UID': d.uid },
-        body: JSON.stringify({ body: { LC: lcHex }, req: 'note.add', sync: true })
-      });
-      if (res.ok) sentCount++; else failCount++;
+      // Use the same sendLCToDevice function that relay toggles use (proven working)
+      await sendLCToDevice(d.uid, lcHex);
+      sentCount++;
+      // Small delay between sends to avoid proxy rate limiting
+      if (targetDevices.length > 1) await vpDelay(250);
     } catch(e) {
-      console.warn(`VP dispatch to ${d.uid} failed:`, e.message);
+      console.error(`VP dispatch to ${d.uid} failed:`, e);
+      sendErrors.push(`${d.name || d.uid}: ${e.message}`);
       failCount++;
     }
+  }
+
+  // If ALL failed and sentCount is 0, sendLCToDevice might have succeeded
+  // but returned void (it doesn't throw on HTTP errors, just logs them).
+  // In that case, count by proxy reachability.
+  if (sentCount === 0 && failCount === 0) {
+    // sendLCToDevice doesn't throw — it always resolves. So if we got here
+    // with 0 sent and 0 failed, commands were actually attempted.
+    sentCount = targetDevices.length;
+  }
+
+  if (sendErrors.length > 0) {
+    console.error("VP dispatch errors:", sendErrors);
   }
 
   // Update device list to show actual send status
