@@ -5648,14 +5648,16 @@
         </div>
       </div>
 
-      <!-- 1. Set Current Time -->
-      <div class="sched-card">
+      <!-- 1. Set Current Time + Schedule Test -->
+      <div class="sched-card" style="border:1.5px solid var(--blue);">
         <div class="sched-card-header">
           <div class="sched-card-title">🕐 Set Current Time <span style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;">Cmd 0x05</span></div>
-          <button class="queue-refresh" onclick="tc250SendSetTime()">Send</button>
+          <button class="queue-refresh" onclick="tc250SendSetTime()">Send Time Only</button>
         </div>
-        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">Syncs the LoRa device's internal clock to the current Unix timestamp. Required for scheduled events and data timestamping.</div>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">
+          <strong>Required for scheduled events.</strong> The TC250 has no battery-backed clock — it loses time on every power cycle. Without Set Time, the device cannot interpret the "Time to Start" field in LC commands and will ignore scheduled events.
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
           <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:8px 14px;font-family:monospace;font-size:13px;font-weight:600;" id="tc250-time-preview">—</div>
           <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
             <input type="checkbox" id="tc250-time-auto" checked onchange="tc250UpdateTimePreview()"> Auto (now)
@@ -5663,7 +5665,32 @@
           <input type="datetime-local" id="tc250-time-manual" disabled
             style="padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;" onchange="tc250UpdateTimePreview()">
         </div>
-        <div id="tc250-time-status" style="margin-top:8px;font-size:11px;font-family:monospace;color:var(--text-hint);min-height:16px;"></div>
+        <div id="tc250-time-status" style="margin-top:4px;font-size:11px;font-family:monospace;color:var(--text-hint);min-height:16px;"></div>
+
+        <!-- Sync & Verify workflow -->
+        <div style="margin-top:14px;padding-top:14px;border-top:0.5px solid var(--border);">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-hint);margin-bottom:8px;">Sync Clock & Verify</div>
+          <div style="font-size:11px;color:var(--text-hint);margin-bottom:8px;">
+            Sends Set Time, waits for LoRa propagation, then queries Time of Day back. Check Notehub events on the gateway for the response (0x83 = Time of Day Response).
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <button class="queue-refresh" onclick="tc250SyncAndVerify()" style="padding:7px 16px;background:var(--blue);color:#fff;border:none;font-weight:600;">🔄 Sync Clock & Query Back</button>
+            <span id="tc250-sync-status" style="font-size:11px;font-family:monospace;color:var(--text-hint);"></span>
+          </div>
+        </div>
+
+        <!-- Quick Schedule Test -->
+        <div style="margin-top:14px;padding-top:14px;border-top:0.5px solid var(--border);">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-hint);margin-bottom:8px;">Quick Schedule Test</div>
+          <div style="font-size:11px;color:var(--text-hint);margin-bottom:8px;">
+            Sets clock, then sends a Relay F1 shed command with Time to Start = 2 minutes from now. If the relay activates after 2 minutes, scheduling works.
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <button class="queue-refresh" onclick="tc250QuickScheduleTest()" style="padding:7px 16px;background:var(--green);color:#fff;border:none;font-weight:600;">⏱ Set Clock + Schedule in 2min</button>
+            <span id="tc250-sched-test-status" style="font-size:11px;font-family:monospace;color:var(--text-hint);"></span>
+          </div>
+          <div id="tc250-sched-test-countdown" style="display:none;margin-top:8px;padding:10px 14px;border-radius:var(--radius-sm);background:var(--amber-bg);font-size:13px;font-weight:600;color:var(--amber);text-align:center;"></div>
+        </div>
       </div>
 
       <!-- 1b. Data Request — Query Slave Status -->
