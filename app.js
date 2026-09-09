@@ -1196,7 +1196,7 @@ async function _executeCreateSchedule() {
       const evIdEl = document.getElementById("sf-lora-evid-preview");
       if (evIdEl) evIdEl.textContent = `Last sent: ${lastEventId} — Next: ${loraEventId}`;
 
-      await supabasePost("schedule_queue", {
+      const queueRes = await supabasePost("schedule_queue", {
         name, fire_at: new Date(schedUnix*1000).toISOString(),
         target_type: "lora_gateway", target_id: gatewayUID,
         target_name: unitName(gatewayUID) + " → LoRa " + (loraAddr === "broadcast" ? "ALL" : "Addr " + loraAddress),
@@ -1204,10 +1204,16 @@ async function _executeCreateSchedule() {
         duration_minutes, timezone: tz, action_time: time,
         lc_mode: loraMsgType, lc_strategy: stratNum, lc_timeout: stratTimeout || null,
         lc_cycle: stratCycle || null, lc_reps: reps, lc_event_id: lastEventId,
-        lc_hex: loraResult.hex,
-        one_time: true, status: "sent", fired_at: new Date().toISOString(),
-        event_type: "lora_broadcast"
+        lc_hex: loraResult.hex, event_type: "lora_broadcast",
+        one_time: true, status: "sent", fired_at: new Date().toISOString()
       });
+      if (!queueRes.ok) {
+        const errText = await queueRes.text().catch(() => "unknown");
+        console.error("schedule_queue insert failed:", errText);
+        setStatus("error", `Command sent to device, but event log failed (HTTP ${queueRes.status}). Check browser console.`);
+      } else {
+        console.log("LoRa event logged to schedule_queue ✓ evId=" + lastEventId);
+      }
 
       let statusMsg = `"${name}" LoRa broadcast sent via ${unitName(gatewayUID)} — evId=${lastEventId}`;
       if (!isImmediate) statusMsg += ` ⚠️ Scheduled for ${new Date(schedUnix*1000).toLocaleString()} — TC250 clock must be set for deferred execution`;
@@ -1362,7 +1368,7 @@ async function loadSchedules() {
     const evType  = s.event_type || "switch";
 
     // Event type badge
-    const typeIcons = { switch:"⚡", bas_di:"🏢", ev:"🔌", battery:"🔋", generator:"⚙️", openadr:"📡", hybrid:"🔀" };
+    const typeIcons = { switch:"⚡", bas_di:"🏢", ev:"🔌", battery:"🔋", generator:"⚙️", openadr:"📡", hybrid:"🔀", lora_broadcast:"📡", virtual_peaker:"🏭" };
     const typeIcon  = typeIcons[evType] || "📋";
 
     const cancelBtn = isCancellable
@@ -1524,6 +1530,33 @@ async function loadDeviceEvents() {
     // If no device_events with names, fall back to schedule_queue directly
     if (!rows.length && Array.isArray(qRows) && qRows.length) {
       rows = qRows.map(q => ({ ...q, lc_status: null, _raw: q }));
+    }
+
+    // ALWAYS merge schedule_queue entries that don't have matching device_events.
+    // This ensures LoRa broadcasts, VP events, and other queue-only entries appear.
+    if (Array.isArray(qRows) && qRows.length && rows.length) {
+      const existingEvIds = new Set(rows.map(r => r.lc_event_id).filter(Boolean));
+      const existingNames = new Set(rows.map(r => r.name).filter(Boolean));
+      const orphanQueue = qRows.filter(q =>
+        q.lc_event_id != null && !existingEvIds.has(q.lc_event_id) &&
+        q.name && !existingNames.has(q.name)
+      );
+      if (orphanQueue.length) {
+        const extras = orphanQueue.map(q => ({
+          ...q,
+          lc_status: null,
+          lc_status_label: q.status || "sent",
+          target_name: q.target_name || "—",
+          relay_action: q.relay_action || "—",
+          lc_mode: q.lc_mode || "—",
+          lc_strategy: q.lc_strategy || "—",
+          lc_reps: q.lc_reps || "—",
+          fire_at: q.fire_at,
+          received_at: q.fired_at || q.fire_at,
+          _raw: q
+        }));
+        rows = rows.concat(extras);
+      }
     }
 
     // Sort by received_at / fire_at descending
@@ -27118,6 +27151,42 @@ async function vpRunDispatch() {
 
   // Refresh event lists so the VP event appears in the Events tab
   try { await loadSchedules(); await loadDeviceEvents(); } catch(e) { /* non-critical */ }
+}
+
+async function vpImmediateRestoreAll() {
+  const statusEl = document.getElementById('vp-restore-status');
+  const relayDevices = DEVICES.filter(d => d.type === 'relay' || !d.type);
+
+  if (!relayDevices.length) {
+    if (statusEl) { statusEl.textContent = '⚠ No relay devices found.'; statusEl.style.color = 'var(--amber)'; }
+    return;
+  }
+
+  if (statusEl) { statusEl.textContent = `⏳ Sending restore to ${relayDevices.length} device(s)…`; statusEl.style.color = 'var(--amber)'; }
+
+  // Build DLC Strategy 61 Abrupt Restore, all relays, event ID = 0xFF (cancel all)
+  const restoreHex = buildRestoreHex('all_off');
+
+  let sent = 0, failed = 0;
+  for (const d of relayDevices) {
+    if (!d.uid) { failed++; continue; }
+    try {
+      await sendLCToDevice(d.uid, restoreHex);
+      sent++;
+      // Small delay between sends to avoid rate limiting
+      if (relayDevices.length > 1) await new Promise(r => setTimeout(r, 200));
+    } catch(e) {
+      console.warn(`VP restore to ${d.uid} failed:`, e.message);
+      failed++;
+    }
+  }
+
+  if (statusEl) {
+    statusEl.textContent = `✅ Restore sent to ${sent}/${relayDevices.length} device(s)${failed ? ` — ${failed} failed` : ''} at ${new Date().toLocaleTimeString()}`;
+    statusEl.style.color = failed ? 'var(--amber)' : 'var(--green-dark)';
+  }
+
+  console.log(`VP Immediate Restore All: ${sent} sent, ${failed} failed, hex=${restoreHex}`);
 }
 
 function vpReset() {
