@@ -2070,6 +2070,20 @@
             </button>
             <button class="queue-refresh" onclick="vpReset()">Reset</button>
           </div>
+
+          <!-- Immediate Restore All -->
+          <div style="margin-top:16px;padding:14px;border-radius:var(--radius-sm);border:1.5px solid var(--red);background:linear-gradient(to bottom,#FEF2F2,var(--surface));">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+              <div>
+                <div style="font-size:13px;font-weight:700;color:var(--red);">🔴 Immediate Restore All</div>
+                <div style="font-size:11px;color:var(--text-hint);margin-top:2px;">Sends a DLC Strategy 61 Abrupt Restore (all relays, all devices) bypassing the event scheduler. Direct LC command to every relay device.</div>
+              </div>
+              <button onclick="vpImmediateRestoreAll()" style="padding:10px 20px;border-radius:var(--radius-sm);border:none;background:var(--red);color:#fff;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">
+                🔴 RESTORE ALL NOW
+              </button>
+            </div>
+            <div id="vp-restore-status" style="font-size:11px;font-family:monospace;color:var(--text-hint);min-height:16px;margin-top:8px;"></div>
+          </div>
         </div>
 
         <!-- Translation preview -->
