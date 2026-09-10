@@ -3844,6 +3844,84 @@
         </div>
       </div>
 
+      <!-- Tag Value Registry -->
+      <div class="sched-card" id="tag-registry-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">🗂️ Tag Value Registry</div>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:12px;">
+          Pre-define the allowed values for each tag field. When tagging devices, fields with registry values become dropdowns — eliminating typos and ensuring consistency across all participants.
+        </div>
+
+        <!-- Tag Field Selector -->
+        <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;margin-bottom:16px;">
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;font-weight:600;">Tag Field</label>
+            <select id="registry-field-selector" onchange="loadRegistryValues(this.value)"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+              <option value="">— select a tag field —</option>
+              <optgroup label="⚡ Grid Location">
+                <option value="transmission_line">Transmission Line</option>
+                <option value="substation_name">Substation Name</option>
+                <option value="substation_id">Substation ID</option>
+                <option value="feeder_id">Feeder / Circuit ID</option>
+                <option value="lateral_id">Lateral ID</option>
+                <option value="transformer_id">Transformer ID</option>
+                <option value="pole_number">Pole Number</option>
+                <option value="phase">Phase</option>
+              </optgroup>
+              <optgroup label="👤 Customer Identity">
+                <option value="service_point_id">Service Point ID (SPID)</option>
+                <option value="account_number">Account Number (CIS)</option>
+                <option value="meter_number">Meter Number</option>
+                <option value="premise_id">Premise ID</option>
+                <option value="esi_id">ESI ID</option>
+                <option value="rate_class">Rate Class / Tariff Code</option>
+                <option value="customer_class">Customer Class</option>
+                <option value="utility_name">Utility Name / Territory</option>
+              </optgroup>
+              <optgroup label="📊 Market / Program">
+                <option value="slap">SLAP (Sub-Load Aggregation Point)</option>
+                <option value="dlap">DLAP (Default Load Aggregation Point)</option>
+                <option value="lap">LAP (Load Aggregation Point)</option>
+                <option value="dr_program">DR Program</option>
+                <option value="iso_rto">ISO / RTO</option>
+                <option value="resource_id">Resource ID</option>
+              </optgroup>
+              <optgroup label="🏷️ Custom Tags" id="registry-custom-optgroup">
+              </optgroup>
+            </select>
+          </div>
+          <button onclick="showAddCustomFieldModal()"
+            style="padding:7px 14px;border-radius:var(--radius-sm);border:0.5px dashed var(--border-md);background:transparent;color:var(--text-secondary);font-size:11px;cursor:pointer;white-space:nowrap;">
+            + New Custom Field
+          </button>
+        </div>
+
+        <!-- Registry Values Editor (hidden until field selected) -->
+        <div id="registry-editor" style="display:none;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <span style="font-size:12px;font-weight:600;color:var(--text-primary);" id="registry-field-label">Values</span>
+            <span style="font-size:10px;color:var(--text-hint);" id="registry-value-count">0 defined</span>
+          </div>
+
+          <!-- Existing values list -->
+          <div id="registry-values-list" style="margin-bottom:10px;"></div>
+
+          <!-- Add new value -->
+          <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;">
+            <input type="text" id="registry-new-value" placeholder="Enter new value…"
+              style="padding:6px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;"
+              onkeydown="if(event.key==='Enter')addRegistryValue();" />
+            <button onclick="addRegistryValue()"
+              style="padding:6px 16px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">
+              + Add
+            </button>
+          </div>
+          <div id="registry-status" style="font-size:11px;margin-top:6px;display:none;"></div>
+        </div>
+      </div>
+
       <!-- Device Tags / Identifiers -->
       <div class="sched-card" id="device-tags-card">
         <div class="sched-card-header">
@@ -3873,48 +3951,8 @@
               <span style="font-size:10px;color:var(--text-hint);margin-left:auto;" id="tags-grid-count">0 set</span>
             </div>
             <div id="tags-grid-body" style="display:none;">
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                <div class="tag-field">
-                  <label>Transmission Line</label>
-                  <input type="text" id="tag-transmission_line" placeholder="e.g. 138kV Westside" />
-                </div>
-                <div class="tag-field">
-                  <label>Substation Name</label>
-                  <input type="text" id="tag-substation_name" placeholder="e.g. Elm Street Sub" />
-                </div>
-                <div class="tag-field">
-                  <label>Substation ID</label>
-                  <input type="text" id="tag-substation_id" placeholder="e.g. SUB-0042" />
-                </div>
-                <div class="tag-field">
-                  <label>Feeder / Circuit ID</label>
-                  <input type="text" id="tag-feeder_id" placeholder="e.g. FDR-1821" />
-                </div>
-                <div class="tag-field">
-                  <label>Lateral ID</label>
-                  <input type="text" id="tag-lateral_id" placeholder="e.g. LAT-003" />
-                </div>
-                <div class="tag-field">
-                  <label>Transformer ID</label>
-                  <input type="text" id="tag-transformer_id" placeholder="e.g. XFMR-7790" />
-                </div>
-                <div class="tag-field">
-                  <label>Pole Number</label>
-                  <input type="text" id="tag-pole_number" placeholder="e.g. P-4419" />
-                </div>
-                <div class="tag-field">
-                  <label>Phase</label>
-                  <select id="tag-phase" style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
-                    <option value="">—</option>
-                    <option value="A">A</option>
-                    <option value="B">B</option>
-                    <option value="C">C</option>
-                    <option value="AB">AB</option>
-                    <option value="AC">AC</option>
-                    <option value="BC">BC</option>
-                    <option value="ABC">ABC</option>
-                  </select>
-                </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;" id="tags-grid-fields">
+                <!-- Populated dynamically by renderTagFields('grid') -->
               </div>
             </div>
           </div>
@@ -3927,47 +3965,8 @@
               <span style="font-size:10px;color:var(--text-hint);margin-left:auto;" id="tags-customer-count">0 set</span>
             </div>
             <div id="tags-customer-body" style="display:none;">
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                <div class="tag-field">
-                  <label>Service Point ID (SPID)</label>
-                  <input type="text" id="tag-service_point_id" placeholder="Unique service location" />
-                </div>
-                <div class="tag-field">
-                  <label>Account Number (CIS)</label>
-                  <input type="text" id="tag-account_number" placeholder="Utility billing account" />
-                </div>
-                <div class="tag-field">
-                  <label>Meter Number</label>
-                  <input type="text" id="tag-meter_number" placeholder="Physical meter serial" />
-                </div>
-                <div class="tag-field">
-                  <label>Premise ID</label>
-                  <input type="text" id="tag-premise_id" placeholder="Physical location record" />
-                </div>
-                <div class="tag-field">
-                  <label>ESI ID</label>
-                  <input type="text" id="tag-esi_id" placeholder="Texas 22-digit ID (if applicable)" />
-                </div>
-                <div class="tag-field">
-                  <label>Rate Class / Tariff Code</label>
-                  <input type="text" id="tag-rate_class" placeholder="e.g. RS, GS, TOU-D-A" />
-                </div>
-                <div class="tag-field">
-                  <label>Customer Class</label>
-                  <select id="tag-customer_class" style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
-                    <option value="">—</option>
-                    <option value="Residential">Residential</option>
-                    <option value="Commercial">Commercial</option>
-                    <option value="Industrial">Industrial</option>
-                    <option value="Agricultural">Agricultural</option>
-                    <option value="Municipal">Municipal</option>
-                    <option value="Institutional">Institutional</option>
-                  </select>
-                </div>
-                <div class="tag-field">
-                  <label>Utility Name / Territory</label>
-                  <input type="text" id="tag-utility_name" placeholder="e.g. SCE, Entergy, Duke" />
-                </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;" id="tags-customer-fields">
+                <!-- Populated dynamically by renderTagFields('customer') -->
               </div>
             </div>
           </div>
@@ -3980,31 +3979,8 @@
               <span style="font-size:10px;color:var(--text-hint);margin-left:auto;" id="tags-market-count">0 set</span>
             </div>
             <div id="tags-market-body" style="display:none;">
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                <div class="tag-field">
-                  <label>SLAP (Sub-Load Aggregation Point)</label>
-                  <input type="text" id="tag-slap" placeholder="e.g. SLAP_PGEB-APND" />
-                </div>
-                <div class="tag-field">
-                  <label>DLAP (Default Load Aggregation Point)</label>
-                  <input type="text" id="tag-dlap" placeholder="e.g. DLAP_PGAE" />
-                </div>
-                <div class="tag-field">
-                  <label>LAP (Load Aggregation Point)</label>
-                  <input type="text" id="tag-lap" placeholder="e.g. LAP_SCE" />
-                </div>
-                <div class="tag-field">
-                  <label>DR Program</label>
-                  <input type="text" id="tag-dr_program" placeholder="e.g. Summer Saver, BIP" />
-                </div>
-                <div class="tag-field">
-                  <label>ISO / RTO</label>
-                  <input type="text" id="tag-iso_rto" placeholder="e.g. CAISO, ERCOT, PJM" />
-                </div>
-                <div class="tag-field">
-                  <label>Resource ID</label>
-                  <input type="text" id="tag-resource_id" placeholder="ISO resource identifier" />
-                </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;" id="tags-market-fields">
+                <!-- Populated dynamically by renderTagFields('market') -->
               </div>
             </div>
           </div>
