@@ -10675,6 +10675,8 @@ async function loadDeviceManagement() {
           </tr>`).join("")}
         </tbody>
       </table>`;
+    // Populate the tags device selector after the table renders
+    setTimeout(() => populateTagsDeviceSelector(), 50);
   } catch(e) {
     list.innerHTML = '<div class="sched-empty">Error loading devices.</div>';
     console.error("loadDeviceManagement:", e);
@@ -10762,6 +10764,232 @@ async function removeDevice(id, name) {
 }
 
 
+// ── Device Tags & Identifiers ────────────────────────────────────────────────
+
+// Standard tag field IDs — must match the HTML input/select id="tag-xxx"
+const STANDARD_TAG_FIELDS = {
+  // Grid Location
+  transmission_line: "grid",
+  substation_name:   "grid",
+  substation_id:     "grid",
+  feeder_id:         "grid",
+  lateral_id:        "grid",
+  transformer_id:    "grid",
+  pole_number:       "grid",
+  phase:             "grid",
+  // Customer Identity
+  service_point_id:  "customer",
+  account_number:    "customer",
+  meter_number:      "customer",
+  premise_id:        "customer",
+  esi_id:            "customer",
+  rate_class:        "customer",
+  customer_class:    "customer",
+  utility_name:      "customer",
+  // Market / Program
+  slap:              "market",
+  dlap:              "market",
+  lap:               "market",
+  dr_program:        "market",
+  iso_rto:           "market",
+  resource_id:       "market",
+};
+const MAX_CUSTOM_TAGS = 20;
+let currentTagsDeviceId = null; // Supabase row id of selected device
+
+// Populate the device dropdown when the Devices tab loads
+function populateTagsDeviceSelector() {
+  const sel = document.getElementById("tags-device-selector");
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— choose a device —</option>';
+  // Use the device-mgmt-list table rows (already loaded) or fall back to DEVICES
+  try {
+    const rows = document.querySelectorAll("#device-mgmt-list tbody tr");
+    if (rows.length > 0) {
+      rows.forEach(tr => {
+        const nameCell = tr.children[0]?.textContent?.trim();
+        const uidCell  = tr.children[1]?.textContent?.trim();
+        // Extract the db id from the remove button onclick
+        const removeBtn = tr.querySelector("button[onclick*='removeDevice']");
+        const match = removeBtn?.getAttribute("onclick")?.match(/removeDevice\((\d+)/);
+        const dbId = match ? match[1] : "";
+        if (dbId) {
+          const opt = document.createElement("option");
+          opt.value = dbId;
+          opt.textContent = `${nameCell}  (${uidCell})`;
+          sel.appendChild(opt);
+        }
+      });
+    }
+  } catch(e) { console.warn("populateTagsDeviceSelector fallback:", e); }
+  // Restore selection if it still exists
+  if (current && sel.querySelector(`option[value="${current}"]`)) sel.value = current;
+}
+
+// Toggle collapsible tag sections
+function toggleTagSection(section) {
+  const body  = document.getElementById(`tags-${section}-body`);
+  const arrow = document.getElementById(`tags-${section}-arrow`);
+  if (!body) return;
+  const open = body.style.display !== "none";
+  body.style.display = open ? "none" : "block";
+  if (arrow) arrow.style.transform = open ? "rotate(0deg)" : "rotate(90deg)";
+}
+
+// Load tags for a selected device
+async function loadDeviceTags(deviceDbId) {
+  const editor = document.getElementById("tags-editor");
+  if (!deviceDbId) { if (editor) editor.style.display = "none"; currentTagsDeviceId = null; return; }
+  currentTagsDeviceId = deviceDbId;
+  if (editor) editor.style.display = "block";
+
+  // Clear all fields first
+  Object.keys(STANDARD_TAG_FIELDS).forEach(key => {
+    const el = document.getElementById(`tag-${key}`);
+    if (el) el.value = "";
+  });
+  document.getElementById("custom-tags-list").innerHTML = "";
+
+  // Fetch the device's tags from Supabase
+  try {
+    const rows = await supabaseGet(`device_tags?device_id=eq.${deviceDbId}&order=id.asc`);
+    if (Array.isArray(rows)) {
+      rows.forEach(row => {
+        if (row.tag_category === "custom") {
+          // Add a custom tag row
+          addCustomTagRow(row.tag_key, row.tag_value);
+        } else {
+          const el = document.getElementById(`tag-${row.tag_key}`);
+          if (el) el.value = row.tag_value || "";
+        }
+      });
+    }
+  } catch(e) {
+    console.warn("loadDeviceTags:", e);
+  }
+  updateTagCounts();
+}
+
+// Count how many tags are set in each section
+function updateTagCounts() {
+  ["grid", "customer", "market"].forEach(section => {
+    const keys = Object.entries(STANDARD_TAG_FIELDS).filter(([,s]) => s === section).map(([k]) => k);
+    let count = 0;
+    keys.forEach(k => {
+      const el = document.getElementById(`tag-${k}`);
+      if (el && el.value.trim()) count++;
+    });
+    const countEl = document.getElementById(`tags-${section}-count`);
+    if (countEl) countEl.textContent = `${count} set`;
+  });
+  // Custom count
+  const customRows = document.querySelectorAll("#custom-tags-list .custom-tag-row");
+  const countEl = document.getElementById("tags-custom-count");
+  if (countEl) countEl.textContent = `${customRows.length} / ${MAX_CUSTOM_TAGS}`;
+  // Show/hide add button
+  const btn = document.getElementById("add-custom-tag-btn");
+  if (btn) btn.style.display = customRows.length >= MAX_CUSTOM_TAGS ? "none" : "inline-block";
+}
+
+// Add a custom tag row (label + value + remove button)
+function addCustomTagRow(label, value) {
+  const list = document.getElementById("custom-tags-list");
+  if (!list) return;
+  const existing = list.querySelectorAll(".custom-tag-row").length;
+  if (existing >= MAX_CUSTOM_TAGS) return;
+
+  const row = document.createElement("div");
+  row.className = "custom-tag-row";
+  row.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:3px;">
+      <label style="font-size:10px;color:var(--text-hint);">Label</label>
+      <input type="text" class="custom-tag-label" placeholder="e.g. Building ID" value="${escapeHtml(label || "")}" />
+    </div>
+    <div style="display:flex;flex-direction:column;gap:3px;">
+      <label style="font-size:10px;color:var(--text-hint);">Value</label>
+      <input type="text" class="custom-tag-value" placeholder="e.g. BLDG-42" value="${escapeHtml(value || "")}" />
+    </div>
+    <button onclick="this.parentElement.remove();updateTagCounts();" title="Remove this tag">✕</button>
+  `;
+  list.appendChild(row);
+  updateTagCounts();
+}
+
+// Helper — escape HTML for safe insertion
+function escapeHtml(str) {
+  const d = document.createElement("div");
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+// Save all tags for the current device
+async function saveDeviceTags() {
+  if (!currentTagsDeviceId) return;
+  const statusEl = document.getElementById("tags-save-status");
+  const showStatus = (msg, ok) => {
+    statusEl.textContent = msg;
+    statusEl.style.color = ok ? "var(--green-dark)" : "var(--red)";
+    statusEl.style.display = "inline";
+    if (ok) setTimeout(() => { statusEl.style.display = "none"; }, 4000);
+  };
+
+  // Collect all standard tags
+  const tags = [];
+  Object.entries(STANDARD_TAG_FIELDS).forEach(([key, category]) => {
+    const el = document.getElementById(`tag-${key}`);
+    const val = el?.value?.trim();
+    if (val) {
+      tags.push({ device_id: parseInt(currentTagsDeviceId), tag_category: category, tag_key: key, tag_value: val });
+    }
+  });
+
+  // Collect custom tags
+  const customRows = document.querySelectorAll("#custom-tags-list .custom-tag-row");
+  let customCount = 0;
+  customRows.forEach(row => {
+    const label = row.querySelector(".custom-tag-label")?.value?.trim();
+    const value = row.querySelector(".custom-tag-value")?.value?.trim();
+    if (label && value) {
+      // Sanitize the label to a key-safe format
+      const safeKey = "custom_" + label.toLowerCase().replace(/[^a-z0-9_]/g, "_").replace(/_+/g, "_").slice(0, 60);
+      tags.push({ device_id: parseInt(currentTagsDeviceId), tag_category: "custom", tag_key: safeKey, tag_value: value, tag_label: label });
+      customCount++;
+    }
+  });
+
+  if (customCount > MAX_CUSTOM_TAGS) {
+    return showStatus(`⚠️ Maximum ${MAX_CUSTOM_TAGS} custom tags allowed.`, false);
+  }
+
+  showStatus("Saving…", true);
+
+  try {
+    // Delete existing tags for this device, then insert all new ones
+    await supabaseDelete("device_tags", `device_id=eq.${currentTagsDeviceId}`);
+
+    if (tags.length > 0) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/device_tags`, {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+          "Content-Type": "application/json",
+          "Prefer": "return=minimal"
+        },
+        body: JSON.stringify(tags)
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        return showStatus(`Error: ${err}`, false);
+      }
+    }
+    showStatus(`✅ ${tags.length} tag(s) saved.`, true);
+    updateTagCounts();
+  } catch(e) {
+    showStatus(`Error: ${e.message}`, false);
+  }
+}
 
 
 // ── NWS Current Conditions ────────────────────────────────────────────────────
