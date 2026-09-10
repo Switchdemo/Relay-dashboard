@@ -187,6 +187,14 @@
   .queue-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
   .queue-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
   .queue-refresh { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 0.5px solid var(--border-md); background: var(--surface2); color: var(--text-secondary); cursor: pointer; }
+  .tag-field { display:flex;flex-direction:column;gap:3px; }
+  .tag-field label { font-size:10px;color:var(--text-hint);font-weight:500; }
+  .tag-field input, .tag-field select { width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;font-family:inherit;color:var(--text-primary); }
+  .tag-field input:focus, .tag-field select:focus { outline:none;border-color:var(--blue); }
+  .tag-field input::placeholder { color:var(--text-hint);opacity:0.6; }
+  .custom-tag-row { display:grid;grid-template-columns:1fr 1.5fr auto;gap:8px;align-items:end;margin-bottom:8px; }
+  .custom-tag-row input { width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;color:var(--text-primary); }
+  .custom-tag-row button { padding:5px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--red);background:transparent;color:var(--red);font-size:10px;cursor:pointer;white-space:nowrap; }
   .queue-list { display: flex; flex-direction: column; gap: 8px; }
   .queue-item { padding: 10px 14px; border-radius: var(--radius-sm); border: 0.5px solid var(--border-md); background: var(--surface2); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .queue-item.pending    { border-left: 3px solid var(--amber); }
@@ -3835,6 +3843,198 @@
           <div class="sched-empty">Loading devices...</div>
         </div>
       </div>
+
+      <!-- Device Tags / Identifiers -->
+      <div class="sched-card" id="device-tags-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">Device Tags &amp; Identifiers</div>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:12px;">
+          Assign utility grid location, customer identity, and market/program identifiers to each device. Select a device to manage its tags.
+        </div>
+
+        <!-- Device Selector -->
+        <div style="margin-bottom:16px;">
+          <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;font-weight:600;">Select Device</label>
+          <select id="tags-device-selector" onchange="loadDeviceTags(this.value)"
+            style="width:100%;max-width:420px;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+            <option value="">— choose a device —</option>
+          </select>
+        </div>
+
+        <!-- Tags Editor (hidden until device selected) -->
+        <div id="tags-editor" style="display:none;">
+
+          <!-- Grid Location Tags -->
+          <div style="margin-bottom:16px;">
+            <div onclick="toggleTagSection('grid')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:0.5px solid var(--border);margin-bottom:10px;">
+              <span id="tags-grid-arrow" style="font-size:10px;color:var(--text-hint);transition:transform 0.2s;">▶</span>
+              <span style="font-size:12px;font-weight:600;color:var(--text-primary);">⚡ Grid Location</span>
+              <span style="font-size:10px;color:var(--text-hint);margin-left:auto;" id="tags-grid-count">0 set</span>
+            </div>
+            <div id="tags-grid-body" style="display:none;">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div class="tag-field">
+                  <label>Transmission Line</label>
+                  <input type="text" id="tag-transmission_line" placeholder="e.g. 138kV Westside" />
+                </div>
+                <div class="tag-field">
+                  <label>Substation Name</label>
+                  <input type="text" id="tag-substation_name" placeholder="e.g. Elm Street Sub" />
+                </div>
+                <div class="tag-field">
+                  <label>Substation ID</label>
+                  <input type="text" id="tag-substation_id" placeholder="e.g. SUB-0042" />
+                </div>
+                <div class="tag-field">
+                  <label>Feeder / Circuit ID</label>
+                  <input type="text" id="tag-feeder_id" placeholder="e.g. FDR-1821" />
+                </div>
+                <div class="tag-field">
+                  <label>Lateral ID</label>
+                  <input type="text" id="tag-lateral_id" placeholder="e.g. LAT-003" />
+                </div>
+                <div class="tag-field">
+                  <label>Transformer ID</label>
+                  <input type="text" id="tag-transformer_id" placeholder="e.g. XFMR-7790" />
+                </div>
+                <div class="tag-field">
+                  <label>Pole Number</label>
+                  <input type="text" id="tag-pole_number" placeholder="e.g. P-4419" />
+                </div>
+                <div class="tag-field">
+                  <label>Phase</label>
+                  <select id="tag-phase" style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
+                    <option value="">—</option>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                    <option value="AB">AB</option>
+                    <option value="AC">AC</option>
+                    <option value="BC">BC</option>
+                    <option value="ABC">ABC</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Customer Identity Tags -->
+          <div style="margin-bottom:16px;">
+            <div onclick="toggleTagSection('customer')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:0.5px solid var(--border);margin-bottom:10px;">
+              <span id="tags-customer-arrow" style="font-size:10px;color:var(--text-hint);transition:transform 0.2s;">▶</span>
+              <span style="font-size:12px;font-weight:600;color:var(--text-primary);">👤 Customer Identity</span>
+              <span style="font-size:10px;color:var(--text-hint);margin-left:auto;" id="tags-customer-count">0 set</span>
+            </div>
+            <div id="tags-customer-body" style="display:none;">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div class="tag-field">
+                  <label>Service Point ID (SPID)</label>
+                  <input type="text" id="tag-service_point_id" placeholder="Unique service location" />
+                </div>
+                <div class="tag-field">
+                  <label>Account Number (CIS)</label>
+                  <input type="text" id="tag-account_number" placeholder="Utility billing account" />
+                </div>
+                <div class="tag-field">
+                  <label>Meter Number</label>
+                  <input type="text" id="tag-meter_number" placeholder="Physical meter serial" />
+                </div>
+                <div class="tag-field">
+                  <label>Premise ID</label>
+                  <input type="text" id="tag-premise_id" placeholder="Physical location record" />
+                </div>
+                <div class="tag-field">
+                  <label>ESI ID</label>
+                  <input type="text" id="tag-esi_id" placeholder="Texas 22-digit ID (if applicable)" />
+                </div>
+                <div class="tag-field">
+                  <label>Rate Class / Tariff Code</label>
+                  <input type="text" id="tag-rate_class" placeholder="e.g. RS, GS, TOU-D-A" />
+                </div>
+                <div class="tag-field">
+                  <label>Customer Class</label>
+                  <select id="tag-customer_class" style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
+                    <option value="">—</option>
+                    <option value="Residential">Residential</option>
+                    <option value="Commercial">Commercial</option>
+                    <option value="Industrial">Industrial</option>
+                    <option value="Agricultural">Agricultural</option>
+                    <option value="Municipal">Municipal</option>
+                    <option value="Institutional">Institutional</option>
+                  </select>
+                </div>
+                <div class="tag-field">
+                  <label>Utility Name / Territory</label>
+                  <input type="text" id="tag-utility_name" placeholder="e.g. SCE, Entergy, Duke" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Market / Program Tags -->
+          <div style="margin-bottom:16px;">
+            <div onclick="toggleTagSection('market')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:0.5px solid var(--border);margin-bottom:10px;">
+              <span id="tags-market-arrow" style="font-size:10px;color:var(--text-hint);transition:transform 0.2s;">▶</span>
+              <span style="font-size:12px;font-weight:600;color:var(--text-primary);">📊 Market / Program</span>
+              <span style="font-size:10px;color:var(--text-hint);margin-left:auto;" id="tags-market-count">0 set</span>
+            </div>
+            <div id="tags-market-body" style="display:none;">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div class="tag-field">
+                  <label>SLAP (Sub-Load Aggregation Point)</label>
+                  <input type="text" id="tag-slap" placeholder="e.g. SLAP_PGEB-APND" />
+                </div>
+                <div class="tag-field">
+                  <label>DLAP (Default Load Aggregation Point)</label>
+                  <input type="text" id="tag-dlap" placeholder="e.g. DLAP_PGAE" />
+                </div>
+                <div class="tag-field">
+                  <label>LAP (Load Aggregation Point)</label>
+                  <input type="text" id="tag-lap" placeholder="e.g. LAP_SCE" />
+                </div>
+                <div class="tag-field">
+                  <label>DR Program</label>
+                  <input type="text" id="tag-dr_program" placeholder="e.g. Summer Saver, BIP" />
+                </div>
+                <div class="tag-field">
+                  <label>ISO / RTO</label>
+                  <input type="text" id="tag-iso_rto" placeholder="e.g. CAISO, ERCOT, PJM" />
+                </div>
+                <div class="tag-field">
+                  <label>Resource ID</label>
+                  <input type="text" id="tag-resource_id" placeholder="ISO resource identifier" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Free-Form Custom Tags (up to 20) -->
+          <div style="margin-bottom:16px;">
+            <div onclick="toggleTagSection('custom')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:0.5px solid var(--border);margin-bottom:10px;">
+              <span id="tags-custom-arrow" style="font-size:10px;color:var(--text-hint);transition:transform 0.2s;">▶</span>
+              <span style="font-size:12px;font-weight:600;color:var(--text-primary);">🏷️ Custom Tags</span>
+              <span style="font-size:10px;color:var(--text-hint);margin-left:auto;" id="tags-custom-count">0 / 20</span>
+            </div>
+            <div id="tags-custom-body" style="display:none;">
+              <div id="custom-tags-list"></div>
+              <button id="add-custom-tag-btn" onclick="addCustomTagRow()"
+                style="margin-top:8px;padding:5px 14px;border-radius:var(--radius-sm);border:0.5px dashed var(--border-md);background:transparent;color:var(--text-hint);font-size:11px;cursor:pointer;">
+                + Add Custom Tag
+              </button>
+            </div>
+          </div>
+
+          <!-- Save / Status -->
+          <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
+            <button onclick="saveDeviceTags()"
+              style="padding:8px 24px;border-radius:var(--radius-sm);border:none;background:var(--green-dark);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">
+              💾 Save Tags
+            </button>
+            <span id="tags-save-status" style="font-size:11px;display:none;"></span>
+          </div>
+        </div><!-- end tags-editor -->
+      </div><!-- end device-tags-card -->
 
     </div>
   </div>
