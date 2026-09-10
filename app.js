@@ -316,7 +316,7 @@ function runTabInit(name) {
   if (name === "settings")         initSettingsTab();
   if (name === "weather")          initWeatherTab();
   if (name === "admin-users")      { updateAdminHeader(); loadUsersTable(); }
-  if (name === "admin-devices") { loadDeviceManagement(); }
+  if (name === "admin-devices") { loadDeviceManagement(); loadTagRegistry(); }
   if (name === "monitor-health") { initFleetHealth(); }
   if (name === "admin-monitor") { initMonitoring(); }
   if (name === "admin-energy")    { initEnergyMonitor(); }
@@ -10766,51 +10766,317 @@ async function removeDevice(id, name) {
 
 // ── Device Tags & Identifiers ────────────────────────────────────────────────
 
-// Standard tag field IDs — must match the HTML input/select id="tag-xxx"
-const STANDARD_TAG_FIELDS = {
+// Standard tag definitions: key → { category, label, placeholder }
+const TAG_DEFINITIONS = {
   // Grid Location
-  transmission_line: "grid",
-  substation_name:   "grid",
-  substation_id:     "grid",
-  feeder_id:         "grid",
-  lateral_id:        "grid",
-  transformer_id:    "grid",
-  pole_number:       "grid",
-  phase:             "grid",
+  transmission_line: { cat: "grid",     label: "Transmission Line",                 placeholder: "e.g. 138kV Westside" },
+  substation_name:   { cat: "grid",     label: "Substation Name",                   placeholder: "e.g. Elm Street Sub" },
+  substation_id:     { cat: "grid",     label: "Substation ID",                     placeholder: "e.g. SUB-0042" },
+  feeder_id:         { cat: "grid",     label: "Feeder / Circuit ID",               placeholder: "e.g. FDR-1821" },
+  lateral_id:        { cat: "grid",     label: "Lateral ID",                        placeholder: "e.g. LAT-003" },
+  transformer_id:    { cat: "grid",     label: "Transformer ID",                    placeholder: "e.g. XFMR-7790" },
+  pole_number:       { cat: "grid",     label: "Pole Number",                       placeholder: "e.g. P-4419" },
+  phase:             { cat: "grid",     label: "Phase",                             placeholder: "" },
   // Customer Identity
-  service_point_id:  "customer",
-  account_number:    "customer",
-  meter_number:      "customer",
-  premise_id:        "customer",
-  esi_id:            "customer",
-  rate_class:        "customer",
-  customer_class:    "customer",
-  utility_name:      "customer",
+  service_point_id:  { cat: "customer", label: "Service Point ID (SPID)",           placeholder: "Unique service location" },
+  account_number:    { cat: "customer", label: "Account Number (CIS)",              placeholder: "Utility billing account" },
+  meter_number:      { cat: "customer", label: "Meter Number",                      placeholder: "Physical meter serial" },
+  premise_id:        { cat: "customer", label: "Premise ID",                        placeholder: "Physical location record" },
+  esi_id:            { cat: "customer", label: "ESI ID",                            placeholder: "Texas 22-digit ID" },
+  rate_class:        { cat: "customer", label: "Rate Class / Tariff Code",          placeholder: "e.g. RS, GS, TOU-D-A" },
+  customer_class:    { cat: "customer", label: "Customer Class",                    placeholder: "" },
+  utility_name:      { cat: "customer", label: "Utility Name / Territory",          placeholder: "e.g. SCE, Entergy, Duke" },
   // Market / Program
-  slap:              "market",
-  dlap:              "market",
-  lap:               "market",
-  dr_program:        "market",
-  iso_rto:           "market",
-  resource_id:       "market",
+  slap:              { cat: "market",   label: "SLAP (Sub-Load Aggregation Point)", placeholder: "e.g. SLAP_PGEB-APND" },
+  dlap:              { cat: "market",   label: "DLAP (Default Load Aggregation Point)", placeholder: "e.g. DLAP_PGAE" },
+  lap:               { cat: "market",   label: "LAP (Load Aggregation Point)",      placeholder: "e.g. LAP_SCE" },
+  dr_program:        { cat: "market",   label: "DR Program",                        placeholder: "e.g. Summer Saver, BIP" },
+  iso_rto:           { cat: "market",   label: "ISO / RTO",                         placeholder: "e.g. CAISO, ERCOT, PJM" },
+  resource_id:       { cat: "market",   label: "Resource ID",                       placeholder: "ISO resource identifier" },
 };
-const MAX_CUSTOM_TAGS = 20;
-let currentTagsDeviceId = null; // Supabase row id of selected device
 
-// Populate the device dropdown when the Devices tab loads
+const MAX_CUSTOM_TAGS = 20;
+let currentTagsDeviceId = null;
+let tagRegistryCache = {};   // key → [value1, value2, ...] from tag_value_registry
+
+// ── Tag Value Registry ───────────────────────────────────────────────────────
+
+// Load the full registry into memory (called on tab init)
+async function loadTagRegistry() {
+  tagRegistryCache = {};
+  try {
+    const rows = await supabaseGet("tag_value_registry?order=tag_key,sort_order.asc,value.asc");
+    if (Array.isArray(rows)) {
+      rows.forEach(r => {
+        if (!tagRegistryCache[r.tag_key]) tagRegistryCache[r.tag_key] = [];
+        tagRegistryCache[r.tag_key].push(r.value);
+      });
+    }
+  } catch(e) { console.warn("loadTagRegistry:", e); }
+
+  // Also load custom field definitions into the registry selector
+  populateRegistryCustomFields();
+}
+
+// Populate custom fields in the registry field selector dropdown
+function populateRegistryCustomFields() {
+  const optgroup = document.getElementById("registry-custom-optgroup");
+  if (!optgroup) return;
+  optgroup.innerHTML = "";
+  Object.keys(tagRegistryCache).forEach(key => {
+    if (key.startsWith("custom_") && !TAG_DEFINITIONS[key]) {
+      const label = key.replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      const opt = document.createElement("option");
+      opt.value = key;
+      opt.textContent = label;
+      optgroup.appendChild(opt);
+    }
+  });
+}
+
+// Show values for a selected registry field
+async function loadRegistryValues(tagKey) {
+  const editor = document.getElementById("registry-editor");
+  const input  = document.getElementById("registry-new-value");
+  if (!tagKey) { if (editor) editor.style.display = "none"; return; }
+  if (editor) editor.style.display = "block";
+  if (input) input.value = "";
+
+  const def = TAG_DEFINITIONS[tagKey];
+  const label = def ? def.label : tagKey.replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const labelEl = document.getElementById("registry-field-label");
+  if (labelEl) labelEl.textContent = `Values for: ${label}`;
+
+  renderRegistryValueList(tagKey);
+}
+
+function renderRegistryValueList(tagKey) {
+  const list = document.getElementById("registry-values-list");
+  const countEl = document.getElementById("registry-value-count");
+  const values = tagRegistryCache[tagKey] || [];
+  if (countEl) countEl.textContent = `${values.length} defined`;
+
+  if (values.length === 0) {
+    list.innerHTML = '<div style="font-size:11px;color:var(--text-hint);padding:8px 0;">No values defined yet. Add values below.</div>';
+    return;
+  }
+
+  list.innerHTML = values.map((v, i) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:${i%2===0 ? "var(--surface2)" : "transparent"};border-radius:4px;margin-bottom:2px;">
+      <span style="flex:1;font-size:12px;color:var(--text-primary);">${escapeHtml(v)}</span>
+      <button onclick="removeRegistryValue('${escapeHtml(tagKey)}', ${i})"
+        style="padding:2px 8px;border-radius:4px;border:0.5px solid var(--red);background:transparent;color:var(--red);font-size:10px;cursor:pointer;">✕</button>
+    </div>
+  `).join("");
+}
+
+async function addRegistryValue() {
+  const sel   = document.getElementById("registry-field-selector");
+  const input = document.getElementById("registry-new-value");
+  const statusEl = document.getElementById("registry-status");
+  const tagKey = sel?.value;
+  const value  = input?.value?.trim();
+
+  const showStatus = (msg, ok) => {
+    statusEl.textContent = msg;
+    statusEl.style.color = ok ? "var(--green-dark)" : "var(--red)";
+    statusEl.style.display = "block";
+    if (ok) setTimeout(() => { statusEl.style.display = "none"; }, 3000);
+  };
+
+  if (!tagKey) return showStatus("Select a tag field first.", false);
+  if (!value)  return showStatus("Enter a value.", false);
+
+  // Check for duplicate
+  if ((tagRegistryCache[tagKey] || []).includes(value)) {
+    return showStatus(`"${value}" already exists.`, false);
+  }
+
+  // Determine next sort order
+  const nextSort = (tagRegistryCache[tagKey] || []).length;
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/tag_value_registry`, {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${currentSession?.access_token || SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+      },
+      body: JSON.stringify({ tag_key: tagKey, value: value, sort_order: nextSort })
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      return showStatus(`Error: ${err}`, false);
+    }
+    // Update local cache
+    if (!tagRegistryCache[tagKey]) tagRegistryCache[tagKey] = [];
+    tagRegistryCache[tagKey].push(value);
+    input.value = "";
+    renderRegistryValueList(tagKey);
+    showStatus(`✅ "${value}" added.`, true);
+    populateRegistryCustomFields();
+  } catch(e) {
+    showStatus(`Error: ${e.message}`, false);
+  }
+}
+
+async function removeRegistryValue(tagKey, index) {
+  const values = tagRegistryCache[tagKey];
+  if (!values || !values[index]) return;
+  const value = values[index];
+  if (!confirm(`Remove "${value}" from the registry?\n\nThis won't remove it from devices already tagged — it just removes it as a dropdown option.`)) return;
+
+  try {
+    await supabaseDelete("tag_value_registry", `tag_key=eq.${encodeURIComponent(tagKey)}&value=eq.${encodeURIComponent(value)}`);
+    values.splice(index, 1);
+    renderRegistryValueList(tagKey);
+  } catch(e) { console.error("removeRegistryValue:", e); }
+}
+
+// Modal for adding a new custom field to the registry
+function showAddCustomFieldModal() {
+  const name = prompt("Enter the name for the new custom tag field:\n\n(e.g. Building ID, Zone, Area Code)");
+  if (!name || !name.trim()) return;
+  const safeKey = "custom_" + name.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_").replace(/_+/g, "_").slice(0, 60);
+
+  // Initialize the key in cache if needed
+  if (!tagRegistryCache[safeKey]) tagRegistryCache[safeKey] = [];
+
+  // Add it to TAG_DEFINITIONS dynamically so it shows up in tag fields
+  if (!TAG_DEFINITIONS[safeKey]) {
+    TAG_DEFINITIONS[safeKey] = { cat: "custom", label: name.trim(), placeholder: "" };
+  }
+
+  populateRegistryCustomFields();
+
+  // Select it in the dropdown
+  const sel = document.getElementById("registry-field-selector");
+  // Ensure the option exists
+  let opt = sel.querySelector(`option[value="${safeKey}"]`);
+  if (!opt) {
+    const optgroup = document.getElementById("registry-custom-optgroup");
+    opt = document.createElement("option");
+    opt.value = safeKey;
+    opt.textContent = name.trim();
+    optgroup.appendChild(opt);
+  }
+  sel.value = safeKey;
+  loadRegistryValues(safeKey);
+}
+
+
+// ── Tag Field Rendering ──────────────────────────────────────────────────────
+
+// Render tag fields for a category — dropdown if registry values exist, free-text otherwise
+function renderTagFields(category) {
+  const container = document.getElementById(`tags-${category}-fields`);
+  if (!container) return;
+  container.innerHTML = "";
+
+  const fields = Object.entries(TAG_DEFINITIONS).filter(([, def]) => def.cat === category);
+
+  fields.forEach(([key, def]) => {
+    const registryValues = tagRegistryCache[key] || [];
+    const div = document.createElement("div");
+    div.className = "tag-field";
+
+    const lbl = document.createElement("label");
+    lbl.textContent = def.label;
+    div.appendChild(lbl);
+
+    if (registryValues.length > 0) {
+      // Render as dropdown with registry values
+      const sel = document.createElement("select");
+      sel.id = `tag-${key}`;
+      sel.style.cssText = "width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;color:var(--text-primary);";
+      sel.innerHTML = '<option value="">—</option>';
+      registryValues.forEach(v => {
+        const o = document.createElement("option");
+        o.value = v;
+        o.textContent = v;
+        sel.appendChild(o);
+      });
+      div.appendChild(sel);
+    } else {
+      // Render as free-text input
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.id = `tag-${key}`;
+      inp.placeholder = def.placeholder || "";
+      div.appendChild(inp);
+    }
+
+    container.appendChild(div);
+  });
+}
+
+// Render custom tag fields in the custom section
+function renderCustomTagFields() {
+  const list = document.getElementById("custom-tags-list");
+  if (!list) return;
+  list.innerHTML = "";
+
+  // Find all custom_ keys in TAG_DEFINITIONS
+  const customFields = Object.entries(TAG_DEFINITIONS).filter(([k, def]) => def.cat === "custom");
+
+  customFields.forEach(([key, def]) => {
+    const registryValues = tagRegistryCache[key] || [];
+    const div = document.createElement("div");
+    div.className = "custom-tag-row";
+    div.dataset.tagKey = key;
+    div.style.cssText = "display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:end;margin-bottom:8px;";
+
+    const labelDiv = document.createElement("div");
+    labelDiv.style.cssText = "display:flex;flex-direction:column;gap:3px;min-width:140px;";
+    labelDiv.innerHTML = `<label style="font-size:10px;color:var(--text-hint);">${escapeHtml(def.label)}</label>`;
+    div.appendChild(labelDiv);
+
+    const valDiv = document.createElement("div");
+    valDiv.style.cssText = "display:flex;flex-direction:column;gap:3px;";
+
+    if (registryValues.length > 0) {
+      const sel = document.createElement("select");
+      sel.id = `tag-${key}`;
+      sel.className = "custom-tag-value";
+      sel.style.cssText = "width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;color:var(--text-primary);";
+      sel.innerHTML = '<option value="">—</option>';
+      registryValues.forEach(v => {
+        const o = document.createElement("option");
+        o.value = v;
+        o.textContent = v;
+        sel.appendChild(o);
+      });
+      valDiv.appendChild(sel);
+    } else {
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.id = `tag-${key}`;
+      inp.className = "custom-tag-value";
+      inp.placeholder = def.placeholder || `Value for ${def.label}`;
+      valDiv.appendChild(inp);
+    }
+
+    div.appendChild(valDiv);
+    list.appendChild(div);
+  });
+}
+
+
+// ── Populate Device Selector ─────────────────────────────────────────────────
+
 function populateTagsDeviceSelector() {
   const sel = document.getElementById("tags-device-selector");
   if (!sel) return;
   const current = sel.value;
   sel.innerHTML = '<option value="">— choose a device —</option>';
-  // Use the device-mgmt-list table rows (already loaded) or fall back to DEVICES
   try {
     const rows = document.querySelectorAll("#device-mgmt-list tbody tr");
     if (rows.length > 0) {
       rows.forEach(tr => {
         const nameCell = tr.children[0]?.textContent?.trim();
         const uidCell  = tr.children[1]?.textContent?.trim();
-        // Extract the db id from the remove button onclick
         const removeBtn = tr.querySelector("button[onclick*='removeDevice']");
         const match = removeBtn?.getAttribute("onclick")?.match(/removeDevice\((\d+)/);
         const dbId = match ? match[1] : "";
@@ -10823,7 +11089,6 @@ function populateTagsDeviceSelector() {
       });
     }
   } catch(e) { console.warn("populateTagsDeviceSelector fallback:", e); }
-  // Restore selection if it still exists
   if (current && sel.querySelector(`option[value="${current}"]`)) sel.value = current;
 }
 
@@ -10837,32 +11102,47 @@ function toggleTagSection(section) {
   if (arrow) arrow.style.transform = open ? "rotate(0deg)" : "rotate(90deg)";
 }
 
-// Load tags for a selected device
+
+// ── Load & Save Device Tags ──────────────────────────────────────────────────
+
 async function loadDeviceTags(deviceDbId) {
   const editor = document.getElementById("tags-editor");
   if (!deviceDbId) { if (editor) editor.style.display = "none"; currentTagsDeviceId = null; return; }
   currentTagsDeviceId = deviceDbId;
   if (editor) editor.style.display = "block";
 
-  // Clear all fields first
-  Object.keys(STANDARD_TAG_FIELDS).forEach(key => {
-    const el = document.getElementById(`tag-${key}`);
-    if (el) el.value = "";
-  });
-  document.getElementById("custom-tags-list").innerHTML = "";
+  // Ensure registry is loaded (might already be cached)
+  if (Object.keys(tagRegistryCache).length === 0) await loadTagRegistry();
 
-  // Fetch the device's tags from Supabase
+  // Also load any custom field definitions from existing tags across all devices
+  try {
+    const allCustom = await supabaseGet("device_tags?tag_category=eq.custom&select=tag_key,tag_label");
+    if (Array.isArray(allCustom)) {
+      allCustom.forEach(r => {
+        if (r.tag_key && !TAG_DEFINITIONS[r.tag_key]) {
+          TAG_DEFINITIONS[r.tag_key] = {
+            cat: "custom",
+            label: r.tag_label || r.tag_key.replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+            placeholder: ""
+          };
+        }
+      });
+    }
+  } catch(e) {}
+
+  // Render all field sections (dropdown vs free-text based on registry)
+  renderTagFields("grid");
+  renderTagFields("customer");
+  renderTagFields("market");
+  renderCustomTagFields();
+
+  // Now load this device's actual values
   try {
     const rows = await supabaseGet(`device_tags?device_id=eq.${deviceDbId}&order=id.asc`);
     if (Array.isArray(rows)) {
       rows.forEach(row => {
-        if (row.tag_category === "custom") {
-          // Add a custom tag row
-          addCustomTagRow(row.tag_key, row.tag_value);
-        } else {
-          const el = document.getElementById(`tag-${row.tag_key}`);
-          if (el) el.value = row.tag_value || "";
-        }
+        const el = document.getElementById(`tag-${row.tag_key}`);
+        if (el) el.value = row.tag_value || "";
       });
     }
   } catch(e) {
@@ -10874,7 +11154,7 @@ async function loadDeviceTags(deviceDbId) {
 // Count how many tags are set in each section
 function updateTagCounts() {
   ["grid", "customer", "market"].forEach(section => {
-    const keys = Object.entries(STANDARD_TAG_FIELDS).filter(([,s]) => s === section).map(([k]) => k);
+    const keys = Object.entries(TAG_DEFINITIONS).filter(([, d]) => d.cat === section).map(([k]) => k);
     let count = 0;
     keys.forEach(k => {
       const el = document.getElementById(`tag-${k}`);
@@ -10884,36 +11164,16 @@ function updateTagCounts() {
     if (countEl) countEl.textContent = `${count} set`;
   });
   // Custom count
-  const customRows = document.querySelectorAll("#custom-tags-list .custom-tag-row");
+  const customKeys = Object.entries(TAG_DEFINITIONS).filter(([, d]) => d.cat === "custom").map(([k]) => k);
+  let filledCustom = 0;
+  customKeys.forEach(k => {
+    const el = document.getElementById(`tag-${k}`);
+    if (el && el.value.trim()) filledCustom++;
+  });
   const countEl = document.getElementById("tags-custom-count");
-  if (countEl) countEl.textContent = `${customRows.length} / ${MAX_CUSTOM_TAGS}`;
-  // Show/hide add button
+  if (countEl) countEl.textContent = `${filledCustom} set / ${customKeys.length} fields (${MAX_CUSTOM_TAGS} max)`;
   const btn = document.getElementById("add-custom-tag-btn");
-  if (btn) btn.style.display = customRows.length >= MAX_CUSTOM_TAGS ? "none" : "inline-block";
-}
-
-// Add a custom tag row (label + value + remove button)
-function addCustomTagRow(label, value) {
-  const list = document.getElementById("custom-tags-list");
-  if (!list) return;
-  const existing = list.querySelectorAll(".custom-tag-row").length;
-  if (existing >= MAX_CUSTOM_TAGS) return;
-
-  const row = document.createElement("div");
-  row.className = "custom-tag-row";
-  row.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:3px;">
-      <label style="font-size:10px;color:var(--text-hint);">Label</label>
-      <input type="text" class="custom-tag-label" placeholder="e.g. Building ID" value="${escapeHtml(label || "")}" />
-    </div>
-    <div style="display:flex;flex-direction:column;gap:3px;">
-      <label style="font-size:10px;color:var(--text-hint);">Value</label>
-      <input type="text" class="custom-tag-value" placeholder="e.g. BLDG-42" value="${escapeHtml(value || "")}" />
-    </div>
-    <button onclick="this.parentElement.remove();updateTagCounts();" title="Remove this tag">✕</button>
-  `;
-  list.appendChild(row);
-  updateTagCounts();
+  if (btn) btn.style.display = customKeys.length >= MAX_CUSTOM_TAGS ? "none" : "inline-block";
 }
 
 // Helper — escape HTML for safe insertion
@@ -10934,33 +11194,17 @@ async function saveDeviceTags() {
     if (ok) setTimeout(() => { statusEl.style.display = "none"; }, 4000);
   };
 
-  // Collect all standard tags
+  // Collect all tags (standard + custom)
   const tags = [];
-  Object.entries(STANDARD_TAG_FIELDS).forEach(([key, category]) => {
+  Object.entries(TAG_DEFINITIONS).forEach(([key, def]) => {
     const el = document.getElementById(`tag-${key}`);
     const val = el?.value?.trim();
     if (val) {
-      tags.push({ device_id: parseInt(currentTagsDeviceId), tag_category: category, tag_key: key, tag_value: val });
+      const row = { device_id: parseInt(currentTagsDeviceId), tag_category: def.cat, tag_key: key, tag_value: val };
+      if (def.cat === "custom") row.tag_label = def.label;
+      tags.push(row);
     }
   });
-
-  // Collect custom tags
-  const customRows = document.querySelectorAll("#custom-tags-list .custom-tag-row");
-  let customCount = 0;
-  customRows.forEach(row => {
-    const label = row.querySelector(".custom-tag-label")?.value?.trim();
-    const value = row.querySelector(".custom-tag-value")?.value?.trim();
-    if (label && value) {
-      // Sanitize the label to a key-safe format
-      const safeKey = "custom_" + label.toLowerCase().replace(/[^a-z0-9_]/g, "_").replace(/_+/g, "_").slice(0, 60);
-      tags.push({ device_id: parseInt(currentTagsDeviceId), tag_category: "custom", tag_key: safeKey, tag_value: value, tag_label: label });
-      customCount++;
-    }
-  });
-
-  if (customCount > MAX_CUSTOM_TAGS) {
-    return showStatus(`⚠️ Maximum ${MAX_CUSTOM_TAGS} custom tags allowed.`, false);
-  }
 
   showStatus("Saving…", true);
 
@@ -10989,6 +11233,40 @@ async function saveDeviceTags() {
   } catch(e) {
     showStatus(`Error: ${e.message}`, false);
   }
+}
+
+// Add a free-form custom tag via the button in the custom section
+function addCustomTagRow() {
+  const name = prompt("Enter the name for the new custom tag:\n\n(e.g. Building ID, Zone, Area Code)");
+  if (!name || !name.trim()) return;
+  const safeKey = "custom_" + name.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_").replace(/_+/g, "_").slice(0, 60);
+
+  if (TAG_DEFINITIONS[safeKey]) {
+    alert(`"${name.trim()}" already exists.`);
+    return;
+  }
+
+  const customCount = Object.entries(TAG_DEFINITIONS).filter(([, d]) => d.cat === "custom").length;
+  if (customCount >= MAX_CUSTOM_TAGS) {
+    alert(`Maximum ${MAX_CUSTOM_TAGS} custom tags reached.`);
+    return;
+  }
+
+  TAG_DEFINITIONS[safeKey] = { cat: "custom", label: name.trim(), placeholder: "" };
+  if (!tagRegistryCache[safeKey]) tagRegistryCache[safeKey] = [];
+
+  renderCustomTagFields();
+  // Re-load current device's values to populate the new field
+  if (currentTagsDeviceId) {
+    supabaseGet(`device_tags?device_id=eq.${currentTagsDeviceId}&tag_key=eq.${safeKey}`).then(rows => {
+      if (Array.isArray(rows) && rows[0]) {
+        const el = document.getElementById(`tag-${safeKey}`);
+        if (el) el.value = rows[0].tag_value;
+      }
+    }).catch(() => {});
+  }
+  updateTagCounts();
+  populateRegistryCustomFields();
 }
 
 
