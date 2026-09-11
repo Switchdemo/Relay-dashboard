@@ -199,6 +199,9 @@
   .profile-tag-item .profile-tag-label { font-size:10px;color:var(--text-hint);font-weight:500; }
   .profile-tag-item .profile-tag-value { font-size:13px;color:var(--text-primary);font-weight:500; }
   .profile-tag-item .profile-tag-empty { font-size:12px;color:var(--text-hint);font-style:italic; }
+  .tag-filter-row { display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end; }
+  .tag-filter-row select { padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface);font-size:11px; }
+  .tag-filter-row button { padding:5px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--red);background:transparent;color:var(--red);font-size:10px;cursor:pointer; }
   .queue-list { display: flex; flex-direction: column; gap: 8px; }
   .queue-item { padding: 10px 14px; border-radius: var(--radius-sm); border: 0.5px solid var(--border-md); background: var(--surface2); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .queue-item.pending    { border-left: 3px solid var(--amber); }
@@ -1272,6 +1275,7 @@
                   <option value="" disabled selected>— Select —</option>
                   <option value="group">Group</option>
                   <option value="device">Individual Device</option>
+                  <option value="tags">🏷️ Target by Tags</option>
                 </select>
               </div>
               <div>
@@ -1287,6 +1291,20 @@
                   <option value="hybrid">Hybrid — per-relay DLC / BAS</option>
                 </select>
               </div>
+            </div>
+
+            <!-- Tag Filter Builder (shown when Target Type = Tags) -->
+            <div id="sf-tag-filter-panel" style="display:none;margin-bottom:14px;padding:12px 14px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                <span style="font-size:12px;font-weight:600;color:var(--text-primary);">🏷️ Tag Filters <span style="font-size:10px;font-weight:400;color:var(--text-hint);">(AND logic — all conditions must match)</span></span>
+                <button onclick="addTagFilterRow()" style="padding:4px 12px;border-radius:var(--radius-sm);border:0.5px dashed var(--border-md);background:transparent;color:var(--text-secondary);font-size:11px;cursor:pointer;">+ Add Filter</button>
+              </div>
+              <div id="sf-tag-filters" style="display:flex;flex-direction:column;gap:8px;"></div>
+              <div style="margin-top:10px;display:flex;align-items:center;gap:10px;">
+                <button onclick="resolveTagTargets()" style="padding:6px 16px;border-radius:var(--radius-sm);border:none;background:var(--blue-dark);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">🔍 Find Matching Devices</button>
+                <span id="sf-tag-match-count" style="font-size:11px;color:var(--text-hint);"></span>
+              </div>
+              <div id="sf-tag-match-list" style="display:none;margin-top:10px;padding:8px 12px;background:var(--surface);border-radius:var(--radius-sm);border:0.5px solid var(--border);max-height:150px;overflow-y:auto;"></div>
             </div>
 
             <!-- Uniform mode: relay selector + duty cycle tiles -->
