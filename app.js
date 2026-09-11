@@ -10814,7 +10814,15 @@ async function loadTagRegistry() {
     }
   } catch(e) { console.warn("loadTagRegistry:", e); }
 
-  // Also load custom field definitions into the registry selector
+  // Ensure every custom_ key in the registry is also in TAG_DEFINITIONS
+  // so renderCustomTagFields knows about it
+  Object.keys(tagRegistryCache).forEach(key => {
+    if (key.startsWith("custom_") && !TAG_DEFINITIONS[key]) {
+      const label = key.replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      TAG_DEFINITIONS[key] = { cat: "custom", label: label, placeholder: "" };
+    }
+  });
+
   populateRegistryCustomFields();
 }
 
@@ -11114,8 +11122,8 @@ async function loadDeviceTags(deviceDbId) {
   currentTagsDeviceId = deviceDbId;
   if (editor) editor.style.display = "block";
 
-  // Ensure registry is loaded (might already be cached)
-  if (Object.keys(tagRegistryCache).length === 0) await loadTagRegistry();
+  // Always reload registry to ensure dropdowns reflect latest values
+  await loadTagRegistry();
 
   // Also load any custom field definitions from existing tags across all devices
   try {
