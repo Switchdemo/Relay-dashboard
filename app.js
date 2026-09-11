@@ -1996,9 +1996,12 @@ function buildRestoreHex(relayAction) {
 }
 
 async function sendLCToDevice(uid, lcHex) {
-  // Block commands to disabled/removed devices
-  if (!DEVICES.find(d => d.uid === uid)) {
-    console.warn(`sendLCToDevice: ${uid} not in active DEVICES — command blocked.`);
+  // Block commands to disabled/removed devices — check DEVICES array first,
+  // but also allow UIDs that came from tag-based targeting (DB-verified)
+  const inDevices = DEVICES.find(d => d.uid === uid);
+  const inTagTargets = resolvedTagDevices.find(d => d.uid === uid);
+  if (!inDevices && !inTagTargets) {
+    console.warn(`sendLCToDevice: ${uid} not in active DEVICES or tag targets — command blocked.`);
     return;
   }
   // Deliver to Notehub as data.qi note in exact required format:
@@ -11570,23 +11573,23 @@ async function resolveTagTargets() {
       return;
     }
 
-    // Resolve device details
+    // Resolve device details — always fetch from DB to ensure we have correct UIDs
     const deviceIdArr = [...matchedDeviceIds];
-    resolvedTagDevices = DEVICES.filter(d => deviceIdArr.includes(d.dbId));
-
-    // Also fetch directly from DB for devices not in DEVICES array
-    if (resolvedTagDevices.length < deviceIdArr.length) {
-      try {
-        const dbDevices = await supabaseGet(`devices?id=in.(${deviceIdArr.join(",")})&select=id,uid,name,type`);
-        if (Array.isArray(dbDevices)) {
-          const existingIds = new Set(resolvedTagDevices.map(d => d.dbId));
-          dbDevices.forEach(d => {
-            if (!existingIds.has(d.id)) {
-              resolvedTagDevices.push({ dbId: d.id, uid: d.uid, name: d.name, type: d.type || "relay" });
-            }
-          });
-        }
-      } catch(e) {}
+    try {
+      const dbDevices = await supabaseGet(`devices?id=in.(${deviceIdArr.join(",")})&enabled=eq.true&select=id,uid,name,type,device_id`);
+      if (Array.isArray(dbDevices)) {
+        resolvedTagDevices = dbDevices.map(d => ({
+          dbId: d.id,
+          uid: d.uid,
+          name: d.name || d.uid,
+          type: d.type || "relay"
+        }));
+      } else {
+        resolvedTagDevices = [];
+      }
+    } catch(e) {
+      console.error("resolveTagTargets DB fetch:", e);
+      resolvedTagDevices = [];
     }
 
     if (countEl) countEl.textContent = `✅ ${resolvedTagDevices.length} device${resolvedTagDevices.length !== 1 ? "s" : ""} matched`;
