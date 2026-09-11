@@ -195,6 +195,10 @@
   .custom-tag-row { display:grid;grid-template-columns:1fr 1.5fr auto;gap:8px;align-items:end;margin-bottom:8px; }
   .custom-tag-row input { width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;color:var(--text-primary); }
   .custom-tag-row button { padding:5px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--red);background:transparent;color:var(--red);font-size:10px;cursor:pointer;white-space:nowrap; }
+  .profile-tag-item { display:flex;flex-direction:column;gap:1px;padding:6px 0; }
+  .profile-tag-item .profile-tag-label { font-size:10px;color:var(--text-hint);font-weight:500; }
+  .profile-tag-item .profile-tag-value { font-size:13px;color:var(--text-primary);font-weight:500; }
+  .profile-tag-item .profile-tag-empty { font-size:12px;color:var(--text-hint);font-style:italic; }
   .queue-list { display: flex; flex-direction: column; gap: 8px; }
   .queue-item { padding: 10px 14px; border-radius: var(--radius-sm); border: 0.5px solid var(--border-md); background: var(--surface2); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .queue-item.pending    { border-left: 3px solid var(--amber); }
@@ -784,6 +788,7 @@
     <button class="sub-tab-btn" id="sub-monitor-scada" onclick="switchSub('monitor','monitor-scada',this)">&#128268; SCADA Data</button>
     <button class="sub-tab-btn" id="sub-monitor-ev" onclick="switchSub('monitor','monitor-ev',this)">&#128268; EV Charging</button>
     <button class="sub-tab-btn" id="sub-monitor-health" onclick="switchSub('monitor','monitor-health',this)">🩺 Fleet Health</button>
+    <button class="sub-tab-btn" id="sub-monitor-profile" onclick="switchSub('monitor','monitor-profile',this)">🏷️ Device Profile</button>
   </div>
   <div class="sub-tabs" id="sub-tabs-admin" style="display:none;">
     <button class="sub-tab-btn active" id="sub-admin-users" onclick="switchSub('admin','admin-users',this)">User Management</button>
@@ -4251,6 +4256,79 @@
           </div>
         </div>
         <div id="th-save-status" style="font-size:11px;margin-top:8px;display:none;"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── DEVICE PROFILE TAB ── -->
+<div class="tab-pane" id="tab-monitor-profile">
+  <div class="scroll-content">
+    <div style="max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding:1rem;">
+
+      <div class="sched-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">🏷️ Device Profile &amp; Identifiers</div>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:12px;">
+          Select a device to view all assigned tags, grid location, customer identity, and market/program identifiers.
+        </div>
+
+        <!-- Device Selector -->
+        <div style="margin-bottom:16px;">
+          <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:4px;font-weight:600;">Select Device</label>
+          <select id="profile-device-selector" onchange="loadDeviceProfile(this.value)"
+            style="width:100%;max-width:420px;padding:7px 10px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;">
+            <option value="">— choose a device —</option>
+          </select>
+        </div>
+
+        <!-- Profile Display -->
+        <div id="device-profile-display" style="display:none;">
+
+          <!-- Device Info Header -->
+          <div id="profile-device-header" style="margin-bottom:16px;padding:12px 16px;background:var(--surface2);border-radius:var(--radius-sm);border-left:4px solid var(--blue);"></div>
+
+          <!-- Tag Sections -->
+          <div id="profile-grid-section" style="margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:0.5px solid var(--border);margin-bottom:10px;">
+              <span style="font-size:12px;font-weight:600;color:var(--text-primary);">⚡ Grid Location</span>
+              <span style="font-size:10px;color:var(--text-hint);margin-left:auto;" id="profile-grid-count"></span>
+            </div>
+            <div id="profile-grid-tags" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;"></div>
+          </div>
+
+          <div id="profile-customer-section" style="margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:0.5px solid var(--border);margin-bottom:10px;">
+              <span style="font-size:12px;font-weight:600;color:var(--text-primary);">👤 Customer Identity</span>
+              <span style="font-size:10px;color:var(--text-hint);margin-left:auto;" id="profile-customer-count"></span>
+            </div>
+            <div id="profile-customer-tags" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;"></div>
+          </div>
+
+          <div id="profile-market-section" style="margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:0.5px solid var(--border);margin-bottom:10px;">
+              <span style="font-size:12px;font-weight:600;color:var(--text-primary);">📊 Market / Program</span>
+              <span style="font-size:10px;color:var(--text-hint);margin-left:auto;" id="profile-market-count"></span>
+            </div>
+            <div id="profile-market-tags" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;"></div>
+          </div>
+
+          <div id="profile-custom-section" style="margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:0.5px solid var(--border);margin-bottom:10px;">
+              <span style="font-size:12px;font-weight:600;color:var(--text-primary);">🏷️ Custom Tags</span>
+              <span style="font-size:10px;color:var(--text-hint);margin-left:auto;" id="profile-custom-count"></span>
+            </div>
+            <div id="profile-custom-tags" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;"></div>
+          </div>
+
+          <!-- No tags message -->
+          <div id="profile-no-tags" style="display:none;text-align:center;padding:2rem;color:var(--text-hint);font-size:12px;">
+            No tags assigned to this device. Use <b>Admin → Devices</b> to assign tags.
+          </div>
+
+        </div>
       </div>
 
     </div>
