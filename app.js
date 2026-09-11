@@ -798,7 +798,13 @@ function showSchedConfirm() {
     type      = getVal("sf-target-type");
     targetVal = getVal("sf-target");
     if (!type)      { setStatus("error", "Please select a target type."); return; }
-    if (!targetVal) { setStatus("error", "Please select a target."); return; }
+    if (type === "tags") {
+      if (!resolvedTagDevices.length) { setStatus("error", "Please click 'Find Matching Devices' first — no devices resolved."); return; }
+      targetVal = "tag_filter";
+      targetName = `🏷️ ${resolvedTagDevices.length} device${resolvedTagDevices.length !== 1 ? "s" : ""} (by tags)`;
+    } else {
+      if (!targetVal) { setStatus("error", "Please select a target."); return; }
+    }
     const isHybrid = document.getElementById("sf-switch-mode")?.value === "hybrid";
     if (isHybrid) {
       const { dlcRelays, basRelays } = getHybridConfig();
@@ -810,9 +816,11 @@ function showSchedConfirm() {
       const shed    = Object.entries(SHED_LEVEL_MAP).find(([,v])=>v.strategy===stratVal||stratVal.startsWith(v.strategy.split("|")[0]));
       actionSummary = shed ? shed[1].label : `Strategy ${stratVal}`;
     }
-    targetName    = type === "group"
-      ? (groupNames[parseInt(targetVal.replace("group_",""))] || targetVal)
-      : unitName(targetVal);
+    if (type !== "tags") {
+      targetName    = type === "group"
+        ? (groupNames[parseInt(targetVal.replace("group_",""))] || targetVal)
+        : unitName(targetVal);
+    }
 
   } else if (eventType === "bas_di") {
     const basType = getVal("sf-bas-target-type");
@@ -1267,22 +1275,38 @@ async function _executeCreateSchedule() {
 
   // ── Switch / Relay / BAS Mode ─────────────────────────────────────────────
   const type     = evType === "bas_di" ? getVal("sf-bas-target-type") : getVal("sf-target-type");
-  const targetVal= evType === "bas_di" ? getVal("sf-bas-target")      : getVal("sf-target");
+  const targetVal= evType === "bas_di" ? getVal("sf-bas-target")      : (type === "tags" ? "tag_filter" : getVal("sf-target"));
   const action   = getVal("sf-action") || "all_on";
   const mode     = getVal("sf-mode")   || (evType === "bas_di" ? "di" : "dlc");
   const stratVal = evType === "bas_di" ? (getVal("sf-bas-strategy")||getVal("sf-strategy")) : getVal("sf-strategy");
 
   if (!type)      { setStatus("error", "Please select a target type."); return; }
-  if (!targetVal) { setStatus("error", "Please select a target."); return; }
+  if (type === "tags" && !resolvedTagDevices.length) { setStatus("error", "No devices matched the tag filters. Click 'Find Matching Devices' first."); return; }
+  if (type !== "tags" && !targetVal) { setStatus("error", "Please select a target."); return; }
   if (!stratVal && evType !== "hybrid")  { setStatus("error", "Please select a shed level."); return; }
 
   const [stratNum, stratTimeout, stratCycle] = stratVal.split("|").map(Number);
   const reps = duration_minutes && stratCycle
     ? Math.max(1, Math.round(duration_minutes / stratCycle)) : 1;
 
-  let targetName = type === "group"
-    ? (groupNames[parseInt(targetVal.replace("group_",""))] || targetVal)
-    : unitName(targetVal);
+  // Build target name — include tag filter summary for tag-based events
+  let targetName;
+  if (type === "tags") {
+    // Collect the filter criteria for the audit trail
+    const filterRows = document.querySelectorAll("#sf-tag-filters .tag-filter-row");
+    const filterDesc = [...filterRows].map(row => {
+      const key = row.querySelector(".tf-key")?.value || "";
+      const val = row.querySelector(".tf-value")?.value || "";
+      const def = TAG_DEFINITIONS[key];
+      const label = def ? def.label : key;
+      return `${label}=${val}`;
+    }).filter(Boolean).join(", ");
+    targetName = `🏷️ ${resolvedTagDevices.length} devices (${filterDesc})`;
+  } else {
+    targetName = type === "group"
+      ? (groupNames[parseInt(targetVal.replace("group_",""))] || targetVal)
+      : unitName(targetVal);
+  }
 
   const schedule = {
     name, enabled: true,
@@ -1304,9 +1328,19 @@ async function _executeCreateSchedule() {
       const gNum = parseInt(targetVal.replace("group_",""));
       const members = DEVICES.filter(d => (groupAssignments[d.uid]||[]).includes(gNum));
       for (const device of members) await sendLCToDevice(device.uid, lcHex);
+    } else if (type === "tags") {
+      for (const device of resolvedTagDevices) await sendLCToDevice(device.uid, lcHex);
     } else {
       await sendLCToDevice(targetVal, lcHex);
     }
+
+    // Store tag filter criteria in the queue record for audit trail
+    const tagFilterMeta = type === "tags" ? JSON.stringify(
+      [...document.querySelectorAll("#sf-tag-filters .tag-filter-row")].map(row => ({
+        key: row.querySelector(".tf-key")?.value,
+        value: row.querySelector(".tf-value")?.value
+      })).filter(f => f.key && f.value)
+    ) : null;
 
     await supabasePost("schedule_queue", {
       schedule_id:null, name,
@@ -1538,10 +1572,13 @@ async function loadDeviceEvents() {
     if (Array.isArray(qRows) && qRows.length && rows.length) {
       const existingEvIds = new Set(rows.map(r => r.lc_event_id).filter(Boolean));
       const existingNames = new Set(rows.map(r => r.name).filter(Boolean));
-      const orphanQueue = qRows.filter(q =>
-        q.lc_event_id != null && !existingEvIds.has(q.lc_event_id) &&
-        q.name && !existingNames.has(q.name)
-      );
+      const orphanQueue = qRows.filter(q => {
+        // Include if: has an event_id not already shown, OR is a LoRa/tag/queue-only event not matched by name
+        const isLoRaOrTagEvent = q.event_type === "lora_broadcast" || q.target_type === "tags" || q.target_type === "lora_gateway";
+        if (isLoRaOrTagEvent && q.name && !existingNames.has(q.name)) return true;
+        return q.lc_event_id != null && !existingEvIds.has(q.lc_event_id) &&
+               q.name && !existingNames.has(q.name);
+      });
       if (orphanQueue.length) {
         const extras = orphanQueue.map(q => ({
           ...q,
@@ -11397,6 +11434,179 @@ async function loadDeviceProfile(deviceDbId) {
       `;
     }).join("");
   });
+}
+
+
+// ── Tag-Based Event Targeting ─────────────────────────────────────────────────
+
+let resolvedTagDevices = []; // devices matched by current tag filters
+
+function addTagFilterRow(preKey, preVal) {
+  const container = document.getElementById("sf-tag-filters");
+  if (!container) return;
+  const existing = container.querySelectorAll(".tag-filter-row").length;
+  if (existing >= 5) { alert("Maximum 5 filter conditions."); return; }
+
+  const row = document.createElement("div");
+  row.className = "tag-filter-row";
+
+  // Build tag key options from TAG_DEFINITIONS + tagRegistryCache
+  const allKeys = new Set([...Object.keys(TAG_DEFINITIONS), ...Object.keys(tagRegistryCache)]);
+  let keyOpts = '<option value="">— Tag Field —</option>';
+  const groups = { grid: "⚡ Grid", customer: "👤 Customer", market: "📊 Market", custom: "🏷️ Custom" };
+  Object.entries(groups).forEach(([cat, label]) => {
+    const keys = [...allKeys].filter(k => {
+      const def = TAG_DEFINITIONS[k];
+      if (def) return def.cat === cat;
+      return cat === "custom" && k.startsWith("custom_");
+    });
+    if (keys.length === 0) return;
+    keyOpts += `<optgroup label="${label}">`;
+    keys.forEach(k => {
+      const def = TAG_DEFINITIONS[k];
+      const lbl = def ? def.label : k.replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      keyOpts += `<option value="${k}" ${k === preKey ? "selected" : ""}>${lbl}</option>`;
+    });
+    keyOpts += `</optgroup>`;
+  });
+
+  row.innerHTML = `
+    <select class="tf-key" onchange="populateTagFilterValues(this)">${keyOpts}</select>
+    <select class="tf-value"><option value="">— Value —</option></select>
+    <button onclick="this.parentElement.remove();clearTagMatches();" title="Remove filter">✕</button>
+  `;
+  container.appendChild(row);
+
+  // If pre-populating, trigger value load
+  if (preKey) {
+    const keySel = row.querySelector(".tf-key");
+    populateTagFilterValues(keySel);
+    if (preVal) setTimeout(() => { row.querySelector(".tf-value").value = preVal; }, 100);
+  }
+}
+
+function populateTagFilterValues(keySel) {
+  const row = keySel.closest(".tag-filter-row");
+  const valSel = row.querySelector(".tf-value");
+  const key = keySel.value;
+  valSel.innerHTML = '<option value="">— Value —</option>';
+
+  if (!key) return;
+
+  // Get values from registry
+  const regValues = tagRegistryCache[key] || [];
+  if (regValues.length > 0) {
+    regValues.forEach(v => {
+      const opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = v;
+      valSel.appendChild(opt);
+    });
+  } else {
+    // No registry values — fetch distinct values from device_tags
+    supabaseGet(`device_tags?tag_key=eq.${encodeURIComponent(key)}&select=tag_value&order=tag_value`).then(rows => {
+      if (!Array.isArray(rows)) return;
+      const unique = [...new Set(rows.map(r => r.tag_value).filter(Boolean))];
+      unique.forEach(v => {
+        const opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = v;
+        valSel.appendChild(opt);
+      });
+    }).catch(() => {});
+  }
+  clearTagMatches();
+}
+
+function clearTagMatches() {
+  resolvedTagDevices = [];
+  const countEl = document.getElementById("sf-tag-match-count");
+  const listEl  = document.getElementById("sf-tag-match-list");
+  if (countEl) countEl.textContent = "";
+  if (listEl) { listEl.style.display = "none"; listEl.innerHTML = ""; }
+}
+
+async function resolveTagTargets() {
+  const container = document.getElementById("sf-tag-filters");
+  const rows = container?.querySelectorAll(".tag-filter-row") || [];
+  const countEl = document.getElementById("sf-tag-match-count");
+  const listEl  = document.getElementById("sf-tag-match-list");
+
+  // Collect filters
+  const filters = [];
+  rows.forEach(row => {
+    const key = row.querySelector(".tf-key")?.value;
+    const val = row.querySelector(".tf-value")?.value;
+    if (key && val) filters.push({ key, val });
+  });
+
+  if (filters.length === 0) {
+    if (countEl) countEl.textContent = "⚠️ Add at least one filter.";
+    return;
+  }
+
+  if (countEl) countEl.textContent = "Searching…";
+
+  try {
+    // For AND logic: find devices that have ALL filter conditions
+    // Query each filter separately, then intersect the device_id sets
+    let matchedDeviceIds = null;
+
+    for (const f of filters) {
+      const rows = await supabaseGet(`device_tags?tag_key=eq.${encodeURIComponent(f.key)}&tag_value=eq.${encodeURIComponent(f.val)}&select=device_id`);
+      const ids = new Set((rows || []).map(r => r.device_id));
+      if (matchedDeviceIds === null) {
+        matchedDeviceIds = ids;
+      } else {
+        // Intersect
+        matchedDeviceIds = new Set([...matchedDeviceIds].filter(id => ids.has(id)));
+      }
+    }
+
+    if (!matchedDeviceIds || matchedDeviceIds.size === 0) {
+      resolvedTagDevices = [];
+      if (countEl) countEl.textContent = "⚠️ No devices match all filters.";
+      if (listEl) listEl.style.display = "none";
+      return;
+    }
+
+    // Resolve device details
+    const deviceIdArr = [...matchedDeviceIds];
+    resolvedTagDevices = DEVICES.filter(d => deviceIdArr.includes(d.dbId));
+
+    // Also fetch directly from DB for devices not in DEVICES array
+    if (resolvedTagDevices.length < deviceIdArr.length) {
+      try {
+        const dbDevices = await supabaseGet(`devices?id=in.(${deviceIdArr.join(",")})&select=id,uid,name,type`);
+        if (Array.isArray(dbDevices)) {
+          const existingIds = new Set(resolvedTagDevices.map(d => d.dbId));
+          dbDevices.forEach(d => {
+            if (!existingIds.has(d.id)) {
+              resolvedTagDevices.push({ dbId: d.id, uid: d.uid, name: d.name, type: d.type || "relay" });
+            }
+          });
+        }
+      } catch(e) {}
+    }
+
+    if (countEl) countEl.textContent = `✅ ${resolvedTagDevices.length} device${resolvedTagDevices.length !== 1 ? "s" : ""} matched`;
+    if (countEl) countEl.style.color = "var(--green-dark)";
+
+    // Show matched device list
+    if (listEl) {
+      listEl.style.display = "block";
+      listEl.innerHTML = resolvedTagDevices.map(d => `
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:0.5px solid var(--border);">
+          <span style="font-size:12px;font-weight:500;color:var(--text-primary);">${escapeHtml(d.name || d.uid)}</span>
+          <span style="font-size:10px;color:var(--text-hint);">${escapeHtml(d.uid)}</span>
+          <span style="font-size:10px;color:var(--text-hint);margin-left:auto;">${escapeHtml(d.type || "relay")}</span>
+        </div>
+      `).join("");
+    }
+  } catch(e) {
+    if (countEl) countEl.textContent = `Error: ${e.message}`;
+    console.error("resolveTagTargets:", e);
+  }
 }
 
 
@@ -24903,6 +25113,25 @@ function onTargetTypeChange(context) {
   // Default: populate the switch panel target selector
   const type = document.getElementById("sf-target-type")?.value;
   if (!type) return;
+
+  // Show/hide tag filter panel
+  const tagPanel = document.getElementById("sf-tag-filter-panel");
+  const targetSel = document.getElementById("sf-target");
+  if (type === "tags") {
+    if (tagPanel) tagPanel.style.display = "block";
+    if (targetSel) targetSel.closest("div").style.display = "none";
+    // Ensure registry is loaded for tag filter dropdowns
+    loadTagRegistry().catch(() => {});
+    // Add initial filter row if empty
+    const filtersContainer = document.getElementById("sf-tag-filters");
+    if (filtersContainer && filtersContainer.children.length === 0) addTagFilterRow();
+  } else {
+    if (tagPanel) tagPanel.style.display = "none";
+    if (targetSel) targetSel.closest("div").style.display = "";
+    resolvedTagDevices = [];
+    clearTagMatches();
+  }
+
   populateTargetSelector();
   updateSchedulerTimezone();
 }
