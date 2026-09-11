@@ -10823,14 +10823,17 @@ function populateRegistryCustomFields() {
   const optgroup = document.getElementById("registry-custom-optgroup");
   if (!optgroup) return;
   optgroup.innerHTML = "";
-  Object.keys(tagRegistryCache).forEach(key => {
-    if (key.startsWith("custom_") && !TAG_DEFINITIONS[key]) {
-      const label = key.replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-      const opt = document.createElement("option");
-      opt.value = key;
-      opt.textContent = label;
-      optgroup.appendChild(opt);
-    }
+  // Collect custom keys from both the registry cache AND TAG_DEFINITIONS
+  const customKeys = new Set();
+  Object.keys(tagRegistryCache).forEach(k => { if (k.startsWith("custom_")) customKeys.add(k); });
+  Object.keys(TAG_DEFINITIONS).forEach(k => { if (TAG_DEFINITIONS[k].cat === "custom") customKeys.add(k); });
+  customKeys.forEach(key => {
+    const def = TAG_DEFINITIONS[key];
+    const label = def ? def.label : key.replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    const opt = document.createElement("option");
+    opt.value = key;
+    opt.textContent = label;
+    optgroup.appendChild(opt);
   });
 }
 
