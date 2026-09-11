@@ -16,7 +16,7 @@ async function loadDevicesFromDB() {
   try {
     const rows = await supabaseGet("devices?enabled=eq.true&order=id.asc&select=*");
     if (Array.isArray(rows) && rows.length > 0) {
-      DEVICES = rows.map(r => ({ id: r.device_id, uid: r.uid, name: r.name, type: r.type||"relay", location: r.location||"", sensing_capable: r.sensing_capable||false }));
+      DEVICES = rows.map(r => ({ id: r.device_id, dbId: r.id, uid: r.uid, name: r.name, type: r.type||"relay", location: r.location||"", sensing_capable: r.sensing_capable||false }));
     } else {
       DEVICES = [
         { id: "device1", uid: "dev:868032061596023", name: "Unit 6023", type:"relay" },
@@ -318,6 +318,7 @@ function runTabInit(name) {
   if (name === "admin-users")      { updateAdminHeader(); loadUsersTable(); }
   if (name === "admin-devices") { loadDeviceManagement(); loadTagRegistry(); }
   if (name === "monitor-health") { initFleetHealth(); }
+  if (name === "monitor-profile") { initDeviceProfile(); }
   if (name === "admin-monitor") { initMonitoring(); }
   if (name === "admin-energy")    { initEnergyMonitor(); }
   if (name === "openadr")         { initOpenADREvents(); }
@@ -11278,6 +11279,124 @@ function addCustomTagRow() {
   }
   updateTagCounts();
   populateRegistryCustomFields();
+}
+
+
+// ── Device Profile (read-only operator view) ────────────────────────────────
+
+function initDeviceProfile() {
+  const sel = document.getElementById("profile-device-selector");
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— choose a device —</option>';
+
+  DEVICES.forEach(d => {
+    // Find the db id from the admin device list or from the device object
+    const opt = document.createElement("option");
+    opt.value = d.dbId || d.id || "";
+    opt.textContent = `${d.name || d.uid}  (${d.uid})`;
+    sel.appendChild(opt);
+  });
+
+  // Also try to populate from admin device table if DEVICES doesn't have dbId
+  try {
+    const rows = document.querySelectorAll("#device-mgmt-list tbody tr");
+    if (rows.length > 0 && sel.options.length <= 1) {
+      rows.forEach(tr => {
+        const nameCell = tr.children[0]?.textContent?.trim();
+        const uidCell  = tr.children[1]?.textContent?.trim();
+        const removeBtn = tr.querySelector("button[onclick*='removeDevice']");
+        const match = removeBtn?.getAttribute("onclick")?.match(/removeDevice\((\d+)/);
+        const dbId = match ? match[1] : "";
+        if (dbId) {
+          const opt = document.createElement("option");
+          opt.value = dbId;
+          opt.textContent = `${nameCell}  (${uidCell})`;
+          sel.appendChild(opt);
+        }
+      });
+    }
+  } catch(e) {}
+
+  if (current && sel.querySelector(`option[value="${current}"]`)) sel.value = current;
+}
+
+async function loadDeviceProfile(deviceDbId) {
+  const display = document.getElementById("device-profile-display");
+  if (!deviceDbId) { if (display) display.style.display = "none"; return; }
+  if (display) display.style.display = "block";
+
+  // Fetch device info
+  const device = DEVICES.find(d => String(d.dbId || d.id) === String(deviceDbId));
+  const header = document.getElementById("profile-device-header");
+  if (header && device) {
+    header.innerHTML = `
+      <div style="font-size:14px;font-weight:600;color:var(--text-primary);">${escapeHtml(device.name || device.uid)}</div>
+      <div style="font-size:11px;color:var(--text-hint);margin-top:2px;">UID: ${escapeHtml(device.uid)} &nbsp;·&nbsp; Type: ${escapeHtml(device.type || "—")}</div>
+    `;
+  } else if (header) {
+    // Fallback: fetch from DB
+    try {
+      const devRows = await supabaseGet(`devices?id=eq.${deviceDbId}`);
+      if (Array.isArray(devRows) && devRows[0]) {
+        header.innerHTML = `
+          <div style="font-size:14px;font-weight:600;color:var(--text-primary);">${escapeHtml(devRows[0].name || devRows[0].uid)}</div>
+          <div style="font-size:11px;color:var(--text-hint);margin-top:2px;">UID: ${escapeHtml(devRows[0].uid)} &nbsp;·&nbsp; Type: ${escapeHtml(devRows[0].type || "—")}</div>
+        `;
+      }
+    } catch(e) {}
+  }
+
+  // Fetch tags
+  let tags = [];
+  try {
+    tags = await supabaseGet(`device_tags?device_id=eq.${deviceDbId}&order=tag_category,tag_key`);
+    if (!Array.isArray(tags)) tags = [];
+  } catch(e) { console.warn("loadDeviceProfile:", e); }
+
+  const noTags = document.getElementById("profile-no-tags");
+
+  if (tags.length === 0) {
+    if (noTags) noTags.style.display = "block";
+    ["grid","customer","market","custom"].forEach(s => {
+      document.getElementById(`profile-${s}-section`).style.display = "none";
+    });
+    return;
+  }
+  if (noTags) noTags.style.display = "none";
+
+  // Group tags by category
+  const grouped = { grid: [], customer: [], market: [], custom: [] };
+  tags.forEach(t => {
+    const cat = grouped[t.tag_category] ? t.tag_category : "custom";
+    grouped[cat].push(t);
+  });
+
+  // Render each section
+  ["grid", "customer", "market", "custom"].forEach(cat => {
+    const section = document.getElementById(`profile-${cat}-section`);
+    const container = document.getElementById(`profile-${cat}-tags`);
+    const countEl = document.getElementById(`profile-${cat}-count`);
+    const items = grouped[cat] || [];
+
+    if (items.length === 0) {
+      section.style.display = "none";
+      return;
+    }
+    section.style.display = "block";
+    if (countEl) countEl.textContent = `${items.length} tag${items.length !== 1 ? "s" : ""}`;
+
+    container.innerHTML = items.map(t => {
+      const def = TAG_DEFINITIONS[t.tag_key];
+      const label = t.tag_label || (def ? def.label : t.tag_key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()));
+      return `
+        <div class="profile-tag-item">
+          <span class="profile-tag-label">${escapeHtml(label)}</span>
+          <span class="profile-tag-value">${escapeHtml(t.tag_value)}</span>
+        </div>
+      `;
+    }).join("");
+  });
 }
 
 
