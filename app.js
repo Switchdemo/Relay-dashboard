@@ -2189,7 +2189,17 @@ const LORA_CMD_TYPES = {
   0x08:"Set Override Timer", 0x09:"Reset Time Since Last Current",
   0x0A:"Time to Record Data", 0x0B:"Time to Report Offset",
   0x0C:"Data Request", 0x0D:"Voltage Alert Config",
-  0x10:"Bubble Up Report", 0x11:"Touch Pad Sense", 0x12:"Min/Max Voltage Alert"
+  0x10:"Bubble Up Report", 0x11:"Touch Pad Sense", 0x12:"Min/Max Voltage Alert",
+  0x21:"Configuration Command", 0x31:"Log Request",
+  0x41:"Bubble Up / Status Request (LoRa)", 0x51:"LC Queue Request (LoRa)",
+  0x1A:"Assignment Command"
+};
+const LORA_RESPONSE_MSG_TYPES = {
+  0x00:"LC Event Response", 0x10:"Bubble Up",
+  0x13:"Log Report 1-50", 0x14:"Log Report 51-100",
+  0x21:"Configuration Response",
+  0x51:"LC Queue Response (LoRa)",
+  0x1A:"Assignment Response"
 };
 const LORA_DATA_REQ_TYPES = {
   0x00:"Address",0x01:"Serial Number",0x02:"CLP Timeout",0x03:"Time of Day",
@@ -2325,10 +2335,17 @@ function runLoraParse(cid){
   re.innerHTML=parsed.map(row=>`<div class="hex-row"><span class="hex-label">${row.label}</span><span class="hex-value">${row.value}</span></div>`).join("");
 }
 
-// ── Compact Bubble Up Parser (variable-length, 34+ chars) ───────────────────
-// Variable-length bubble up per EnTek spec — shorter variant without power
-// measurement, TouchPad, SW/SQ, or DeviceID. May use two's complement
-// checksum instead of XOR (newer firmware / Blues Notecard variant).
+// ── LoRa Bubble Up Parser — EnTek LoRa Protocol Rev 1.0 ─────────────────────
+// Standard LoRa bubble up for TC260/TC250/MC140 LoRa-based devices (34 chars).
+// Fixed format: Config(2) + R1-R4(4) + PowerUp(1) + Override(2) + Serial(3) + DeviceID(1)
+// Also handles variable-length cellular variants.
+// Supports both XOR and two's complement checksums.
+// New LoRa MsgTypes: 0x41 = Bubble Up/Status Request, 0x51 = LC Queue Request/Response
+
+const LORA_DEVICE_IDS = {
+  0x01: "CN250", 0x02: "CN260", 0x03: "CN340", 0x04: "CN140",
+  0x05: "TC260 (LoRa)", 0x06: "TC250 (LoRa)", 0x07: "MC140 (LoRa)"
+};
 
 function parseCompactBubbleUpHex(hex) {
   hex = hex.trim().toUpperCase().replace(/\s/g, "");
@@ -2342,9 +2359,7 @@ function parseCompactBubbleUpHex(hex) {
   const length  = b(1);
   const msgType = b(2);
 
-  // Must be a response (0x51) with Bubble Up msg type (0x10)
   if (header !== 0x51 || msgType !== 0x10) return null;
-  // Length byte should match: totalBytes - 2 = length
   if (length !== totalBytes - 2) return null;
 
   // Verify checksum — try both XOR and two's complement sum
@@ -2354,25 +2369,56 @@ function parseCompactBubbleUpHex(hex) {
   const csXorOk = xor === lastByte;
   const csSumOk = ((256 - sum) & 0xFF) === lastByte;
   const csOk = csXorOk || csSumOk;
-  const csMethod = csXorOk ? "XOR" : csSumOk ? "2's complement" : "Unknown";
+  const csMethod = csXorOk ? "XOR" : csSumOk ? "2\'s complement" : "Unknown";
 
   const config = word(3, 4);
-
   const relayStatus = (r) => {
     const active = (r >> 3) & 1;
     const load   = r & 1;
     return active ? "ON (Active)" : (load ? "OFF (Load present)" : "OFF");
   };
 
+  // ── 34-char LoRa Bubble Up (17 bytes) — per EnTek LoRa Protocol Rev 1.0
+  // Fixed layout: Header(1)+Len(1)+MsgType(1)+Config(2)+R1-R4(4)+PowerUp(1)+Override(2)+Serial(3)+DevID(1)+CS(1)
+  if (totalBytes === 17) {
+    const overrideTimer = word(10, 11);
+    const serial = (b(12) << 16) | (b(13) << 8) | b(14);
+    const devId = b(15);
+    const devName = LORA_DEVICE_IDS[devId] || "Unknown (0x" + devId.toString(16).toUpperCase() + ")";
+    const isLoRa = devId >= 0x05 && devId <= 0x07;
+
+    return {
+      type:           "lora_bubble_up",
+      header:         "0x51 (Response)",
+      length:         length + " (" + totalBytes + " bytes total, " + hex.length + " chars)",
+      msgType:        "0x10 (Bubble Up — " + (isLoRa ? "LoRa" : "compact") + ")",
+      config:         "0x" + config.toString(16).toUpperCase() + " (" + config.toString(2).padStart(16, "0") + ")",
+      relay1:         relayStatus(b(5)),
+      relay2:         relayStatus(b(6)),
+      relay3:         relayStatus(b(7)),
+      relay4:         relayStatus(b(8)),
+      powerUp:        b(9) === 0x77 ? "Power Up (0x77)" : b(9) === 0x55 ? "Power Down (0x55)" : "Normal (0x" + b(9).toString(16).toUpperCase().padStart(2, "0") + ")",
+      overrideTimer:  overrideTimer + " minutes" + (overrideTimer === 0xFFFF ? " (permanent)" : overrideTimer === 0 ? " (none)" : ""),
+      serialNumber:   serial + " (0x" + serial.toString(16).toUpperCase() + ")",
+      deviceModel:    "0x" + devId.toString(16).toUpperCase().padStart(2, "0") + " — " + devName,
+      checksumMethod: csMethod,
+      checksum:       csOk
+        ? "0x" + lastByte.toString(16).toUpperCase() + " ✅ Valid (" + csMethod + ")"
+        : "0x" + lastByte.toString(16).toUpperCase() + " ❌ Invalid",
+    };
+  }
+
+  // ── Variable-length Bubble Up (other non-standard lengths)
+  // Config-bit-driven parsing for cellular devices or future variants
   const result = {
-    type:           "compact_bubble_up",
-    header:         `0x51 (Response)`,
-    length:         `${length} (${totalBytes} bytes total, ${hex.length} chars)`,
-    msgType:        `0x10 (Bubble Up — compact)`,
-    config:         `0x${config.toString(16).toUpperCase()} (${config.toString(2).padStart(16, "0")})`,
+    type:    "compact_bubble_up",
+    header:  "0x51 (Response)",
+    length:  length + " (" + totalBytes + " bytes total, " + hex.length + " chars)",
+    msgType: "0x10 (Bubble Up — " + totalBytes + " byte variant)",
+    config:  "0x" + config.toString(16).toUpperCase() + " (" + config.toString(2).padStart(16, "0") + ")",
   };
 
-  let ptr = 5; // after header(0), length(1), msgType(2), config(3,4)
+  let ptr = 5;
 
   // Config bit 0: Relay Status (4 bytes)
   if ((config & 0x01) && ptr + 3 < totalBytes) {
@@ -2386,53 +2432,46 @@ function parseCompactBubbleUpHex(hex) {
   // Config bit 1: Power Up Flag (1 byte)
   if ((config & 0x02) && ptr < totalBytes - 1) {
     const pu = b(ptr);
-    result.powerUp = pu === 0x77 ? "Power Up (0x77)" : pu === 0x55 ? "Power Down (0x55)" : `Normal (0x${pu.toString(16).toUpperCase().padStart(2,"0")})`;
+    result.powerUp = pu === 0x77 ? "Power Up (0x77)" : pu === 0x55 ? "Power Down (0x55)" : "Normal (0x" + pu.toString(16).toUpperCase().padStart(2, "0") + ")";
     ptr++;
   }
 
-  // Config bit 5: Customer Comfort (1 byte)
+  // Config bit 5: Customer Comfort (cellular only)
   if ((config & 0x20) && ptr < totalBytes - 1) {
-    const cc = b(ptr) & 0x0F;
-    result.custComfort = cc === 0x0A ? "ON" : "OFF";
+    result.custComfort = (b(ptr) & 0x0F) === 0x0A ? "ON" : "OFF";
     ptr++;
   }
 
-  // Config bit 3: Power Measurement (8 bytes: V(2)+I(2)+PF(2)+W(2))
+  // Config bit 3: Power Measurement (8 bytes, cellular only)
   if ((config & 0x08) && ptr + 7 < totalBytes) {
-    result.voltage     = `${word(ptr, ptr + 1) / 10} V`;
-    result.current     = `${word(ptr + 2, ptr + 3) / 10} A`;
-    result.powerFactor = `${(word(ptr + 4, ptr + 5) / 1000).toFixed(3)}`;
-    result.watts       = `${word(ptr + 6, ptr + 7)} W`;
+    result.voltage     = (word(ptr, ptr + 1) / 10) + " V";
+    result.current     = (word(ptr + 2, ptr + 3) / 10) + " A";
+    result.powerFactor = (word(ptr + 4, ptr + 5) / 1000).toFixed(3);
+    result.watts       = word(ptr + 6, ptr + 7) + " W";
     ptr += 8;
   }
 
-  // Config bit 4: Touch Pad (1 byte)
+  // Config bit 4: Touch Pad (cellular only)
   if ((config & 0x10) && ptr < totalBytes - 1) {
     const tp = b(ptr) & 0x03;
-    result.touchPad = tp === 1 ? "Override" : tp === 2 ? "Override Canceled" : `${tp}`;
+    result.touchPad = tp === 1 ? "Override" : tp === 2 ? "Override Canceled" : "" + tp;
     ptr++;
   }
 
-  // Remaining bytes before checksum — identify Override, Serial, DeviceID
+  // Remaining tail: Override(2) + Serial(3) + DeviceID(1)
   const remaining = totalBytes - 1 - ptr;
-
-  if (remaining >= 10) {
-    result.swValue       = word(ptr, ptr + 1); ptr += 2;
-    result.sqValue       = word(ptr, ptr + 1); ptr += 2;
-    result.overrideTimer = `${word(ptr, ptr + 1)} min`; ptr += 2;
-    result.serialNumber  = (b(ptr) << 16) | (b(ptr + 1) << 8) | b(ptr + 2); ptr += 3;
-    result.deviceId      = `0x${b(ptr).toString(16).toUpperCase()} (${b(ptr)})`; ptr++;
-  } else if (remaining >= 6) {
-    result.overrideTimer = `${word(ptr, ptr + 1)} min`; ptr += 2;
-    result.serialNumber  = (b(ptr) << 16) | (b(ptr + 1) << 8) | b(ptr + 2); ptr += 3;
-    result.deviceId      = `0x${b(ptr).toString(16).toUpperCase()} (${b(ptr)})`; ptr++;
+  if (remaining >= 6) {
+    result.overrideTimer = word(ptr, ptr + 1) + " minutes"; ptr += 2;
+    result.serialNumber  = "" + ((b(ptr) << 16) | (b(ptr+1) << 8) | b(ptr+2)); ptr += 3;
+    const did = b(ptr);
+    result.deviceModel   = "0x" + did.toString(16).toUpperCase().padStart(2,"0") + " — " + (LORA_DEVICE_IDS[did] || "Unknown"); ptr++;
   } else if (remaining >= 5) {
-    result.overrideTimer = `${word(ptr, ptr + 1)} min`; ptr += 2;
-    result.serialNumber  = (b(ptr) << 16) | (b(ptr + 1) << 8) | b(ptr + 2); ptr += 3;
+    result.overrideTimer = word(ptr, ptr + 1) + " minutes"; ptr += 2;
+    result.serialNumber  = "" + ((b(ptr) << 16) | (b(ptr+1) << 8) | b(ptr+2)); ptr += 3;
   } else if (remaining >= 3) {
-    result.serialNumber  = (b(ptr) << 16) | (b(ptr + 1) << 8) | b(ptr + 2); ptr += 3;
+    result.serialNumber  = "" + ((b(ptr) << 16) | (b(ptr+1) << 8) | b(ptr+2)); ptr += 3;
   } else if (remaining >= 2) {
-    result.overrideTimer = `${word(ptr, ptr + 1)} min`; ptr += 2;
+    result.overrideTimer = word(ptr, ptr + 1) + " minutes"; ptr += 2;
   }
 
   if (ptr < totalBytes - 1) {
@@ -2443,11 +2482,12 @@ function parseCompactBubbleUpHex(hex) {
 
   result.checksumMethod = csMethod;
   result.checksum = csOk
-    ? `0x${lastByte.toString(16).toUpperCase()} ✅ Valid (${csMethod})`
-    : `0x${lastByte.toString(16).toUpperCase()} ❌ Invalid`;
+    ? "0x" + lastByte.toString(16).toUpperCase() + " ✅ Valid (" + csMethod + ")"
+    : "0x" + lastByte.toString(16).toUpperCase() + " ❌ Invalid";
 
   return result;
 }
+
 
 // ── LC Response Parser ────────────────────────────────────────────────────────
 
