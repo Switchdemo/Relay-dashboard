@@ -11548,7 +11548,7 @@ async function resolveTagTargets() {
     return;
   }
 
-  if (countEl) countEl.textContent = "Searching…";
+  if (countEl) { countEl.textContent = "Searching…"; countEl.style.color = "var(--text-hint)"; }
 
   try {
     // For AND logic: find devices that have ALL filter conditions
@@ -11556,28 +11556,32 @@ async function resolveTagTargets() {
     let matchedDeviceIds = null;
 
     for (const f of filters) {
-      const rows = await supabaseGet(`device_tags?tag_key=eq.${encodeURIComponent(f.key)}&tag_value=eq.${encodeURIComponent(f.val)}&select=device_id`);
-      const ids = new Set((rows || []).map(r => r.device_id));
+      const query = `device_tags?tag_key=eq.${encodeURIComponent(f.key)}&tag_value=eq.${encodeURIComponent(f.val)}&select=device_id`;
+      console.log("Tag filter query:", query);
+      const tagRows = await supabaseGet(query);
+      console.log("Tag filter result:", tagRows);
+      const ids = new Set((tagRows || []).map(r => r.device_id));
       if (matchedDeviceIds === null) {
         matchedDeviceIds = ids;
       } else {
-        // Intersect
         matchedDeviceIds = new Set([...matchedDeviceIds].filter(id => ids.has(id)));
       }
     }
 
     if (!matchedDeviceIds || matchedDeviceIds.size === 0) {
       resolvedTagDevices = [];
-      if (countEl) countEl.textContent = "⚠️ No devices match all filters.";
+      if (countEl) { countEl.textContent = "⚠️ No devices match all filters."; countEl.style.color = "var(--amber)"; }
       if (listEl) listEl.style.display = "none";
       return;
     }
 
-    // Resolve device details — always fetch from DB to ensure we have correct UIDs
+    // Resolve device details from DB — no enabled filter since not all tables have it
     const deviceIdArr = [...matchedDeviceIds];
+    console.log("Matched device IDs:", deviceIdArr);
     try {
-      const dbDevices = await supabaseGet(`devices?id=in.(${deviceIdArr.join(",")})&enabled=eq.true&select=id,uid,name,type,device_id`);
-      if (Array.isArray(dbDevices)) {
+      const dbDevices = await supabaseGet(`devices?id=in.(${deviceIdArr.join(",")})&select=id,uid,name,type,device_id`);
+      console.log("Resolved devices:", dbDevices);
+      if (Array.isArray(dbDevices) && dbDevices.length > 0) {
         resolvedTagDevices = dbDevices.map(d => ({
           dbId: d.id,
           uid: d.uid,
@@ -11592,8 +11596,14 @@ async function resolveTagTargets() {
       resolvedTagDevices = [];
     }
 
-    if (countEl) countEl.textContent = `✅ ${resolvedTagDevices.length} device${resolvedTagDevices.length !== 1 ? "s" : ""} matched`;
-    if (countEl) countEl.style.color = "var(--green-dark)";
+    if (resolvedTagDevices.length === 0 && deviceIdArr.length > 0) {
+      // device_tags matched but devices table didn't — show diagnostic
+      if (countEl) { countEl.textContent = `⚠️ ${deviceIdArr.length} tag match(es) but devices not found in devices table (IDs: ${deviceIdArr.join(",")})`; countEl.style.color = "var(--amber)"; }
+      if (listEl) listEl.style.display = "none";
+      return;
+    }
+
+    if (countEl) { countEl.textContent = `✅ ${resolvedTagDevices.length} device${resolvedTagDevices.length !== 1 ? "s" : ""} matched`; countEl.style.color = "var(--green-dark)"; }
 
     // Show matched device list
     if (listEl) {
@@ -11607,7 +11617,7 @@ async function resolveTagTargets() {
       `).join("");
     }
   } catch(e) {
-    if (countEl) countEl.textContent = `Error: ${e.message}`;
+    if (countEl) { countEl.textContent = `Error: ${e.message}`; countEl.style.color = "var(--red)"; }
     console.error("resolveTagTargets:", e);
   }
 }
