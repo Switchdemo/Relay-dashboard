@@ -3462,7 +3462,7 @@ async function refreshParticipationEvents() {
   const rangeVal = document.getElementById("participation-date-range")?.value;
   const days = rangeVal !== "" && rangeVal != null ? parseInt(rangeVal) : null;
   const since = days ? new Date(Date.now() - days * 86400000).toISOString() : null;
-  let q = "schedule_queue?order=fire_at.desc&limit=200&select=name,fire_at,status,target_type,target_id";
+  let q = "schedule_queue?order=fire_at.desc&limit=200&select=name,fire_at,status,target_type,target_id,target_name";
   if (since) q += `&fire_at=gte.${since}`;
   try {
     const rows = await supabaseGet(q);
@@ -3472,7 +3472,8 @@ async function refreshParticipationEvents() {
       rows.filter(r => r.name && r.name !== "—").forEach(r => {
         const opt = document.createElement("option");
         opt.value = r.name;
-        opt.textContent = `${r.name} (${new Date(r.fire_at).toLocaleDateString()})`;
+        const tagInfo = r.target_type === "tags" && r.target_name ? ` ${r.target_name}` : "";
+        opt.textContent = `${r.name} (${new Date(r.fire_at).toLocaleDateString()})${tagInfo}`;
         if (r.name === current) opt.selected = true;
         sel.appendChild(opt);
       });
@@ -3506,6 +3507,32 @@ async function loadParticipation() {
     } else if (targetType === "group") {
       const groupNum = parseInt((targetId || "").replace("group_", ""));
       targetDevices = DEVICES.filter(d => (groupAssignments[d.uid] || []).includes(groupNum));
+    } else if (targetType === "tags") {
+      // Re-resolve tag filters from the target_name which contains the filter description
+      // Parse "🏷️ N devices (Key1=Val1, Key2=Val2)" to extract filters
+      const filterMatch = (event.target_name || "").match(/\(([^)]+)\)/);
+      if (filterMatch) {
+        const filterPairs = filterMatch[1].split(",").map(s => s.trim().split("=")).filter(p => p.length === 2);
+        let matchedIds = null;
+        for (const [label, val] of filterPairs) {
+          // Find the tag_key from the label
+          const tagKey = Object.entries(TAG_DEFINITIONS).find(([, def]) => def.label === label)?.[0] || label.toLowerCase().replace(/[^a-z0-9]/g, "_");
+          try {
+            const tagRows = await supabaseGet(`device_tags?tag_key=eq.${encodeURIComponent(tagKey)}&tag_value=eq.${encodeURIComponent(val)}&select=device_id`);
+            const ids = new Set((tagRows || []).map(r => r.device_id));
+            if (matchedIds === null) matchedIds = ids;
+            else matchedIds = new Set([...matchedIds].filter(id => ids.has(id)));
+          } catch(e) { console.warn("tag resolve in stats:", e); }
+        }
+        if (matchedIds && matchedIds.size > 0) {
+          try {
+            const dbDevs = await supabaseGet(`devices?id=in.(${[...matchedIds].join(",")})&select=id,uid,name`);
+            if (Array.isArray(dbDevs)) {
+              targetDevices = dbDevs.map(d => ({ dbId: d.id, uid: d.uid, name: d.name || d.uid, type: "relay" }));
+            }
+          } catch(e) {}
+        }
+      }
     } else {
       const d = DEVICES.find(d => d.uid === targetId);
       if (d) targetDevices = [d];
