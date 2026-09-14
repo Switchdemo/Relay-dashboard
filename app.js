@@ -2210,12 +2210,34 @@ function parseLoraUniversal(hex) {
   hex = hex.trim().toUpperCase().replace(/\s/g,"");
   if (hex.length < 8) return {error:`Need >= 8 hex chars, got ${hex.length}`};
   if (hex.length % 2) return {error:"Odd number of hex chars"};
+
+  // Auto-detect compact bubble up (non-standard lengths with 0x51 header + 0x10 msgType)
+  if (hex.length !== 62 && hex.length !== 20 && hex.length >= 20) {
+    const h = parseInt(hex.slice(0, 2), 16);
+    const mt = parseInt(hex.slice(4, 6), 16);
+    if (h === 0x51 && mt === 0x10) {
+      const compact = parseCompactBubbleUpHex(hex);
+      if (compact) {
+        // Convert object to array format for uniform rendering
+        return Object.entries(compact)
+          .filter(([k]) => k !== "type")
+          .map(([k, v]) => ({
+            label: k.charAt(0).toUpperCase() + k.slice(1).replace(/([A-Z])/g, " $1"),
+            value: String(v)
+          }));
+      }
+    }
+  }
+
   const bytes=[]; for(let i=0;i<hex.length;i+=2) bytes.push(parseInt(hex.slice(i,i+2),16));
   const b=i=>bytes[i]||0, w=i=>((bytes[i]||0)<<8)|(bytes[i+1]||0);
   const header=b(0),length=b(1),isCmd=header===0xA1,isResp=header===0x51;
   if(!isCmd&&!isResp) return{error:`Header 0x${header.toString(16).toUpperCase()}: expected 0xA1 or 0x51`};
-  let xor=0; for(let i=0;i<bytes.length-1;i++) xor^=bytes[i];
-  const csOk=xor===bytes[bytes.length-1];
+  let xor=0,csSum=0; for(let i=0;i<bytes.length-1;i++){xor^=bytes[i];csSum=(csSum+bytes[i])&0xFF;}
+  const csXorOk=xor===bytes[bytes.length-1];
+  const cs2sOk=((256-csSum)&0xFF)===bytes[bytes.length-1];
+  const csOk=csXorOk||cs2sOk;
+  const csAlgo=csXorOk?"XOR":cs2sOk?"2's complement":"";
   const r=[];
   r.push({label:"Header",value:`0x${header.toString(16).toUpperCase()} — ${isCmd?'📤 Command':'📥 Response'}`});
   r.push({label:"Length",value:`${length} bytes follow (${bytes.length} total)`});
@@ -2283,7 +2305,7 @@ function parseLoraUniversal(hex) {
     else if(rt===0x00){for(let i=0;i<5;i++)r.push({label:`Address ${i+1}`,value:`${b(bs+i)}`});}
     else{const rem=bytes.slice(bs,bytes.length-1);if(rem.length)r.push({label:"Body",value:rem.map(b=>b.toString(16).toUpperCase().padStart(2,'0')).join(' ')});}
   }
-  r.push({label:"Checksum",value:`0x${bytes[bytes.length-1].toString(16).toUpperCase().padStart(2,'0')} ${csOk?'✅ Valid':'❌ INVALID (exp 0x'+xor.toString(16).toUpperCase().padStart(2,'0')+')'}`});
+  r.push({label:"Checksum",value:`0x${bytes[bytes.length-1].toString(16).toUpperCase().padStart(2,'0')} ${csOk?'✅ Valid'+(csAlgo?' ('+csAlgo+')':''):'❌ INVALID (XOR exp 0x'+xor.toString(16).toUpperCase().padStart(2,'0')+')'}`});
   return r;
 }
 
@@ -2301,6 +2323,130 @@ function runLoraParse(cid){
   const parsed=parseLoraUniversal(hex);
   if(parsed.error){re.innerHTML=`<div class="hex-error">${parsed.error}</div>`;return;}
   re.innerHTML=parsed.map(row=>`<div class="hex-row"><span class="hex-label">${row.label}</span><span class="hex-value">${row.value}</span></div>`).join("");
+}
+
+// ── Compact Bubble Up Parser (variable-length, 34+ chars) ───────────────────
+// Variable-length bubble up per EnTek spec — shorter variant without power
+// measurement, TouchPad, SW/SQ, or DeviceID. May use two's complement
+// checksum instead of XOR (newer firmware / Blues Notecard variant).
+
+function parseCompactBubbleUpHex(hex) {
+  hex = hex.trim().toUpperCase().replace(/\s/g, "");
+  const totalBytes = hex.length / 2;
+  if (totalBytes < 10 || hex.length === 62 || hex.length === 20) return null;
+
+  const b = (pos) => parseInt(hex.slice(pos * 2, pos * 2 + 2), 16);
+  const word = (msb, lsb) => (b(msb) << 8) | b(lsb);
+
+  const header  = b(0);
+  const length  = b(1);
+  const msgType = b(2);
+
+  // Must be a response (0x51) with Bubble Up msg type (0x10)
+  if (header !== 0x51 || msgType !== 0x10) return null;
+  // Length byte should match: totalBytes - 2 = length
+  if (length !== totalBytes - 2) return null;
+
+  // Verify checksum — try both XOR and two's complement sum
+  let xor = 0, sum = 0;
+  for (let i = 0; i < totalBytes - 1; i++) { xor ^= b(i); sum = (sum + b(i)) & 0xFF; }
+  const lastByte = b(totalBytes - 1);
+  const csXorOk = xor === lastByte;
+  const csSumOk = ((256 - sum) & 0xFF) === lastByte;
+  const csOk = csXorOk || csSumOk;
+  const csMethod = csXorOk ? "XOR" : csSumOk ? "2's complement" : "Unknown";
+
+  const config = word(3, 4);
+
+  const relayStatus = (r) => {
+    const active = (r >> 3) & 1;
+    const load   = r & 1;
+    return active ? "ON (Active)" : (load ? "OFF (Load present)" : "OFF");
+  };
+
+  const result = {
+    type:           "compact_bubble_up",
+    header:         `0x51 (Response)`,
+    length:         `${length} (${totalBytes} bytes total, ${hex.length} chars)`,
+    msgType:        `0x10 (Bubble Up — compact)`,
+    config:         `0x${config.toString(16).toUpperCase()} (${config.toString(2).padStart(16, "0")})`,
+  };
+
+  let ptr = 5; // after header(0), length(1), msgType(2), config(3,4)
+
+  // Config bit 0: Relay Status (4 bytes)
+  if ((config & 0x01) && ptr + 3 < totalBytes) {
+    result.relay1 = relayStatus(b(ptr));
+    result.relay2 = relayStatus(b(ptr + 1));
+    result.relay3 = relayStatus(b(ptr + 2));
+    result.relay4 = relayStatus(b(ptr + 3));
+    ptr += 4;
+  }
+
+  // Config bit 1: Power Up Flag (1 byte)
+  if ((config & 0x02) && ptr < totalBytes - 1) {
+    const pu = b(ptr);
+    result.powerUp = pu === 0x77 ? "Power Up (0x77)" : pu === 0x55 ? "Power Down (0x55)" : `Normal (0x${pu.toString(16).toUpperCase().padStart(2,"0")})`;
+    ptr++;
+  }
+
+  // Config bit 5: Customer Comfort (1 byte)
+  if ((config & 0x20) && ptr < totalBytes - 1) {
+    const cc = b(ptr) & 0x0F;
+    result.custComfort = cc === 0x0A ? "ON" : "OFF";
+    ptr++;
+  }
+
+  // Config bit 3: Power Measurement (8 bytes: V(2)+I(2)+PF(2)+W(2))
+  if ((config & 0x08) && ptr + 7 < totalBytes) {
+    result.voltage     = `${word(ptr, ptr + 1) / 10} V`;
+    result.current     = `${word(ptr + 2, ptr + 3) / 10} A`;
+    result.powerFactor = `${(word(ptr + 4, ptr + 5) / 1000).toFixed(3)}`;
+    result.watts       = `${word(ptr + 6, ptr + 7)} W`;
+    ptr += 8;
+  }
+
+  // Config bit 4: Touch Pad (1 byte)
+  if ((config & 0x10) && ptr < totalBytes - 1) {
+    const tp = b(ptr) & 0x03;
+    result.touchPad = tp === 1 ? "Override" : tp === 2 ? "Override Canceled" : `${tp}`;
+    ptr++;
+  }
+
+  // Remaining bytes before checksum — identify Override, Serial, DeviceID
+  const remaining = totalBytes - 1 - ptr;
+
+  if (remaining >= 10) {
+    result.swValue       = word(ptr, ptr + 1); ptr += 2;
+    result.sqValue       = word(ptr, ptr + 1); ptr += 2;
+    result.overrideTimer = `${word(ptr, ptr + 1)} min`; ptr += 2;
+    result.serialNumber  = (b(ptr) << 16) | (b(ptr + 1) << 8) | b(ptr + 2); ptr += 3;
+    result.deviceId      = `0x${b(ptr).toString(16).toUpperCase()} (${b(ptr)})`; ptr++;
+  } else if (remaining >= 6) {
+    result.overrideTimer = `${word(ptr, ptr + 1)} min`; ptr += 2;
+    result.serialNumber  = (b(ptr) << 16) | (b(ptr + 1) << 8) | b(ptr + 2); ptr += 3;
+    result.deviceId      = `0x${b(ptr).toString(16).toUpperCase()} (${b(ptr)})`; ptr++;
+  } else if (remaining >= 5) {
+    result.overrideTimer = `${word(ptr, ptr + 1)} min`; ptr += 2;
+    result.serialNumber  = (b(ptr) << 16) | (b(ptr + 1) << 8) | b(ptr + 2); ptr += 3;
+  } else if (remaining >= 3) {
+    result.serialNumber  = (b(ptr) << 16) | (b(ptr + 1) << 8) | b(ptr + 2); ptr += 3;
+  } else if (remaining >= 2) {
+    result.overrideTimer = `${word(ptr, ptr + 1)} min`; ptr += 2;
+  }
+
+  if (ptr < totalBytes - 1) {
+    const extra = [];
+    while (ptr < totalBytes - 1) { extra.push(b(ptr).toString(16).toUpperCase().padStart(2, "0")); ptr++; }
+    result.extraBytes = extra.join(" ");
+  }
+
+  result.checksumMethod = csMethod;
+  result.checksum = csOk
+    ? `0x${lastByte.toString(16).toUpperCase()} ✅ Valid (${csMethod})`
+    : `0x${lastByte.toString(16).toUpperCase()} ❌ Invalid`;
+
+  return result;
 }
 
 // ── LC Response Parser ────────────────────────────────────────────────────────
@@ -2413,7 +2559,7 @@ function renderBubbleUpParser(containerId) {
   if (!el) return;
   el.innerHTML = `
     <input class="hex-input" id="bu-input-${containerId}" type="text"
-      placeholder="Paste Bubble Up hex (62 chars)..." maxlength="62"
+      placeholder="Paste Bubble Up hex (34 or 62 chars)..." maxlength="62"
       oninput="runBubbleUpParse('${containerId}')" />
     <button class="hex-parse-btn" onclick="runBubbleUpParse('${containerId}')">Parse</button>
     <div id="bu-result-${containerId}" class="hex-result"></div>`;
@@ -2424,10 +2570,28 @@ function runBubbleUpParse(containerId) {
   const result = document.getElementById(`bu-result-${containerId}`);
   if (!input || !result) return;
   const hex = input.value.trim();
-  if (hex.length < 62) {
-    result.innerHTML = `<div class="hex-error">Enter 62 hex characters (${hex.length}/62)</div>`;
+  if (hex.length < 20) {
+    result.innerHTML = `<div class="hex-error">Enter at least 20 hex characters (${hex.length})</div>`;
     return;
   }
+
+  // Try compact first (non-62-char), then full
+  if (hex.length !== 62) {
+    const compact = parseCompactBubbleUpHex(hex);
+    if (compact) {
+      result.innerHTML = Object.entries(compact)
+        .filter(([k]) => k !== "type")
+        .map(([k, v]) =>
+          `<div class="hex-row">
+            <span class="hex-label">${k.charAt(0).toUpperCase() + k.slice(1).replace(/([A-Z])/g, " $1")}</span>
+            <span class="hex-value">${v}</span>
+          </div>`
+        ).join("");
+      return;
+    }
+  }
+
+  // Fall through to full 62-char parser
   const parsed = parseBubbleUpHex(hex);
   if (parsed.error) {
     result.innerHTML = `<div class="hex-error">${parsed.error}</div>`;
@@ -28750,10 +28914,10 @@ function tc250ParseResponse() {
   const msgType = b(2) & 0x7F; // mask off response bit
   const typeName = LORA_RESPONSE_TYPES[msgType] || `Unknown (0x${msgType.toString(16).toUpperCase()})`;
 
-  // Validate checksum
-  let xor = 0;
-  for (let i = 0; i < totalBytes - 1; i++) xor ^= b(i);
-  const csOk = xor === b(totalBytes - 1);
+  // Validate checksum — try XOR first, then two's complement sum
+  let xor = 0, csm = 0;
+  for (let i = 0; i < totalBytes - 1; i++) { xor ^= b(i); csm = (csm + b(i)) & 0xFF; }
+  const csOk = (xor === b(totalBytes - 1)) || (((256 - csm) & 0xFF) === b(totalBytes - 1));
 
   let body = `Header:    0x${b(0).toString(16).toUpperCase()} ${header === 0x51 ? '✅ Response' : '⚠ Expected 0x51'}\n`;
   body += `Length:    ${length}\n`;
@@ -28834,15 +28998,18 @@ function tc250ParseBubbleUp() {
   const length  = b(1);
   const msgType = b(2);
 
-  // Validate checksum
-  let xor = 0;
-  for (let i = 0; i < totalBytes - 1; i++) xor ^= b(i);
-  const csOk = xor === b(totalBytes - 1);
+  // Validate checksum — try XOR first, then two's complement sum
+  let xor = 0, csum2 = 0;
+  for (let i = 0; i < totalBytes - 1; i++) { xor ^= b(i); csum2 = (csum2 + b(i)) & 0xFF; }
+  const csXorOk2 = xor === b(totalBytes - 1);
+  const csSumOk2 = ((256 - csum2) & 0xFF) === b(totalBytes - 1);
+  const csOk = csXorOk2 || csSumOk2;
+  const csLabel = csXorOk2 ? "XOR" : csSumOk2 ? "2's complement" : "";
 
   let out = `Header:   0x${b(0).toString(16).toUpperCase()} ${header === 0x51 ? '✅' : '⚠ Expected 0x51'}\n`;
   out += `Type:     0x${msgType.toString(16).toUpperCase()} ${msgType === 0x10 ? '(Bubble Up ✅)' : msgType === 0x11 ? '(Touch Pad Alert)' : msgType === 0x12 ? '(Min/Max Voltage Alert)' : '(Unknown)'}\n`;
   out += `Length:   ${length} bytes\n`;
-  out += `Checksum: ${csOk ? '✅ Valid' : '❌ Invalid'}\n\n`;
+  out += `Checksum: ${csOk ? '✅ Valid' + (csLabel ? ' (' + csLabel + ')' : '') : '❌ Invalid'}\n\n`;
 
   if (msgType === 0x10) {
     // Variable bubble-up — read config bits then parse fields in order
