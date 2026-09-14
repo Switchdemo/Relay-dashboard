@@ -11377,11 +11377,11 @@ async function loadDeviceProfile(deviceDbId) {
   } else if (header) {
     // Fallback: fetch from DB
     try {
-      const devRows = await supabaseGet(`devices?id=eq.${deviceDbId}`);
+      const devRows = await supabaseGet(`devices?id=eq.${deviceDbId}&select=id,uid,name`);
       if (Array.isArray(devRows) && devRows[0]) {
         header.innerHTML = `
           <div style="font-size:14px;font-weight:600;color:var(--text-primary);">${escapeHtml(devRows[0].name || devRows[0].uid)}</div>
-          <div style="font-size:11px;color:var(--text-hint);margin-top:2px;">UID: ${escapeHtml(devRows[0].uid)} &nbsp;·&nbsp; Type: ${escapeHtml(devRows[0].type || "—")}</div>
+          <div style="font-size:11px;color:var(--text-hint);margin-top:2px;">UID: ${escapeHtml(devRows[0].uid)}</div>
         `;
       }
     } catch(e) {}
@@ -11579,14 +11579,14 @@ async function resolveTagTargets() {
     const deviceIdArr = [...matchedDeviceIds];
     console.log("Matched device IDs:", deviceIdArr);
     try {
-      const dbDevices = await supabaseGet(`devices?id=in.(${deviceIdArr.join(",")})&select=id,uid,name,type,device_id`);
+      const dbDevices = await supabaseGet(`devices?id=in.(${deviceIdArr.join(",")})&select=id,uid,name`);
       console.log("Resolved devices:", dbDevices);
       if (Array.isArray(dbDevices) && dbDevices.length > 0) {
         resolvedTagDevices = dbDevices.map(d => ({
           dbId: d.id,
           uid: d.uid,
           name: d.name || d.uid,
-          type: d.type || "relay"
+          type: "relay"
         }));
       } else {
         resolvedTagDevices = [];
