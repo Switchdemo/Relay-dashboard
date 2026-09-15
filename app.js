@@ -11483,9 +11483,13 @@ async function saveDeviceTags() {
     const el = document.getElementById(`tag-${key}`);
     const val = el?.value?.trim();
     if (val) {
-      const row = { device_id: parseInt(currentTagsDeviceId), tag_category: def.cat, tag_key: key, tag_value: val };
-      if (def.cat === "custom") row.tag_label = def.label;
-      tags.push(row);
+      tags.push({
+        device_id: parseInt(currentTagsDeviceId),
+        tag_category: def.cat,
+        tag_key: key,
+        tag_value: val,
+        tag_label: def.cat === "custom" ? def.label : null
+      });
     }
   });
 
