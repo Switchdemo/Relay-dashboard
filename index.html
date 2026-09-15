@@ -4035,6 +4035,39 @@
         </div><!-- end tags-editor -->
       </div><!-- end device-tags-card -->
 
+      <!-- Device Tags Report -->
+      <div class="sched-card" id="device-tags-report-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">📋 Device Tags Report</div>
+          <div style="display:flex;gap:8px;">
+            <button class="queue-refresh" onclick="loadDeviceTagsReport()">Refresh</button>
+            <button onclick="exportDeviceTagsCSV()" style="padding:4px 12px;border-radius:6px;border:none;background:var(--green-dark);color:#fff;font-size:11px;font-weight:600;cursor:pointer;">📥 Export CSV</button>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">
+          All devices with their assigned tags. Click Export CSV to download the full report.
+        </div>
+        <div id="device-tags-report-filters" style="display:flex;gap:10px;align-items:end;margin-bottom:12px;flex-wrap:wrap;">
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Filter by Tag</label>
+            <select id="report-filter-key" onchange="onReportFilterKeyChange()" style="padding:5px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
+              <option value="">All Tags</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-hint);display:block;margin-bottom:3px;">Filter by Value</label>
+            <select id="report-filter-value" style="padding:5px 8px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;">
+              <option value="">All Values</option>
+            </select>
+          </div>
+          <button onclick="loadDeviceTagsReport()" style="padding:5px 14px;border-radius:var(--radius-sm);border:0.5px solid var(--border-md);background:var(--surface2);font-size:11px;cursor:pointer;">Apply</button>
+        </div>
+        <div id="device-tags-report-table" style="overflow-x:auto;">
+          <div class="sched-empty">Click Refresh to load report.</div>
+        </div>
+        <div id="device-tags-report-count" style="font-size:10px;color:var(--text-hint);margin-top:8px;"></div>
+      </div>
+
     </div>
   </div>
 </div>
