@@ -11675,6 +11675,201 @@ async function loadDeviceProfile(deviceDbId) {
 }
 
 
+// ── Device Tags Report ───────────────────────────────────────────────────────
+
+let deviceTagsReportData = []; // cached for export
+
+async function loadDeviceTagsReport() {
+  const container = document.getElementById("device-tags-report-table");
+  const countEl   = document.getElementById("device-tags-report-count");
+  if (!container) return;
+  container.innerHTML = '<div class="sched-empty">Loading…</div>';
+
+  try {
+    // Fetch all devices and all tags
+    const [devices, tags] = await Promise.all([
+      supabaseGet("devices?select=id,uid,name&order=name"),
+      supabaseGet("device_tags?order=device_id,tag_category,tag_key")
+    ]);
+
+    if (!Array.isArray(devices) || !devices.length) {
+      container.innerHTML = '<div class="sched-empty">No devices found.</div>';
+      return;
+    }
+
+    // Group tags by device_id
+    const tagsByDevice = {};
+    if (Array.isArray(tags)) {
+      tags.forEach(t => {
+        if (!tagsByDevice[t.device_id]) tagsByDevice[t.device_id] = [];
+        tagsByDevice[t.device_id].push(t);
+      });
+    }
+
+    // Collect all unique tag keys for column headers
+    const allTagKeys = new Set();
+    if (Array.isArray(tags)) tags.forEach(t => allTagKeys.add(t.tag_key));
+    const tagKeysArr = [...allTagKeys].sort();
+
+    // Populate the filter dropdowns
+    populateReportFilters(tagKeysArr, tags);
+
+    // Apply filters
+    const filterKey = document.getElementById("report-filter-key")?.value || "";
+    const filterVal = document.getElementById("report-filter-value")?.value || "";
+
+    // Build report rows: one row per device
+    let reportRows = devices.map(dev => {
+      const devTags = tagsByDevice[dev.id] || [];
+      const tagMap = {};
+      devTags.forEach(t => { tagMap[t.tag_key] = t.tag_value; });
+      return { id: dev.id, uid: dev.uid, name: dev.name || dev.uid, tags: tagMap, tagCount: devTags.length };
+    });
+
+    // Apply filter
+    if (filterKey) {
+      reportRows = reportRows.filter(r => {
+        if (!r.tags[filterKey]) return false;
+        if (filterVal && r.tags[filterKey] !== filterVal) return false;
+        return true;
+      });
+    }
+
+    // Cache for export
+    deviceTagsReportData = { rows: reportRows, tagKeys: tagKeysArr };
+
+    if (!reportRows.length) {
+      container.innerHTML = '<div class="sched-empty">No devices match the filter.</div>';
+      if (countEl) countEl.textContent = "0 devices";
+      return;
+    }
+
+    // Determine which tag columns to show (only those that have at least one value in filtered results)
+    const activeKeys = tagKeysArr.filter(k => reportRows.some(r => r.tags[k]));
+
+    // Build table
+    const getLabel = (key) => {
+      const def = TAG_DEFINITIONS[key];
+      return def ? def.label : key.replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    };
+
+    let html = '<table style="width:100%;border-collapse:collapse;font-size:11px;">';
+    html += '<thead><tr style="border-bottom:1.5px solid var(--border);text-align:left;">';
+    html += '<th style="padding:6px 8px;font-weight:600;white-space:nowrap;position:sticky;left:0;background:var(--surface);z-index:1;">Device</th>';
+    html += '<th style="padding:6px 8px;font-weight:600;white-space:nowrap;">UID</th>';
+    html += '<th style="padding:6px 8px;font-weight:600;text-align:center;">Tags</th>';
+    activeKeys.forEach(k => {
+      html += `<th style="padding:6px 8px;font-weight:600;white-space:nowrap;color:var(--text-secondary);">${escapeHtml(getLabel(k))}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+
+    reportRows.forEach((row, i) => {
+      const bg = i % 2 === 0 ? "var(--surface2)" : "transparent";
+      html += `<tr style="background:${bg};border-bottom:0.5px solid var(--border);">`;
+      html += `<td style="padding:5px 8px;font-weight:500;white-space:nowrap;position:sticky;left:0;background:${bg};z-index:1;">${escapeHtml(row.name)}</td>`;
+      html += `<td style="padding:5px 8px;color:var(--text-hint);white-space:nowrap;font-family:monospace;font-size:10px;">${escapeHtml(row.uid)}</td>`;
+      html += `<td style="padding:5px 8px;text-align:center;">${row.tagCount}</td>`;
+      activeKeys.forEach(k => {
+        const val = row.tags[k] || "";
+        html += `<td style="padding:5px 8px;${val ? "" : "color:var(--text-hint);font-style:italic;"}">${val ? escapeHtml(val) : "—"}</td>`;
+      });
+      html += '</tr>';
+    });
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+    if (countEl) countEl.textContent = `${reportRows.length} device${reportRows.length !== 1 ? "s" : ""} · ${activeKeys.length} tag column${activeKeys.length !== 1 ? "s" : ""}`;
+
+  } catch(e) {
+    container.innerHTML = `<div class="sched-empty" style="color:var(--red);">Error: ${e.message}</div>`;
+    console.error("loadDeviceTagsReport:", e);
+  }
+}
+
+function populateReportFilters(tagKeysArr, tags) {
+  const keySel = document.getElementById("report-filter-key");
+  const valSel = document.getElementById("report-filter-value");
+  if (!keySel) return;
+
+  const currentKey = keySel.value;
+  const currentVal = valSel?.value || "";
+
+  keySel.innerHTML = '<option value="">All Tags</option>';
+  const getLabel = (key) => {
+    const def = TAG_DEFINITIONS[key];
+    return def ? def.label : key.replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  };
+  tagKeysArr.forEach(k => {
+    const opt = document.createElement("option");
+    opt.value = k;
+    opt.textContent = getLabel(k);
+    if (k === currentKey) opt.selected = true;
+    keySel.appendChild(opt);
+  });
+
+  // Populate value filter based on selected key
+  if (valSel) {
+    valSel.innerHTML = '<option value="">All Values</option>';
+    if (currentKey && Array.isArray(tags)) {
+      const vals = [...new Set(tags.filter(t => t.tag_key === currentKey).map(t => t.tag_value))].sort();
+      vals.forEach(v => {
+        const opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = v;
+        if (v === currentVal) opt.selected = true;
+        valSel.appendChild(opt);
+      });
+    }
+  }
+}
+
+function onReportFilterKeyChange() {
+  // When the key filter changes, reload to repopulate the value filter
+  loadDeviceTagsReport();
+}
+
+function exportDeviceTagsCSV() {
+  if (!deviceTagsReportData.rows || !deviceTagsReportData.rows.length) {
+    alert("Load the report first, then export.");
+    return;
+  }
+
+  const { rows, tagKeys } = deviceTagsReportData;
+  const getLabel = (key) => {
+    const def = TAG_DEFINITIONS[key];
+    return def ? def.label : key.replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  };
+
+  // Build CSV
+  const csvEscape = (str) => {
+    const s = String(str || "");
+    return s.includes(",") || s.includes('"') || s.includes("\n") ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+
+  const headers = ["Device Name", "Device UID", "Tag Count", ...tagKeys.map(k => getLabel(k))];
+  const csvRows = [headers.join(",")];
+
+  rows.forEach(row => {
+    const cells = [
+      csvEscape(row.name),
+      csvEscape(row.uid),
+      row.tagCount,
+      ...tagKeys.map(k => csvEscape(row.tags[k] || ""))
+    ];
+    csvRows.push(cells.join(","));
+  });
+
+  const csvContent = csvRows.join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `device_tags_report_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+
 // ── Tag-Based Event Targeting ─────────────────────────────────────────────────
 
 let resolvedTagDevices = []; // devices matched by current tag filters
