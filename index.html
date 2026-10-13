@@ -5082,14 +5082,14 @@
           </div>
         </div>
         <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">
-          Choose which devices respond to each OpenADR 2.0b event level. Each level can target <b>all devices</b>, a <b>group</b>, or a <b>single device</b>, and can shed all relays or one relay. A level set to "None" borrows the nearest configured level; Level 0 is a restore signal and needs no assignment.
+          Choose which devices respond to each OpenADR 2.0b event level. Each level can target <b>all devices</b>, a <b>group</b>, or a <b>single device</b>, and can shed all relays or one relay. A shed level set to "None" borrows the nearest configured shed level. <b>Level 0 is the restore signal</b>: when the VTN sends it, the selected devices are returned to normal operation (default: all devices).
         </div>
         <div style="overflow-x:auto;">
           <table style="width:100%;border-collapse:collapse;font-size:12px;">
             <thead><tr>
               <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Event Level</th>
               <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Target (Group / Device)</th>
-              <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Relays Shed</th>
+              <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Relays (Shed / Restore)</th>
             </tr></thead>
             <tbody id="oadr-dispatch-table"><tr><td colspan="3" class="sched-empty">Loading...</td></tr></tbody>
           </table>
