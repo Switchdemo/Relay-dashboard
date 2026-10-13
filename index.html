@@ -5072,6 +5072,31 @@
         <div id="oadr-mapping-status" style="font-size:11px;margin-top:8px;display:none;"></div>
       </div>
 
+      <!-- Shed Level Assignment (Dispatch Targets) -->
+      <div class="sched-card" id="oadr-dispatch-card">
+        <div class="sched-card-header">
+          <div class="sched-card-title">Shed Level Assignment <button class="help-icon" onclick="openHelp('openadr')" title="Help">?</button></div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="queue-refresh" onclick="loadOadrDispatchConfig()">Refresh</button>
+            <button class="queue-refresh" style="color:var(--green-dark);border-color:var(--green);" onclick="saveOadrDispatchConfig()">Save Assignments</button>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:10px;">
+          Choose which devices respond to each OpenADR 2.0b event level. Each level can target <b>all devices</b>, a <b>group</b>, or a <b>single device</b>, and can shed all relays or one relay. A level set to "None" borrows the nearest configured level; Level 0 is a restore signal and needs no assignment.
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead><tr>
+              <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Event Level</th>
+              <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Target (Group / Device)</th>
+              <th style="text-align:left;padding:8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Relays Shed</th>
+            </tr></thead>
+            <tbody id="oadr-dispatch-table"><tr><td colspan="3" class="sched-empty">Loading...</td></tr></tbody>
+          </table>
+        </div>
+        <div id="oadr-dispatch-status" style="font-size:11px;margin-top:8px;display:none;"></div>
+      </div>
+
       <!-- DR Device Configuration -->
       <div class="sched-card">
         <div class="sched-card-header">
