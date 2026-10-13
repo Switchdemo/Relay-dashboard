@@ -9526,6 +9526,7 @@ async function initOpenADRConfig() {
   } catch(e) { console.error("initOpenADRConfig:", e); }
 
   renderMappingTable();
+  loadOadrDispatchConfig();
   loadDRConfig();
 }
 
@@ -9623,6 +9624,91 @@ async function saveVTNConfig() {
   } catch(e) {
     if (statusEl) { statusEl.textContent = `Error saving: ${e.message}`; statusEl.style.color = "var(--red)"; statusEl.style.display = "block"; }
     console.error("saveVTNConfig:", e);
+  }
+}
+
+// ── Shed Level Assignment (OpenADR 2.0b dispatch targets) ────────────────────
+// Stored in program_settings.oadr_dispatch_config as JSON:
+//   { l1_target, l1_action, l2_target, l2_action, l3_target, l3_action }
+// target: "none" | "all" | "group_<n>" | <device uid>;  action: all_on | relay1_on..relay4_on
+// Read by the Worker in resolveDispatch() when a VTN event arrives.
+const OADR_DISPATCH_LEVELS = [
+  { n: 1, label: "Level 1 — Moderate" },
+  { n: 2, label: "Level 2 — High" },
+  { n: 3, label: "Level 3 — Special" }
+];
+let oadrDispatchConfig = {};
+
+async function loadOadrDispatchConfig() {
+  const tbody = document.getElementById("oadr-dispatch-table");
+  if (!tbody) return;
+  try {
+    const rows = await supabaseGet("program_settings?setting_key=eq.oadr_dispatch_config&select=setting_value");
+    oadrDispatchConfig = rows?.[0]?.setting_value ? JSON.parse(rows[0].setting_value) : {};
+  } catch(e) { console.warn("oadr_dispatch_config load:", e); oadrDispatchConfig = {}; }
+  // Make sure group names are current (loadGroups may not have run yet)
+  try {
+    const names = await supabaseGet("group_names?order=group_number");
+    if (Array.isArray(names)) names.forEach(n => { groupNames[n.group_number] = n.group_name; });
+  } catch(e) {}
+  renderOadrDispatchTable();
+}
+
+function renderOadrDispatchTable() {
+  const tbody = document.getElementById("oadr-dispatch-table");
+  if (!tbody) return;
+  const esc = s => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
+  const groupNums = Object.keys(groupNames).map(Number).sort((a,b) => a-b);
+  const devices   = DEVICES.filter(d => !d.uid.includes("PLACEHOLDER"));
+  const selStyle  = "padding:4px 8px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--surface2);font-size:12px;";
+  const actions   = [["all_on","All Relays"],["relay1_on","Relay 1 only"],["relay2_on","Relay 2 only"],["relay3_on","Relay 3 only"],["relay4_on","Relay 4 only"]];
+
+  tbody.innerHTML = OADR_DISPATCH_LEVELS.map(({n,label}) => {
+    const tgt = oadrDispatchConfig[`l${n}_target`] || "none";
+    const act = oadrDispatchConfig[`l${n}_action`] || "all_on";
+    const opt = (v,t) => `<option value="${esc(v)}" ${tgt===v?"selected":""}>${esc(t)}</option>`;
+    const groupOpts = groupNums.map(g => opt(`group_${g}`, `Group ${g}: ${groupNames[g]||"Group "+g}`)).join("");
+    const devOpts   = devices.map(d => opt(d.uid, `${d.name} (${d.uid})`)).join("");
+    return `<tr>
+      <td style="padding:8px;border-bottom:0.5px solid var(--border);font-weight:600;">${label}</td>
+      <td style="padding:8px;border-bottom:0.5px solid var(--border);">
+        <select id="oadr-dispatch-l${n}-target" style="${selStyle}min-width:260px;">
+          ${opt("none","— None (not assigned) —")}${opt("all","All Devices")}
+          <optgroup label="Groups">${groupOpts}</optgroup>
+          <optgroup label="Individual Devices">${devOpts}</optgroup>
+        </select>
+      </td>
+      <td style="padding:8px;border-bottom:0.5px solid var(--border);">
+        <select id="oadr-dispatch-l${n}-action" style="${selStyle}">
+          ${actions.map(([v,t]) => `<option value="${v}" ${act===v?"selected":""}>${t}</option>`).join("")}
+        </select>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+async function saveOadrDispatchConfig() {
+  const cfg = {};
+  OADR_DISPATCH_LEVELS.forEach(({n}) => {
+    cfg[`l${n}_target`] = document.getElementById(`oadr-dispatch-l${n}-target`)?.value || "none";
+    cfg[`l${n}_action`] = document.getElementById(`oadr-dispatch-l${n}-action`)?.value || "all_on";
+  });
+  const statusEl = document.getElementById("oadr-dispatch-status");
+  const show = (msg, color) => {
+    if (!statusEl) return;
+    statusEl.textContent = msg; statusEl.style.color = color; statusEl.style.display = "block";
+    setTimeout(() => { statusEl.style.display = "none"; }, 3000);
+  };
+  try {
+    const res = await supabaseUpsert("program_settings",
+      { setting_key: "oadr_dispatch_config", setting_value: JSON.stringify(cfg), updated_at: new Date().toISOString() },
+      "setting_key");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    oadrDispatchConfig = cfg;
+    show("✅ Shed level assignments saved.", "var(--green-dark)");
+  } catch(e) {
+    console.error("saveOadrDispatchConfig:", e);
+    show(`Error saving: ${e.message}`, "var(--red)");
   }
 }
 
