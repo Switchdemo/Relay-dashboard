@@ -9629,10 +9629,11 @@ async function saveVTNConfig() {
 
 // ── Shed Level Assignment (OpenADR 2.0b dispatch targets) ────────────────────
 // Stored in program_settings.oadr_dispatch_config as JSON:
-//   { l1_target, l1_action, l2_target, l2_action, l3_target, l3_action }
+//   { l0_target, l0_action, l1_target, l1_action, ... l3_target, l3_action }  (l0 = restore)
 // target: "none" | "all" | "group_<n>" | <device uid>;  action: all_on | relay1_on..relay4_on
 // Read by the Worker in resolveDispatch() when a VTN event arrives.
 const OADR_DISPATCH_LEVELS = [
+  { n: 0, label: "Level 0 — Restore All" },
   { n: 1, label: "Level 1 — Moderate" },
   { n: 2, label: "Level 2 — High" },
   { n: 3, label: "Level 3 — Special" }
@@ -9664,7 +9665,8 @@ function renderOadrDispatchTable() {
   const actions   = [["all_on","All Relays"],["relay1_on","Relay 1 only"],["relay2_on","Relay 2 only"],["relay3_on","Relay 3 only"],["relay4_on","Relay 4 only"]];
 
   tbody.innerHTML = OADR_DISPATCH_LEVELS.map(({n,label}) => {
-    const tgt = oadrDispatchConfig[`l${n}_target`] || "none";
+    // Level 0 (restore) defaults to All Devices when never configured
+    const tgt = oadrDispatchConfig[`l${n}_target`] || (n === 0 ? "all" : "none");
     const act = oadrDispatchConfig[`l${n}_action`] || "all_on";
     const opt = (v,t) => `<option value="${esc(v)}" ${tgt===v?"selected":""}>${esc(t)}</option>`;
     const groupOpts = groupNums.map(g => opt(`group_${g}`, `Group ${g}: ${groupNames[g]||"Group "+g}`)).join("");
