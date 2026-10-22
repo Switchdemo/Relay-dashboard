@@ -4688,6 +4688,7 @@ async function initSettingsTab() {
   await loadBubbleUpIntervals();
   await refreshBubbleStatus();
   loadBubbleSchedule();
+  initTouchpadCard();
   startBubbleScheduler();
   // Auto-refresh status every 2 minutes while on settings tab
   if (window._bubbleStatusInterval) clearInterval(window._bubbleStatusInterval);
@@ -4963,6 +4964,211 @@ function showBubbleStatus(msg, type) {
   if (!el) return;
   el.textContent = msg;
   el.style.color = type === "error" ? "var(--red)" : "var(--green-dark)";
+}
+
+// ── Touchpad (Local Control) ─────────────────────────────────────────────────
+// Per EnTek Blue Notecard protocol Rev 4.0. The touchpad keys are local-only; the host can
+// govern them (max local overrides 0x06, clear counter 0x07, override timer via Config 0x21,
+// report flag bit 4 via 0x03) and monitor them (Last Touch Pad Command in the bubble-up).
+const TP_COMMANDS = {
+  0: "None reported",
+  1: "Load Control Override",
+  2: "Override Canceled",
+  3: "Local Activation (4 relays, 5 min)",
+  4: "Hardware Reset"
+};
+let tpPolicy = {};   // { [uid]: { max_optouts, sent_at } } — persisted in program_settings.touchpad_policy
+
+function tpFrame(bytes) {
+  const out = bytes.slice();
+  let chk = 0; out.forEach(b => { chk ^= b; });
+  out.push(chk);
+  return out.map(b => b.toString(16).toUpperCase().padStart(2, "0")).join("");
+}
+// Assignment 0x06 — Max Number of Local Opt Outs (0–10)
+function buildTpMaxOptOutHex(n)   { return tpFrame([0xA1, 0x05, 0x00, 0x1A, 0x06, n & 0x0F]); }
+// Assignment 0x07 — Clear Local Opt Out Counter
+function buildTpClearCounterHex() { return tpFrame([0xA1, 0x05, 0x00, 0x1A, 0x07, 0x00]); }
+// Assignment 0x60 / 0x70 / 0x30 — requests (no data)
+function buildTpRequestHex(des)   { return tpFrame([0xA1, 0x04, 0x00, 0x1A, des & 0xFF]); }
+// Assignment 0x03 — Bubble Up Flag (2 bytes, MSB/LSB)
+function buildTpBubbleFlagHex(flag) { return tpFrame([0xA1, 0x06, 0x00, 0x1A, 0x03, (flag >> 8) & 0xFF, flag & 0xFF]); }
+// Configuration 0x21 — write Override Timer only (designator bit 8). All other fields sent as 0 and ignored.
+function buildTpOverrideHex(minutes) {
+  const m = Math.max(0, Math.min(0xFFFF, minutes | 0));
+  const body = [
+    0x00,             // address spec: all-call (device is targeted by UID)
+    0x21,             // message type: Configuration
+    0x01, 0x00,       // write designator: bit 8 = Override Timer
+    (m >> 8) & 0xFF, m & 0xFF,
+    0x00, 0x00, 0x00, 0x00,       // CLP F1–F4 (ignored)
+    0x00, 0x00,                   // Relay map (ignored)
+    0x00, 0x00, 0x00, 0x00, 0x00, // Addresses 1–5 (ignored)
+    0x00, 0x00,                   // Bubble-up config (ignored)
+    0x00,                         // Max opt-outs (ignored)
+    0x00                          // Clear counter (ignored)
+  ];
+  return tpFrame([0xA1, body.length + 1, ...body]);
+}
+
+function tpRelayDevices() {
+  return DEVICES.filter(d => !String(d.uid).includes("PLACEHOLDER") && (d.type || "relay") === "relay");
+}
+function tpTargets() {
+  const sel = document.getElementById("tp-target")?.value || "all";
+  const devs = tpRelayDevices();
+  return sel === "all" ? devs : devs.filter(d => d.uid === sel);
+}
+function tpSetStatus(msg, type) {
+  const el = document.getElementById("tp-status");
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = type === "error" ? "var(--red)" : type === "ok" ? "var(--green-dark)" : "var(--text-hint)";
+}
+async function tpSend(hex, label) {
+  const targets = tpTargets();
+  if (!targets.length) { tpSetStatus("No device selected.", "error"); return []; }
+  const okUids = [];
+  let fail = 0;
+  for (const d of targets) {
+    try {
+      const res = await fetch(PROXY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Device-UID": d.uid },
+        body: JSON.stringify({ body: { LC: hex }, req: "note.add", sync: true })
+      });
+      if (res.ok) okUids.push(d.uid); else { fail++; console.error("Touchpad cmd failed", d.uid, res.status, await res.text()); }
+    } catch(e) { fail++; console.error("Touchpad cmd error", d.uid, e); }
+  }
+  console.log(`Touchpad ${label}: ${hex} → ${okUids.length} ok, ${fail} failed`);
+  tpSetStatus(
+    fail ? `⚠ ${label}: sent to ${okUids.length}, failed for ${fail} device(s) — see console.`
+         : `✅ ${label} sent to ${okUids.length} device(s). Takes effect on the next sync.`,
+    fail ? "error" : "ok");
+  return okUids;
+}
+
+function tpPreset(n) { const el = document.getElementById("tp-max-optouts"); if (el) el.value = n; }
+
+async function tpApplyMaxOptOuts() {
+  const n = parseInt(document.getElementById("tp-max-optouts")?.value, 10);
+  if (isNaN(n) || n < 0 || n > 10) { tpSetStatus("Enter a limit from 0 to 10.", "error"); return; }
+  if (n === 0 && !confirm("Limit 0 locks out local override — customers will not be able to override load control from the touchpad. Continue?")) return;
+  const ok = await tpSend(buildTpMaxOptOutHex(n), `Override limit ${n}`);
+  if (ok.length) {
+    ok.forEach(uid => { tpPolicy[uid] = { max_optouts: n, sent_at: new Date().toISOString() }; });
+    await tpSavePolicy();
+    renderTpDeviceRows();
+  }
+}
+async function tpClearCounter() { await tpSend(buildTpClearCounterHex(), "Override counter reset"); }
+async function tpRequest(des) {
+  const names = { 0x60: "Limit request", 0x70: "Counter request", 0x30: "Flag request" };
+  await tpSend(buildTpRequestHex(des), names[des] || "Request");
+  tpSetStatus("Request sent. The answer arrives in the device's next inbound message (see the Bubble-Up Parser / Monitor).", "ok");
+}
+async function tpSetOverride() {
+  const m = parseInt(document.getElementById("tp-override-mins")?.value, 10);
+  if (isNaN(m) || m < 1 || m > 65534) { tpSetStatus("Enter override minutes from 1 to 65534.", "error"); return; }
+  if (!confirm(`Devices will ignore load control commands for ${m} minutes. Continue?`)) return;
+  await tpSend(buildTpOverrideHex(m), `Override ${m} min`);
+}
+async function tpCancelOverride() { await tpSend(buildTpOverrideHex(0), "Override canceled"); }
+async function tpSetOverrideIndefinite() {
+  if (!confirm("Indefinite override (0xFFFF): devices ignore ALL load control until you cancel the override. Continue?")) return;
+  await tpSend(buildTpOverrideHex(0xFFFF), "Override indefinite");
+}
+async function tpSetReporting(on) {
+  const keep = document.getElementById("tp-keep-current")?.checked ? 0x0080 : 0;
+  const flag = (on ? 0x003F : 0x002F) | keep;
+  await tpSend(buildTpBubbleFlagHex(flag), on ? "Touchpad reporting ON" : "Touchpad reporting OFF");
+}
+
+async function tpLoadPolicy() {
+  try {
+    const rows = await supabaseGet("program_settings?setting_key=eq.touchpad_policy&select=setting_value");
+    tpPolicy = rows?.[0]?.setting_value ? JSON.parse(rows[0].setting_value) : {};
+  } catch(e) { tpPolicy = {}; }
+}
+async function tpSavePolicy() {
+  try {
+    await supabaseUpsert("program_settings",
+      { setting_key: "touchpad_policy", setting_value: JSON.stringify(tpPolicy), updated_at: new Date().toISOString() },
+      "setting_key");
+  } catch(e) { console.warn("touchpad_policy save:", e); }
+}
+
+let tpLatest = {};   // { [uid]: reading row }
+function renderTpDeviceRows() {
+  const tbody = document.getElementById("tp-device-rows");
+  if (!tbody) return;
+  const devs = tpRelayDevices();
+  if (!devs.length) { tbody.innerHTML = `<tr><td colspan="5" class="sched-empty">No relay devices.</td></tr>`; return; }
+  const td = "padding:6px 8px;border-bottom:0.5px solid var(--border);";
+  tbody.innerHTML = devs.map(d => {
+    const r = tpLatest[d.uid];
+    const cmd = r ? (Number(r.touch_pad_command) & 0x07) : null;
+    const ov  = r && r.override_timer_value != null ? Number(r.override_timer_value) : null;
+    const pol = tpPolicy[d.uid];
+    const cmdColor = cmd === 1 ? "var(--amber)" : cmd === 4 ? "var(--red)" : "var(--text-primary)";
+    return `<tr>
+      <td style="${td}"><div style="font-weight:500;">${escapeHtml(d.name)}</div><div style="font-size:10px;color:var(--text-hint);font-family:monospace;">${escapeHtml(d.uid)}</div></td>
+      <td style="${td}color:${cmdColor};">${cmd === null ? "—" : `${cmd} · ${TP_COMMANDS[cmd] || "Unknown"}`}</td>
+      <td style="${td}">${ov === null ? "—" : ov === 0xFFFF ? "Indefinite" : ov === 0 ? "None" : ov + " min"}</td>
+      <td style="${td}">${pol ? `${pol.max_optouts} <span style="font-size:10px;color:var(--text-hint);">(${new Date(pol.sent_at).toLocaleDateString()})</span>` : `<span style="color:var(--text-hint);">device default (5)</span>`}</td>
+      <td style="${td}font-size:11px;color:var(--text-secondary);">${r?.recorded_at ? new Date(r.recorded_at).toLocaleString() : "—"}</td>
+    </tr>`;
+  }).join("");
+}
+
+async function loadTpHistory() {
+  const box = document.getElementById("tp-history");
+  if (!box) return;
+  try {
+    const rows = await supabaseGet("device_readings?touch_pad_command=gt.0&select=device_uid,recorded_at,touch_pad_command&order=recorded_at.desc&limit=300");
+    if (!Array.isArray(rows) || !rows.length) { box.innerHTML = `<div class="sched-empty">No touchpad activity reported.</div>`; return; }
+    // Oldest → newest, keep only changes in the reported command per device
+    const last = {}, events = [];
+    rows.slice().reverse().forEach(r => {
+      const c = Number(r.touch_pad_command) & 0x07;
+      if (!c || last[r.device_uid] === c) return;
+      last[r.device_uid] = c;
+      events.push({ uid: r.device_uid, at: r.recorded_at, cmd: c });
+    });
+    const shown = events.reverse().slice(0, 25);
+    const td = "padding:5px 8px;border-bottom:0.5px solid var(--border);";
+    box.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>
+      <th style="text-align:left;padding:5px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Reported</th>
+      <th style="text-align:left;padding:5px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Device</th>
+      <th style="text-align:left;padding:5px 8px;border-bottom:0.5px solid var(--border-md);color:var(--text-hint);">Touchpad Command</th></tr></thead><tbody>` +
+      shown.map(e => {
+        const dev = DEVICES.find(d => d.uid === e.uid);
+        return `<tr><td style="${td}">${new Date(e.at).toLocaleString()}</td><td style="${td}">${escapeHtml(dev?.name || e.uid)}</td><td style="${td}">${e.cmd} · ${TP_COMMANDS[e.cmd] || "Unknown"}</td></tr>`;
+      }).join("") + `</tbody></table>`;
+  } catch(e) { box.innerHTML = `<div class="sched-empty">Could not load touchpad activity.</div>`; }
+}
+
+async function loadTouchpadStatus() {
+  const devs = tpRelayDevices();
+  await Promise.all(devs.map(async d => {
+    try {
+      const rows = await supabaseGet(`device_readings?device_uid=eq.${encodeURIComponent(d.uid)}&select=recorded_at,touch_pad_command,override_timer_value&order=recorded_at.desc&limit=1`);
+      tpLatest[d.uid] = Array.isArray(rows) && rows[0] ? rows[0] : null;
+    } catch(e) { tpLatest[d.uid] = null; }
+  }));
+  renderTpDeviceRows();
+  loadTpHistory();
+}
+
+async function initTouchpadCard() {
+  const sel = document.getElementById("tp-target");
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = `<option value="all">All relay devices</option>` +
+    tpRelayDevices().map(d => `<option value="${escapeHtml(d.uid)}">${escapeHtml(d.name)} (${escapeHtml(d.uid)})</option>`).join("");
+  if (prev) sel.value = prev;
+  await tpLoadPolicy();
+  await loadTouchpadStatus();
 }
 
 // ── WEATHER FORECAST ─────────────────────────────────────────────────────────
